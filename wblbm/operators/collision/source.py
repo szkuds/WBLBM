@@ -1,7 +1,7 @@
 import jax.numpy as jnp
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
-from wblbm.operator.differential.gradient import Gradient
+from wblbm.operators.differential.gradient import Gradient
 class SourceTerm:
     """
     Callable class to calculate the source term for the LBM equation.
@@ -18,14 +18,14 @@ class SourceTerm:
         self.cy = lattice.c[1]
         self.gradient = Gradient(lattice)
 
-    def __call__(self, rho_: jnp.ndarray, u_: jnp.ndarray, force_: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray) -> jnp.ndarray:
         """
         Calculate the source term for the LBM equation.
 
         Args:
-            u_ (jnp.ndarray): Velocity field.
-            force_ (jnp.ndarray): Force field.
-            rho_ (jnp.ndarray): Density field.
+            u (jnp.ndarray): Velocity field.
+            force (jnp.ndarray): Force field.
+            rho (jnp.ndarray): Density field.
 
         Returns:
             jnp.ndarray: Source term.
@@ -117,4 +117,4 @@ class SourceTerm:
                                                       ))
             return source_
 
-        return source_term(u_, force_, rho_)
+        return source_term(u, force, rho)

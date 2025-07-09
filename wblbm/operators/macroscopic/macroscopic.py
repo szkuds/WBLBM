@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from typing import Tuple
-from wblbm.operator.differential.gradient import Gradient
+from wblbm.operators.differential.gradient import Gradient
 
 
 class Macroscopic:

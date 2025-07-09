@@ -6,12 +6,12 @@ from wblbm.lattice.lattice import Lattice
 class Collision:
     """
     Callable class to perform the collision step of the LBM.
-    Implements the BGK collision operator with source terms.
+    Implements the BGK collision operators with source terms.
     """
 
     def __init__(self, grid: Grid, lattice: Lattice, tau: float) -> None:
         """
-        Initialize the Collision operator.
+        Initialize the Collision operators.
 
         Args:
             grid (Grid): Grid object containing simulation domain information
@@ -24,16 +24,15 @@ class Collision:
         self.d: int = lattice.d
         self.tau: float = tau
 
-    def __call__(self, fi_: jnp.ndarray, feq_: jnp.ndarray, source_: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, f: jnp.ndarray, feq: jnp.ndarray) -> jnp.ndarray:
         """
         Perform the collision step of the LBM.
 
         Args:
-            fi_ (jnp.ndarray): Distribution function.
-            feq_ (jnp.ndarray): Equilibrium distribution function.
-            source_ (jnp.ndarray): Source term.
+            f (jnp.ndarray): Distribution function.
+            feq (jnp.ndarray): Equilibrium distribution function.
 
         Returns:
             jnp.ndarray: Post-collision distribution function.
         """
-        return (1 - (1 / self.tau)) * fi_ + (1 / self.tau) * feq_ + (1 - (1 / (2 * self.tau))) * source_
+        return (1 - (1 / self.tau)) * f + (1 / self.tau) * feq
