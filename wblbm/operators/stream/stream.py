@@ -11,19 +11,19 @@ class Streaming:
         self.c = lattice.c  # Shape: (2, Q)
         self.q = lattice.q
 
-    def __call__(self, fi_):
+    def __call__(self, f):
         """
         Perform the streaming step of the LBM.
 
         Args:
-            fi_ (jnp.ndarray): Distribution function, shape (nx, ny, q)
+            f (jnp.ndarray): Distribution function, shape (nx, ny, q, 1)
 
         Returns:
             jnp.ndarray: Post-streaming distribution function.
         """
         for i in range(self.q):
-            fi_ = fi_.at[:, :, i].set(
+            f = f.at[:, :, i, 0].set(
                 jnp.roll(
-                    jnp.roll(fi_[:, :, i], self.c[0, i], axis=0),
+                    jnp.roll(f[:, :, i, 0], self.c[0, i], axis=0),
                     self.c[1, i], axis=1))
-        return fi_
+        return f

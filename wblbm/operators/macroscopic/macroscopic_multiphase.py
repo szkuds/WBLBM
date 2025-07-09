@@ -1,7 +1,9 @@
 import jax.numpy as jnp
-from wblbm.operator.macroscopic.macroscopic import Macroscopic
-from wblbm.operator.differential.gradient import Gradient
-from wblbm.operator.differential.laplacian import Laplacian
+
+from wblbm.grid import Grid
+from wblbm.operators.macroscopic.macroscopic import Macroscopic
+from wblbm.operators.differential.gradient import Gradient
+from wblbm.operators.differential.laplacian import Laplacian
 from wblbm.lattice.lattice import Lattice
 
 
@@ -11,7 +13,7 @@ class MacroscopicMultiphase(Macroscopic):
     Inherits from Macroscopic and adds multiphase-specific methods.
     """
 
-    def __init__(self, grid, lattice: Lattice, kappa: float, beta: float, rho_l: float, rho_v: float):
+    def __init__(self, grid: Grid, lattice: Lattice, kappa: float, beta: float, rho_l: float, rho_v: float):
         super().__init__(grid, lattice)
         self.kappa = kappa
         self.beta = beta
