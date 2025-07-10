@@ -1,4 +1,7 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
@@ -22,6 +25,7 @@ class UpdateMultiphase(Update):
         self.macroscopic = MacroscopicMultiphase(grid, lattice, kappa, interface_width, rho_l, rho_v)
         self.collision = CollisionMultiphase(grid, lattice, tau)
 
+    @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.array):
         rho, u, force = self.macroscopic(f)
         feq = self.equilibrium(rho, u)
