@@ -30,17 +30,25 @@ class MacroscopicMultiphase(Macroscopic):
             f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
 
         Returns:
-            tuple: (rho, u)
+            tuple: (rho, u, force_int)
                 rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
                 u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
+                force_int (jnp.ndarray): Interaction force, shape (nx, ny, 1, 2)
         """
         rho, u = super().__call__(f)
         force_int = self.force_int(rho)
-        u_updated = self.u_new(u, rho)
+        u_updated = self.u_new(u, rho, force_int)
         return rho, u_updated, force_int
 
     def eos(self, rho):
-        return 2 * self.beta * (rho - self.rho_l) * (rho - self.rho_v) * (2 * rho - self.rho_l - self.rho_v)
+        """Equation of state - extract 2D data for computation"""
+        rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+        eos_2d = 2 * self.beta * (rho_2d - self.rho_l) * (rho_2d - self.rho_v) * (2 * rho_2d - self.rho_l - self.rho_v)
+
+        # Convert back to 4D format
+        eos_4d = jnp.zeros_like(rho)
+        eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+        return eos_4d
 
     def chem_pot(self, rho):
         """
@@ -54,16 +62,13 @@ class MacroscopicMultiphase(Macroscopic):
         """
         Calculate the interaction force.
         """
-        grad_chem_pot = self.gradient(self.chem_pot(rho))
-        # Return -rho * grad_chem_pot, shape (2, nx, ny)
+        grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
+        # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
         return -rho * grad_chem_pot
 
-    def u_new(self, u, rho):
+    def u_new(self, u, rho, force):
         """
         Update velocity with interaction force.
         """
-        force = self.force_int(rho)
-        # u: shape (nx, ny, 1, d), force: (2, nx, ny)
-        # Need to broadcast force to shape (nx, ny, 1, d)
-        force_broadcast = jnp.moveaxis(force, 0, -1)[..., jnp.newaxis, :]  # (nx, ny, 1, d)
-        return u + force_broadcast / 2
+        # Both u and force have shape (nx, ny, 1, 2)
+        return u + force / 2

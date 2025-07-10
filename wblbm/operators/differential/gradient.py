@@ -16,16 +16,22 @@ class Gradient:
         Calculate the gradient using the provided stencil.
 
         Args:
-            grid (jnp.ndarray): Input field, shape (nx, ny)
+            grid (jnp.ndarray): Input field, shape (nx, ny, 1, 1)
 
         Returns:
-            jnp.ndarray: Gradient, shape (2, nx, ny)
+            jnp.ndarray: Gradient, shape (nx, ny, 1, 2)
         """
+        # Extract 2D data from 4D input
+        if grid.ndim == 4:
+            grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+        else:
+            grid_2d = grid
+
         w = self.w
         c = self.c
 
-        grad_ = jnp.zeros((2, grid.shape[0], grid.shape[1]))
-        grid_padded = jnp.pad(grid, pad_width=1, mode='wrap')
+        grad_ = jnp.zeros((2, grid_2d.shape[0], grid_2d.shape[1]))
+        grid_padded = jnp.pad(grid_2d, pad_width=1, mode='wrap')
 
         # Side nodes
         grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -59,4 +65,9 @@ class Gradient:
                                        )
                                       )
 
-        return grad_
+        # Convert to 4D format: (nx, ny, 1, 2)
+        grad_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 2))
+        grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
+        grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
+
+        return grad_4d

@@ -2,10 +2,11 @@ import jax.numpy as jnp
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from wblbm.operators.differential.gradient import Gradient
+
+
 class SourceTerm:
     """
     Callable class to calculate the source term for the LBM equation.
-    Uses the provided source_term implementation directly.
     """
 
     def __init__(self, grid: Grid, lattice: Lattice):
@@ -23,12 +24,12 @@ class SourceTerm:
         Calculate the source term for the LBM equation.
 
         Args:
-            u (jnp.ndarray): Velocity field.
-            force (jnp.ndarray): Force field.
-            rho (jnp.ndarray): Density field.
+            rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
+            u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
+            force (jnp.ndarray): Force field, shape (nx, ny, 1, 2)
 
         Returns:
-            jnp.ndarray: Source term.
+            jnp.ndarray: Source term, shape (nx, ny, q, 1)
         """
         nx, ny, q = self.nx, self.ny, self.q
         w = self.w
@@ -36,85 +37,39 @@ class SourceTerm:
         d = self.d
         gradient = self.gradient
 
-        def source_term(u_, force_, rho_):
-            """
-            Calculate the source term for the LBM equation.
+        # Extract 2D data from 4D arrays
+        u_2d = u[:, :, 0, :]  # Shape: (nx, ny, 2)
+        force_2d = force[:, :, 0, :]  # Shape: (nx, ny, 2)
+        rho_2d = rho[:, :, 0, 0]  # Shape: (nx, ny)
 
-            Args:
-                u_ (jnp.ndarray): Velocity field.
-                force_ (jnp.ndarray): Force field.
-                rho_ (jnp.ndarray): Density field.
+        # Calculate gradient of rho
+        grad_rho = gradient(rho)  # Shape: (nx, ny, 1, 2)
+        grad_rho_2d = grad_rho[:, :, 0, :]  # Shape: (nx, ny, 2)
 
-            Returns:
-                jnp.ndarray: Source term.
-            """
-            cx, cy, fx, fy, ux, uy, grad_rho_x, grad_rho_y = (
-                c[0],
-                c[1],
-                force_[0],
-                force_[1],
-                u_[0],
-                u_[1],
-                gradient(rho_)[0],
-                gradient(rho_)[1]
-            )
+        def source_term(u_2d_, force_2d_, grad_rho_2d_):
+            cx, cy = c[0], c[1]
+            fx, fy = force_2d_[:, :, 0], force_2d_[:, :, 1]
+            ux, uy = u_2d_[:, :, 0], u_2d_[:, :, 1]
+            grad_rho_x, grad_rho_y = grad_rho_2d_[:, :, 0], grad_rho_2d_[:, :, 1]
+
             fx_cor = fx + (grad_rho_x / 3)
             fy_cor = fy + (grad_rho_y / 3)
             source_ = jnp.zeros((nx, ny, q))
-            source_ = source_.at[:, :, 0].set(w[0] * (3 * (cx[0] * fx + cy[0] * fy) +
-                                                      9 * (cx[0] * fx_cor + cy[0] * fy_cor) * (cx[0] * ux + cy[0] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[0] * cx[0] + cy[0] * cy[0]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 1].set(w[1] * (3 * (cx[1] * fx + cy[1] * fy) +
-                                                      9 * (cx[1] * fx_cor + cy[1] * fy_cor) * (cx[1] * ux + cy[1] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[1] * cx[1] + cy[1] * cy[1]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 2].set(w[2] * (3 * (cx[2] * fx + cy[2] * fy) +
-                                                      9 * (cx[2] * fx_cor + cy[2] * fy_cor) * (cx[2] * ux + cy[2] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[2] * cx[2] + cy[2] * cy[2]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 3].set(w[3] * (3 * (cx[3] * fx + cy[3] * fy) +
-                                                      9 * (cx[3] * fx_cor + cy[3] * fy_cor) * (cx[3] * ux + cy[3] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[3] * cx[3] + cy[3] * cy[3]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 4].set(w[4] * (3 * (cx[4] * fx + cy[4] * fy) +
-                                                      9 * (cx[4] * fx_cor + cy[4] * fy_cor) * (cx[4] * ux + cy[4] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[4] * cx[4] + cy[4] * cy[4]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 5].set(w[5] * (3 * (cx[5] * fx + cy[5] * fy) +
-                                                      9 * (cx[5] * fx_cor + cy[5] * fy_cor) * (cx[5] * ux + cy[5] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[5] * cx[5] + cy[5] * cy[5]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 6].set(w[6] * (3 * (cx[6] * fx + cy[6] * fy) +
-                                                      9 * (cx[6] * fx_cor + cy[6] * fy_cor) * (cx[6] * ux + cy[6] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[6] * cx[6] + cy[6] * cy[6]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 7].set(w[7] * (3 * (cx[7] * fx + cy[7] * fy) +
-                                                      9 * (cx[7] * fx_cor + cy[7] * fy_cor) * (cx[7] * ux + cy[7] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[7] * cx[7] + cy[7] * cy[7]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
-            source_ = source_.at[:, :, 8].set(w[8] * (3 * (cx[8] * fx + cy[8] * fy) +
-                                                      9 * (cx[8] * fx_cor + cy[8] * fy_cor) * (cx[8] * ux + cy[8] * uy) -
-                                                      3 * (ux * fx_cor + uy * fy_cor) +
-                                                      .5 * (3 * (cx[8] * cx[8] + cy[8] * cy[8]) - d) * (
-                                                              ux * grad_rho_x + uy * grad_rho_y)
-                                                      ))
+
+            for i in range(q):
+                source_ = source_.at[:, :, i].set(w[i] * (
+                        3 * (cx[i] * fx + cy[i] * fy) +
+                        9 * (cx[i] * fx_cor + cy[i] * fy_cor) * (cx[i] * ux + cy[i] * uy) -
+                        3 * (ux * fx_cor + uy * fy_cor) +
+                        0.5 * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d) * (
+                                ux * grad_rho_x + uy * grad_rho_y)
+                ))
+
             return source_
 
-        return source_term(u, force, rho)
+        source_2d = source_term(u_2d, force_2d, grad_rho_2d)
+
+        # Convert to 4D format: (nx, ny, q, 1)
+        source_4d = jnp.expand_dims(source_2d, axis=-1)
+
+        return source_4d
