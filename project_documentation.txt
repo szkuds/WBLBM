@@ -63,16 +63,22 @@ wblbm/
                     Calculate the gradient using the provided stencil.
             
                     Args:
-                        grid (jnp.ndarray): Input field, shape (nx, ny)
+                        grid (jnp.ndarray): Input field, shape (nx, ny, 1, 1)
             
                     Returns:
-                        jnp.ndarray: Gradient, shape (2, nx, ny)
+                        jnp.ndarray: Gradient, shape (nx, ny, 1, 2)
                     """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    else:
+                        grid_2d = grid
+            
                     w = self.w
                     c = self.c
             
-                    grad_ = jnp.zeros((2, grid.shape[0], grid.shape[1]))
-                    grid_padded = jnp.pad(grid, pad_width=1, mode='wrap')
+                    grad_ = jnp.zeros((2, grid_2d.shape[0], grid_2d.shape[1]))
+                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode='wrap')
             
                     # Side nodes
                     grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -106,7 +112,12 @@ wblbm/
                                                    )
                                                   )
             
-                    return grad_
+                    # Convert to 4D format: (nx, ny, 1, 2)
+                    grad_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 2))
+                    grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
+                    grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
+            
+                    return grad_4d
             --- End of gradient.py ---
 
             __init__.py
@@ -117,6 +128,7 @@ wblbm/
             --- Code in laplacian.py ---
             import jax.numpy as jnp
             from wblbm.lattice.lattice import Lattice
+            
             
             class Laplacian:
                 """
@@ -131,15 +143,21 @@ wblbm/
                     Calculate the Laplacian of a 2D grid.
             
                     Args:
-                        grid (jnp.ndarray): Input 2D grid.
+                        grid (jnp.ndarray): Input grid, shape (nx, ny, 1, 1)
             
                     Returns:
-                        jnp.ndarray: Laplacian of the input grid.
+                        jnp.ndarray: Laplacian of the input grid, shape (nx, ny, 1, 1)
                     """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    else:
+                        grid_2d = grid
+            
                     w = self.w
             
-                    laplacian_ = jnp.zeros_like(grid)
-                    grid_padded = jnp.pad(grid, pad_width=1, mode='wrap')
+                    laplacian_2d = jnp.zeros_like(grid_2d)
+                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode='wrap')
             
                     # Side nodes
                     grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -156,23 +174,27 @@ wblbm/
                     # Central node
                     grid_i0_j0 = grid_padded[1:-1, 1:-1]
             
-                    laplacian_ = laplacian_.at[:, :].set(6 *
-                        (w[1] * (grid_ipos1_j0 - grid_i0_j0) +
-                         w[2] * (grid_i0_jpos1 - grid_i0_j0) +
-                         w[3] * (grid_ineg1_j0 - grid_i0_j0) +
-                         w[4] * (grid_i0_jneg1 - grid_i0_j0) +
-                         w[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
-                         w[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
-                         w[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
-                         w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
-                        )
-                    )
+                    laplacian_2d = laplacian_2d.at[:, :].set(6 *
+                                                             (w[1] * (grid_ipos1_j0 - grid_i0_j0) +
+                                                              w[2] * (grid_i0_jpos1 - grid_i0_j0) +
+                                                              w[3] * (grid_ineg1_j0 - grid_i0_j0) +
+                                                              w[4] * (grid_i0_jneg1 - grid_i0_j0) +
+                                                              w[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
+                                                              w[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
+                                                              w[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
+                                                              w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
+                                                              )
+                                                             )
             
-                    return laplacian_
+                    # Convert to 4D format: (nx, ny, 1, 1)
+                    laplacian_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 1))
+                    laplacian_4d = laplacian_4d.at[:, :, 0, 0].set(laplacian_2d)
             
+                    return laplacian_4d
             --- End of laplacian.py ---
 
             __pycache__/
+                laplacian.cpython-312.pyc
                 gradient.cpython-312.pyc
                 __init__.cpython-312.pyc
         macroscopic/
@@ -261,17 +283,25 @@ wblbm/
                         f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
             
                     Returns:
-                        tuple: (rho, u)
+                        tuple: (rho, u, force_int)
                             rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
                             u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
+                            force_int (jnp.ndarray): Interaction force, shape (nx, ny, 1, 2)
                     """
                     rho, u = super().__call__(f)
                     force_int = self.force_int(rho)
-                    u_updated = self.u_new(u, rho)
+                    u_updated = self.u_new(u, rho, force_int)
                     return rho, u_updated, force_int
             
                 def eos(self, rho):
-                    return 2 * self.beta * (rho - self.rho_l) * (rho - self.rho_v) * (2 * rho - self.rho_l - self.rho_v)
+                    """Equation of state - extract 2D data for computation"""
+                    rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    eos_2d = 2 * self.beta * (rho_2d - self.rho_l) * (rho_2d - self.rho_v) * (2 * rho_2d - self.rho_l - self.rho_v)
+            
+                    # Convert back to 4D format
+                    eos_4d = jnp.zeros_like(rho)
+                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+                    return eos_4d
             
                 def chem_pot(self, rho):
                     """
@@ -285,21 +315,22 @@ wblbm/
                     """
                     Calculate the interaction force.
                     """
-                    grad_chem_pot = self.gradient(self.chem_pot(rho))
-                    # Return -rho * grad_chem_pot, shape (2, nx, ny)
+                    grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
+                    # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
                     return -rho * grad_chem_pot
             
-                def u_new(self, u, rho):
+                def u_new(self, u, rho, force):
                     """
                     Update velocity with interaction force.
                     """
-                    force = self.force_int(rho)
-                    # u: shape (nx, ny, 1, d), force: (2, nx, ny)
-                    # Need to broadcast force to shape (nx, ny, 1, d)
-                    force_broadcast = jnp.moveaxis(force, 0, -1)[..., jnp.newaxis, :]  # (nx, ny, 1, d)
-                    return u + force_broadcast / 2
+                    # Both u and force have shape (nx, ny, 1, 2)
+                    return u + force / 2
             --- End of macroscopic_multiphase.py ---
 
+            __pycache__/
+                macroscopic_multiphase.cpython-312.pyc
+                __init__.cpython-312.pyc
+                macroscopic.cpython-312.pyc
         update/
             update.py
             --- Code in update.py ---
@@ -380,6 +411,10 @@ wblbm/
             
             --- End of update_multiphase.py ---
 
+            __pycache__/
+                update_multiphase.cpython-312.pyc
+                update.cpython-312.pyc
+                __init__.cpython-312.pyc
         stream/
             __init__.py
             --- Code in __init__.py ---
@@ -419,6 +454,9 @@ wblbm/
                     return f
             --- End of stream.py ---
 
+            __pycache__/
+                stream.cpython-312.pyc
+                __init__.cpython-312.pyc
         initialise/
             __init__.py
             --- Code in __init__.py ---
@@ -426,37 +464,81 @@ wblbm/
 
             init.py
             --- Code in init.py ---
+            import jax.numpy as jnp
             import numpy as np
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
+            from wblbm.operators.equilibrium.equilibirum import Equilibrium
             
             
             class Initialise:
                 """
-                Base class for initialisation of the simulation.
+                Handles the initialisation of the simulation for various scenarios.
                 """
             
-                def __init__(self, grid_shape, lattice_type):
-                    self.grid = Grid(grid_shape)
-                    self.lattice = Lattice(lattice_type)
-                    self.nx, self.ny = grid_shape
-                    self.q = self.lattice.q  # Number of discrete velocities
+                def __init__(self, grid: Grid, lattice: Lattice):
+                    self.grid = grid
+                    self.lattice = lattice
+                    self.nx, self.ny = grid.nx, grid.ny
+                    self.q = self.lattice.q
+                    self.equilibrium = Equilibrium(self.grid, self.lattice)
             
-                def initialise_population(self, initial_value=1.0):
+                def initialise_standard(self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])):
                     """
-                    Initialise the population distribution f with shape (nx, ny, q, 1).
-                    """
-                    f = np.full((self.nx, self.ny, self.q, 1), initial_value, dtype=np.float64)
-                    return f
+                    Initialises a standard simulation with uniform density and velocity.
             
-                def set_boundary_conditions(self):
+                    Args:
+                        density (float): Initial uniform density.
+                        velocity (np.ndarray): Initial uniform velocity [ux, uy].
+            
+                    Returns:
+                        jnp.ndarray: Initialised population distribution f.
                     """
-                    Set the boundary conditions for the simulation.
-                    This method should be overridden by subclasses.
+                    # Create density and velocity fields with the correct 4D shape
+                    rho = jnp.full((self.nx, self.ny, 1, 1), density)
+            
+                    u = jnp.broadcast_to(
+                        jnp.array(velocity).reshape(1, 1, 1, 2),
+                        (self.nx, self.ny, 1, 2)
+                    )
+            
+                    # Return the equilibrium distribution for this state
+                    return self.equilibrium(rho, u)
+            
+                def initialise_multiphase_bubble(self, rho_l: float, rho_v: float):
                     """
-                    raise NotImplementedError("This method should be overridden by subclasses.")
+                    Initialises a multiphase simulation with a low-density bubble in the center.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase (bubble) density.
+            
+                    Returns:
+                        jnp.ndarray: Initialised population distribution f.
+                    """
+                    # Create a density field with a bubble in the center
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing='ij')
+                    center_x, center_y = self.nx // 2, self.ny // 2
+                    radius = min(self.nx, self.ny) // 4
+            
+                    # Use tanh for a smooth, stable interface
+                    interface_width = 2.0
+                    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh((distance - radius) / interface_width)
+            
+                    # Reshape to 4D
+                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+            
+                    # Initialise with zero velocity
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+            
+                    # Return the equilibrium distribution
+                    return self.equilibrium(rho, u)
             --- End of init.py ---
 
+            __pycache__/
+                init.cpython-312.pyc
+                __init__.cpython-312.pyc
         __pycache__/
             __init__.cpython-312.pyc
         boundary_condition/
@@ -475,6 +557,7 @@ wblbm/
 
             equilibirum.py
             --- Code in equilibirum.py ---
+            # wblbm/operators/equilibrium/equilibirum.py
             import jax.numpy as jnp
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
@@ -483,7 +566,6 @@ wblbm/
             class Equilibrium:
                 """
                 Callable class to calculate the equilibrium population distribution for LBM.
-                Uses the provided feq implementation directly.
                 """
             
                 def __init__(self, grid: Grid, lattice: Lattice) -> None:
@@ -500,46 +582,164 @@ wblbm/
                     Calculate the equilibrium distribution function.
             
                     Args:
-                        rho_ (jnp.ndarray): Density field.
-                        u_ (jnp.ndarray): Velocity field.
+                        rho_ (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
+                        u_ (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
             
                     Returns:
-                        jnp.ndarray: Equilibrium distribution function.
+                        jnp.ndarray: Equilibrium distribution function, shape (nx, ny, q, 1)
                     """
                     nx, ny, q = self.nx, self.ny, self.q
                     w = self.w
-                    c = (self.cx, self.cy)
-                    f_eq = jnp.zeros((nx, ny, q))
-                    w, cx, cy, ux, uy = w, c[0], c[1], u_[0], u_[1]
-                    f_eq = f_eq.at[:, :, 1].set(w[1] * rho_ * (
-                            3 * (cx[1] * ux + cy[1] * uy) + 4.5 * (cx[1] * ux + cy[1] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 2].set(w[2] * rho_ * (
-                            3 * (cx[2] * ux + cy[2] * uy) + 4.5 * (cx[2] * ux + cy[2] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 3].set(w[3] * rho_ * (
-                            3 * (cx[3] * ux + cy[3] * uy) + 4.5 * (cx[3] * ux + cy[3] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 4].set(w[4] * rho_ * (
-                            3 * (cx[4] * ux + cy[4] * uy) + 4.5 * (cx[4] * ux + cy[4] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 5].set(w[5] * rho_ * (
-                            3 * (cx[5] * ux + cy[5] * uy) + 4.5 * (cx[5] * ux + cy[5] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 6].set(w[6] * rho_ * (
-                            3 * (cx[6] * ux + cy[6] * uy) + 4.5 * (cx[6] * ux + cy[6] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 7].set(w[7] * rho_ * (
-                            3 * (cx[7] * ux + cy[7] * uy) + 4.5 * (cx[7] * ux + cy[7] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 8].set(w[8] * rho_ * (
-                            3 * (cx[8] * ux + cy[8] * uy) + 4.5 * (cx[8] * ux + cy[8] * uy) ** 2 - 3 / 2 * (ux * ux + uy * uy)))
-                    f_eq = f_eq.at[:, :, 0].set(rho_ * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy))))
+                    cx, cy = self.cx, self.cy
+            
+                    # Extract velocity components
+                    ux = u_[..., 0]  # Shape: (nx, ny, 1)
+                    uy = u_[..., 1]  # Shape: (nx, ny, 1)
+            
+                    # Squeeze density to match velocity dimensions
+                    rho = rho_.squeeze(axis=-1)  # Shape: (nx, ny, 1)
+            
+                    # Initialize equilibrium distribution - note the 4D shape
+                    f_eq = jnp.zeros((nx, ny, q, 1))
+            
+                    # Calculate equilibrium for each velocity direction
+                    for i in range(q):
+                        cu = cx[i] * ux + cy[i] * uy
+                        cu2 = cu * cu
+                        u2 = ux * ux + uy * uy
+            
+                        f_eq = f_eq.at[:, :, i, :].set(
+                            w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2)
+                        )
+                    f_eq = f_eq.at[:, :, 0, :].set(rho[:, :, :] * (1 - w[0] * (1.5 * (ux * ux + uy * uy))))
+            
                     return f_eq
             --- End of equilibirum.py ---
 
+            __pycache__/
+                equilibirum.cpython-312.pyc
+                __init__.cpython-312.pyc
         run/
             run.py
             --- Code in run.py ---
+            import jax.numpy as jnp
+            import numpy as np
+            from wblbm.grid import Grid
+            from wblbm.lattice import Lattice
+            from wblbm.operators.initialise.init import Initialise
+            from wblbm.operators.update.update import Update
+            from wblbm.operators.update.update_multiphase import UpdateMultiphase
+            from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.utils.io import SimulationIO
+            
+            
+            class Run:
+                """
+                Main class to configure and run lattice Boltzmann simulations.
+                """
+            
+                def __init__(
+                        self,
+                        grid_shape: tuple,
+                        lattice_type: str = "D2Q9",
+                        tau: float = 1.0,
+                        nt: int = 1000,
+                        multiphase: bool = False,
+                        kappa: float = 0.1,
+                        beta: float = 1.0,
+                        rho_l: float = 1.0,
+                        rho_v: float = 0.1,
+                        save_interval: int = 100,
+                        results_dir: str = "results"
+                ):
+                    self.grid_shape = grid_shape
+                    self.nt = nt
+                    self.multiphase = multiphase
+                    self.save_interval = save_interval
+            
+                    # Store multiphase params
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+            
+                    # Initialize core components
+                    self.grid = Grid(grid_shape)
+                    self.lattice = Lattice(lattice_type)
+                    self.initialiser = Initialise(self.grid, self.lattice)
+            
+                    # Select the appropriate update and macroscopic operators
+                    if multiphase:
+                        self.update_op = UpdateMultiphase(
+                            self.grid, self.lattice, tau, kappa, beta, rho_l, rho_v
+                        )
+                        self.macroscopic_op = self.update_op.macroscopic
+                    else:
+                        from wblbm.operators.macroscopic.macroscopic import Macroscopic
+                        self.update_op = Update(self.grid, self.lattice, tau)
+                        self.macroscopic_op = Macroscopic(self.grid, self.lattice)
+            
+                    # Prepare config dictionary for the IO handler
+                    self.config = {
+                        'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
+                        'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
+                        'kappa': kappa if multiphase else None, 'beta': beta if multiphase else None,
+                        'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None
+                    }
+                    self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
+            
+                def run(self, init_type: str = 'standard', verbose: bool = True):
+                    """
+                    Main function to run the LBM simulation.
+            
+                    Args:
+                        init_type (str): Type of initialisation ('standard' or 'multiphase_bubble').
+                        verbose (bool): Whether to print progress updates to the console.
+                    """
+                    # Initialize the population distribution based on the simulation type
+                    if self.multiphase:
+                        f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v)
+                    else:
+                        f_prev = self.initialiser.initialise_standard()
+            
+                    if verbose:
+                        print(f"Starting LBM simulation with {self.nt} time steps...")
+                        print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}")
+            
+                    # Main simulation loop
+                    for it in range(self.nt):
+                        f_next = self.update_op(f_prev)
+                        f_prev = f_next
+            
+                        # Save data at the specified interval
+                        if it % self.save_interval == 0 or it == self.nt - 1:
+                            if self.multiphase:
+                                rho, u, force = self.macroscopic_op(f_prev)
+                                data_to_save = {
+                                    'rho': np.array(rho), 'u': np.array(u), 'force': np.array(force)
+                                }
+                            else:
+                                rho, u = self.macroscopic_op(f_prev)
+                                data_to_save = {'rho': np.array(rho), 'u': np.array(u)}
+            
+                            self.io_handler.save_data_step(it, data_to_save)
+            
+                            if verbose:
+                                avg_rho = np.mean(rho)
+                                max_u = np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2))
+                                print(f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}")
+            
+                    if verbose:
+                        print("Simulation completed!")
+                        print(f"Results saved in: {self.io_handler.run_dir}")
             --- End of run.py ---
 
             __init__.py
             --- Code in __init__.py ---
+            from .run import Run
             --- End of __init__.py ---
 
+            __pycache__/
+                run.cpython-312.pyc
+                __init__.cpython-312.pyc
         collision/
             collision_multiphase.py
             --- Code in collision_multiphase.py ---
@@ -615,10 +815,11 @@ wblbm/
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
             from wblbm.operators.differential.gradient import Gradient
+            
+            
             class SourceTerm:
                 """
                 Callable class to calculate the source term for the LBM equation.
-                Uses the provided source_term implementation directly.
                 """
             
                 def __init__(self, grid: Grid, lattice: Lattice):
@@ -636,12 +837,12 @@ wblbm/
                     Calculate the source term for the LBM equation.
             
                     Args:
-                        u (jnp.ndarray): Velocity field.
-                        force (jnp.ndarray): Force field.
-                        rho (jnp.ndarray): Density field.
+                        rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
+                        u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
+                        force (jnp.ndarray): Force field, shape (nx, ny, 1, 2)
             
                     Returns:
-                        jnp.ndarray: Source term.
+                        jnp.ndarray: Source term, shape (nx, ny, q, 1)
                     """
                     nx, ny, q = self.nx, self.ny, self.q
                     w = self.w
@@ -649,95 +850,183 @@ wblbm/
                     d = self.d
                     gradient = self.gradient
             
-                    def source_term(u_, force_, rho_):
-                        """
-                        Calculate the source term for the LBM equation.
+                    # Extract 2D data from 4D arrays
+                    u_2d = u[:, :, 0, :]  # Shape: (nx, ny, 2)
+                    force_2d = force[:, :, 0, :]  # Shape: (nx, ny, 2)
+                    rho_2d = rho[:, :, 0, 0]  # Shape: (nx, ny)
             
-                        Args:
-                            u_ (jnp.ndarray): Velocity field.
-                            force_ (jnp.ndarray): Force field.
-                            rho_ (jnp.ndarray): Density field.
+                    # Calculate gradient of rho
+                    grad_rho = gradient(rho)  # Shape: (nx, ny, 1, 2)
+                    grad_rho_2d = grad_rho[:, :, 0, :]  # Shape: (nx, ny, 2)
             
-                        Returns:
-                            jnp.ndarray: Source term.
-                        """
-                        cx, cy, fx, fy, ux, uy, grad_rho_x, grad_rho_y = (
-                            c[0],
-                            c[1],
-                            force_[0],
-                            force_[1],
-                            u_[0],
-                            u_[1],
-                            gradient(rho_)[0],
-                            gradient(rho_)[1]
-                        )
+                    def source_term(u_2d_, force_2d_, grad_rho_2d_):
+                        cx, cy = c[0], c[1]
+                        fx, fy = force_2d_[:, :, 0], force_2d_[:, :, 1]
+                        ux, uy = u_2d_[:, :, 0], u_2d_[:, :, 1]
+                        grad_rho_x, grad_rho_y = grad_rho_2d_[:, :, 0], grad_rho_2d_[:, :, 1]
+            
                         fx_cor = fx + (grad_rho_x / 3)
                         fy_cor = fy + (grad_rho_y / 3)
                         source_ = jnp.zeros((nx, ny, q))
-                        source_ = source_.at[:, :, 0].set(w[0] * (3 * (cx[0] * fx + cy[0] * fy) +
-                                                                  9 * (cx[0] * fx_cor + cy[0] * fy_cor) * (cx[0] * ux + cy[0] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[0] * cx[0] + cy[0] * cy[0]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 1].set(w[1] * (3 * (cx[1] * fx + cy[1] * fy) +
-                                                                  9 * (cx[1] * fx_cor + cy[1] * fy_cor) * (cx[1] * ux + cy[1] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[1] * cx[1] + cy[1] * cy[1]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 2].set(w[2] * (3 * (cx[2] * fx + cy[2] * fy) +
-                                                                  9 * (cx[2] * fx_cor + cy[2] * fy_cor) * (cx[2] * ux + cy[2] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[2] * cx[2] + cy[2] * cy[2]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 3].set(w[3] * (3 * (cx[3] * fx + cy[3] * fy) +
-                                                                  9 * (cx[3] * fx_cor + cy[3] * fy_cor) * (cx[3] * ux + cy[3] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[3] * cx[3] + cy[3] * cy[3]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 4].set(w[4] * (3 * (cx[4] * fx + cy[4] * fy) +
-                                                                  9 * (cx[4] * fx_cor + cy[4] * fy_cor) * (cx[4] * ux + cy[4] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[4] * cx[4] + cy[4] * cy[4]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 5].set(w[5] * (3 * (cx[5] * fx + cy[5] * fy) +
-                                                                  9 * (cx[5] * fx_cor + cy[5] * fy_cor) * (cx[5] * ux + cy[5] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[5] * cx[5] + cy[5] * cy[5]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 6].set(w[6] * (3 * (cx[6] * fx + cy[6] * fy) +
-                                                                  9 * (cx[6] * fx_cor + cy[6] * fy_cor) * (cx[6] * ux + cy[6] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[6] * cx[6] + cy[6] * cy[6]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 7].set(w[7] * (3 * (cx[7] * fx + cy[7] * fy) +
-                                                                  9 * (cx[7] * fx_cor + cy[7] * fy_cor) * (cx[7] * ux + cy[7] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[7] * cx[7] + cy[7] * cy[7]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
-                        source_ = source_.at[:, :, 8].set(w[8] * (3 * (cx[8] * fx + cy[8] * fy) +
-                                                                  9 * (cx[8] * fx_cor + cy[8] * fy_cor) * (cx[8] * ux + cy[8] * uy) -
-                                                                  3 * (ux * fx_cor + uy * fy_cor) +
-                                                                  .5 * (3 * (cx[8] * cx[8] + cy[8] * cy[8]) - d) * (
-                                                                          ux * grad_rho_x + uy * grad_rho_y)
-                                                                  ))
+            
+                        for i in range(q):
+                            source_ = source_.at[:, :, i].set(w[i] * (
+                                    3 * (cx[i] * fx + cy[i] * fy) +
+                                    9 * (cx[i] * fx_cor + cy[i] * fy_cor) * (cx[i] * ux + cy[i] * uy) -
+                                    3 * (ux * fx_cor + uy * fy_cor) +
+                                    0.5 * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d) * (
+                                            ux * grad_rho_x + uy * grad_rho_y)
+                            ))
+            
                         return source_
             
-                    return source_term(u, force, rho)
+                    source_2d = source_term(u_2d, force_2d, grad_rho_2d)
+            
+                    # Convert to 4D format: (nx, ny, q, 1)
+                    source_4d = jnp.expand_dims(source_2d, axis=-1)
+            
+                    return source_4d
             --- End of source.py ---
 
+            __pycache__/
+                collision.cpython-312.pyc
+                collision_multiphase.cpython-312.pyc
+                source.cpython-312.pyc
+                __init__.cpython-312.pyc
     utils/
+        plotting.py
+        --- Code in plotting.py ---
+        import os
+        import numpy as np
+        import matplotlib.pyplot as plt
+        
+        
+        def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
+            """
+            Visualizes simulation results by loading and plotting every saved timestep.
+        
+            Args:
+                sim_instance: The completed simulation instance from the Run class.
+                title (str): The base title for the plots.
+            """
+            try:
+                # Get the directory where data files are stored
+                data_dir = sim_instance.io_handler.data_dir
+        
+                # Create a new directory within the run to store the plots
+                plot_dir = os.path.join(sim_instance.io_handler.run_dir, "plots")
+                os.makedirs(plot_dir, exist_ok=True)
+                print(f"Saving plots to: {plot_dir}")
+        
+                # Get all data files and sort them by timestep
+                files = [f for f in os.listdir(data_dir) if f.endswith('.npz')]
+                if not files:
+                    print("No data files found to visualize.")
+                    return
+        
+                # Sort files based on the iteration number in the filename
+                files.sort(key=lambda f: int(f.split('_')[-1].split('.')[0]))
+        
+                # Loop through each timestep file and generate a plot
+                for filename in files:
+                    file_path = os.path.join(data_dir, filename)
+                    timestep = int(filename.split('_')[-1].split('.')[0])
+        
+                    data = np.load(file_path)
+                    final_rho = data['rho']
+                    final_u = data['u']
+        
+                    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        
+                    # Plot density
+                    im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin='lower', cmap='viridis')
+                    axes[0].set_title(f'Density (t={timestep})')
+                    plt.colorbar(im1, ax=axes[0], label="Density")
+        
+                    # Plot velocity magnitude
+                    vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
+                    im2 = axes[1].imshow(vel_mag.T, origin='lower', cmap='plasma')
+                    axes[1].set_title('Velocity Magnitude')
+                    plt.colorbar(im2, ax=axes[1], label="Velocity")
+        
+                    for ax in axes:
+                        ax.set_xlabel('x')
+                        ax.set_ylabel('y')
+        
+                    plt.suptitle(f"{title} - Timestep {timestep}")
+                    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        
+                    # Save the figure to the plots directory
+                    plot_filename = os.path.join(plot_dir, f"timestep_{timestep}.png")
+                    plt.savefig(plot_filename)
+                    plt.close(fig)  # Close the figure to free up memory
+        
+                print(f"Finished generating plots for all {len(files)} timesteps.")
+        
+            except ImportError:
+                print("Matplotlib not found. Please install it to visualize results.")
+            except Exception as e:
+                print(f"An error occurred during visualization: {e}")
+        
+        --- End of plotting.py ---
+
+        io.py
+        --- Code in io.py ---
+        import os
+        import json
+        import numpy as np
+        from datetime import datetime
+        from typing import Dict
+        
+        class SimulationIO:
+            """
+            Handles all I/O operations for the simulation, including logging and saving results.
+            """
+            def __init__(self, base_dir: str = "results", config: Dict = None):
+                """
+                Initializes the IO handler.
+        
+                Args:
+                    base_dir (str): The base directory to store simulation results.
+                    config (Dict, optional): A dictionary containing the simulation configuration to save.
+                """
+                self.base_dir = base_dir
+                self.run_dir = self._create_timestamped_directory()
+                self.data_dir = os.path.join(self.run_dir, "data")
+                os.makedirs(self.data_dir, exist_ok=True)
+        
+                if config:
+                    self.save_config(config)
+        
+            def _create_timestamped_directory(self) -> str:
+                """Creates a unique, timestamped directory for a single simulation run."""
+                timestamp = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
+                run_dir = os.path.join(self.base_dir, timestamp)
+                os.makedirs(run_dir, exist_ok=True)
+                print(f"Created results directory: {run_dir}")
+                return run_dir
+        
+            def save_config(self, config: Dict):
+                """Saves the simulation configuration to a JSON file."""
+                config_path = os.path.join(self.run_dir, "config.json")
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=4)
+                print(f"Configuration saved to {config_path}")
+        
+            def save_data_step(self, iteration: int, data: Dict[str, np.ndarray]):
+                """Saves the data for a single timestep to a compressed .npz file."""
+                filename = os.path.join(self.data_dir, f"timestep_{iteration}.npz")
+                np.savez(filename, **data)
+        --- End of io.py ---
+
         __init__.py
         --- Code in __init__.py ---
         --- End of __init__.py ---
 
+        __pycache__/
+            io.cpython-312.pyc
+            __init__.cpython-312.pyc
+            plotting.cpython-312.pyc
     __pycache__/
         __init__.cpython-312.pyc
     lattice/
@@ -916,18 +1205,56 @@ wblbm/
 example/
     test.py
     --- Code in test.py ---
-    from wblbm.grid.grid import Grid
-    from wblbm.lattice import Lattice
     import numpy as np
+    from wblbm.operators.run.run import Run
+    from wblbm.utils.plotting import visualize_all_steps # Import the new function
     
-    lattice = Lattice("D2Q9")
-    grid = Grid((200, 100))
+    def test_basic_simulation():
+        """Test a basic single-phase LBM simulation."""
+        print("\n=== Basic LBM Simulation Test ===")
+        sim = Run(
+            grid_shape=(100, 50),
+            lattice_type="D2Q9",
+            tau=1.0,
+            nt=500,
+            save_interval=100,
+            multiphase=False
+        )
+        sim.run(init_type='standard', verbose=True)
+        return sim
     
-    c: np.array = lattice.c
-    bot = lattice.construct_bottom_indices
-    edges = grid.get_edges()
-    nx, ny = grid.nx, grid.ny
+    def test_multiphase_simulation():
+        """Test a multiphase LBM simulation with a central bubble."""
+        print("\n=== Multiphase LBM Simulation Test ===")
+        sim = Run(
+            grid_shape=(80, 80),
+            lattice_type="D2Q9",
+            tau=0.9,
+            nt=300,
+            save_interval=50,
+            multiphase=True,
+            kappa=0.05,
+            rho_l=1.0,
+            rho_v=0.1
+        )
+        sim.run(init_type='multiphase_bubble', verbose=True)
+        return sim
     
-    print(c[0])
+    if __name__ == "__main__":
+        print("Testing LBM Codebase with Refactored IO and Initialization")
+        print("=" * 60)
+    
+        # Run simulations
+        sim_basic = test_basic_simulation()
+        sim_multiphase = test_multiphase_simulation()
+    
+        # Visualize results using the new, centralized function
+        print("\n=== Visualizing Results ===")
+        visualize_all_steps(sim_basic, "Basic LBM Simulation")
+        visualize_all_steps(sim_multiphase, "Multiphase LBM Simulation")
+    
+        print("\nAll tests completed!")
+    
     --- End of test.py ---
 
+    results/

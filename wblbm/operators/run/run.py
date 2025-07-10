@@ -1,17 +1,17 @@
 import jax.numpy as jnp
 import numpy as np
-from typing import Optional, Callable
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.initialise.init import Initialise
 from wblbm.operators.update.update import Update
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
-from wblbm.operators.macroscopic.macroscopic import Macroscopic
+from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+from wblbm.utils.io import SimulationIO
 
 
 class Run:
     """
-    Main class to run lattice Boltzmann simulations.
+    Main class to configure and run lattice Boltzmann simulations.
     """
 
     def __init__(
@@ -25,170 +25,87 @@ class Run:
             beta: float = 1.0,
             rho_l: float = 1.0,
             rho_v: float = 0.1,
+            interface_width: int = 4,
             save_interval: int = 100,
-            output_callback: Optional[Callable] = None
+            results_dir: str = "results"
     ):
-        """
-        Initialize the Run class.
-
-        Args:
-            grid_shape (tuple): Shape of the simulation grid (nx, ny)
-            lattice_type (str): Type of lattice (default: "D2Q9")
-            tau (float): Relaxation time parameter
-            nt (int): Number of time steps
-            multiphase (bool): Whether to run multiphase simulation
-            kappa (float): Interface width parameter (for multiphase)
-            beta (float): Surface tension parameter (for multiphase)
-            rho_l (float): Liquid density (for multiphase)
-            rho_v (float): Vapor density (for multiphase)
-            save_interval (int): Interval for saving/outputting results
-            output_callback (Callable): Optional callback function for custom output handling
-        """
         self.grid_shape = grid_shape
-        self.lattice_type = lattice_type
-        self.tau = tau
         self.nt = nt
         self.multiphase = multiphase
         self.save_interval = save_interval
-        self.output_callback = output_callback
 
-        # Initialize components
+        # Store multiphase params
+        self.rho_l = rho_l
+        self.rho_v = rho_v
+        self.interface_width = interface_width if multiphase else None
+
+        # Initialize core components
         self.grid = Grid(grid_shape)
         self.lattice = Lattice(lattice_type)
-        self.initialise = Initialise(grid_shape, lattice_type)
+        self.initialiser = Initialise(self.grid, self.lattice)
 
-        # Initialize update operator
+        # Select the appropriate update and macroscopic operators
         if multiphase:
-            self.update = UpdateMultiphase(
+            self.update_op = UpdateMultiphase(
                 self.grid, self.lattice, tau, kappa, beta, rho_l, rho_v
             )
+            self.macroscopic_op = self.update_op.macroscopic
         else:
-            self.update = Update(self.grid, self.lattice, tau)
+            from wblbm.operators.macroscopic.macroscopic import Macroscopic
+            self.update_op = Update(self.grid, self.lattice, tau)
+            self.macroscopic_op = Macroscopic(self.grid, self.lattice)
 
-        # Initialize macroscopic calculator for output
-        self.macroscopic = Macroscopic(self.grid, self.lattice)
-
-        # Storage for results
-        self.results = {
-            'rho': [],
-            'u': [],
-            'iterations': []
+        # Prepare config dictionary for the IO handler
+        self.config = {
+            'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
+            'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
+            'kappa': kappa if multiphase else None, 'beta': beta if multiphase else None,
+            'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None,
+            'interface_width': self.interface_width
         }
+        self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
 
-    def init(self, initial_density: float = 1.0,
-             initial_velocity: Optional[jnp.ndarray] = None,
-             custom_init: Optional[Callable] = None) -> jnp.ndarray:
-        """
-        Initialize the population distribution.
-
-        Args:
-            initial_density (float): Initial density value
-            initial_velocity (jnp.ndarray): Initial velocity field
-            custom_init (Callable): Custom initialization function
-
-        Returns:
-            jnp.ndarray: Initial population distribution
-        """
-        if custom_init is not None:
-            return custom_init()
-
-        # Initialize population
-        f = self.initialise.initialise_population(initial_density)
-        f = jnp.array(f)
-
-        # If initial velocity is provided, adjust the population
-        if initial_velocity is not None:
-            from wblbm.operators.equilibrium.equilibirum import Equilibrium
-            equilibrium = Equilibrium(self.grid, self.lattice)
-
-            # Create density field
-            rho = jnp.full((self.grid.nx, self.grid.ny, 1, 1), initial_density)
-
-            # Reshape velocity to match expected format
-            if initial_velocity.shape != (self.grid.nx, self.grid.ny, 1, 2):
-                u = jnp.broadcast_to(
-                    initial_velocity.reshape(1, 1, 1, -1),
-                    (self.grid.nx, self.grid.ny, 1, 2)
-                )
-            else:
-                u = initial_velocity
-
-            # Calculate equilibrium distribution
-            feq = equilibrium(rho, u)
-            f = feq.reshape(self.grid.nx, self.grid.ny, self.lattice.q, 1)
-
-        return f
-
-    def run(self,
-            initial_density: float = 1.0,
-            initial_velocity: Optional[jnp.ndarray] = None,
-            custom_init: Optional[Callable] = None,
-            verbose: bool = True) -> dict:
+    def run(self, init_type: str = 'standard', verbose: bool = True):
         """
         Main function to run the LBM simulation.
 
         Args:
-            initial_density (float): Initial density value
-            initial_velocity (jnp.ndarray): Initial velocity field
-            custom_init (Callable): Custom initialization function
-            verbose (bool): Whether to print progress
-
-        Returns:
-            dict: Dictionary containing simulation results
+            init_type (str): Type of initialisation ('standard' or 'multiphase_bubble').
+            verbose (bool): Whether to print progress updates to the console.
         """
-        # Initialize
-        f_prev = self.init(initial_density, initial_velocity, custom_init)
+        # Initialize the population distribution based on the simulation type
+        if self.multiphase:
+            f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
+        else:
+            f_prev = self.initialiser.initialise_standard()
 
         if verbose:
             print(f"Starting LBM simulation with {self.nt} time steps...")
-            print(f"Grid shape: {self.grid_shape}")
-            print(f"Lattice type: {self.lattice_type}")
-            print(f"Multiphase: {self.multiphase}")
+            print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}")
 
         # Main simulation loop
         for it in range(self.nt):
-            # Update step
-            f_next = self.update(f_prev)
+            f_next = self.update_op(f_prev)
             f_prev = f_next
 
-            # Save results at specified intervals
+            # Save data at the specified interval
             if it % self.save_interval == 0 or it == self.nt - 1:
-                rho, u = self.macroscopic(f_prev)
-                self.results['rho'].append(np.array(rho))
-                self.results['u'].append(np.array(u))
-                self.results['iterations'].append(it)
+                if self.multiphase:
+                    rho, u, force = self.macroscopic_op(f_prev)
+                    data_to_save = {
+                        'rho': np.array(rho), 'u': np.array(u), 'force': np.array(force)
+                    }
+                else:
+                    rho, u = self.macroscopic_op(f_prev)
+                    data_to_save = {'rho': np.array(rho), 'u': np.array(u)}
 
-                # Custom output callback
-                if self.output_callback:
-                    self.output_callback(it, rho, u, f_prev)
+                self.io_handler.save_data_step(it, data_to_save)
 
                 if verbose:
-                    print(f"Step {it}/{self.nt}: avg_rho={np.mean(rho):.4f}, "
-                          f"max_u={np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2)):.6f}")
+                    avg_rho = np.mean(rho)
+                    max_u = np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2))
+                    print(f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}")
 
         if verbose:
             print("Simulation completed!")
-
-        return self.results
-
-    def get_final_state(self) -> tuple:
-        """
-        Get the final density and velocity fields.
-
-        Returns:
-            tuple: (rho, u) final density and velocity fields
-        """
-        if not self.results['rho']:
-            raise ValueError("No simulation results available. Run simulation first.")
-
-        return self.results['rho'][-1], self.results['u'][-1]
-
-    def save_results(self, filename: str):
-        """
-        Save simulation results to a file.
-
-        Args:
-            filename (str): Output filename
-        """
-        np.savez(filename, **self.results)
-        print(f"Results saved to {filename}")
+            print(f"Results saved in: {self.io_handler.run_dir}")

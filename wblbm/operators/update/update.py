@@ -1,4 +1,7 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
@@ -24,12 +27,10 @@ class Update(object):
         self.source_term = SourceTerm(grid, lattice)
         self.streaming = Streaming(lattice)
 
+    @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.ndarray):
         rho, u = self.macroscopic(f)
         feq = self.equilibrium(rho, u)
         fcol = self.collision(f, feq)
         fstream = self.streaming(fcol)
         return fstream
-
-
-
