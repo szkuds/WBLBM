@@ -74,8 +74,10 @@ class Run:
             verbose (bool): Whether to print progress updates to the console.
         """
         # Initialize the population distribution based on the simulation type
-        if self.multiphase:
+        if self.multiphase and init_type == 'multiphase_droplet':
             f_prev = self.initialiser.initialise_multiphase_droplet(self.rho_l, self.rho_v, self.interface_width)
+        elif self.multiphase and init_type == 'multiphase_bubble':
+            f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
         else:
             f_prev = self.initialiser.initialise_standard()
 

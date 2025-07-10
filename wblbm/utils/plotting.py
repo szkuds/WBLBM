@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
+def visualise(sim_instance, title="LBM Simulation Results"):
     """
     Visualizes simulation results by loading and plotting every saved timestep.
     This version includes a vector plot overlay on the velocity magnitude heatmap.
