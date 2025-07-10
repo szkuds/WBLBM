@@ -22,7 +22,6 @@ class Run:
             nt: int = 1000,
             multiphase: bool = False,
             kappa: float = 0.1,
-            beta: float = 1.0,
             rho_l: float = 1.0,
             rho_v: float = 0.1,
             interface_width: int = 4,
@@ -46,20 +45,21 @@ class Run:
 
         # Select the appropriate update and macroscopic operators
         if multiphase:
-            self.update_op = UpdateMultiphase(
-                self.grid, self.lattice, tau, kappa, beta, rho_l, rho_v
+            from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            self.update = UpdateMultiphase(
+                self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v
             )
-            self.macroscopic_op = self.update_op.macroscopic
+            self.macroscopic_multiphase = MacroscopicMultiphase(self.grid, self.lattice, kappa, interface_width, rho_l, rho_v)
         else:
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
-            self.update_op = Update(self.grid, self.lattice, tau)
-            self.macroscopic_op = Macroscopic(self.grid, self.lattice)
+            self.update = Update(self.grid, self.lattice, tau)
+            self.macroscopic = Macroscopic(self.grid, self.lattice)
 
         # Prepare config dictionary for the IO handler
         self.config = {
             'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
             'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
-            'kappa': kappa if multiphase else None, 'beta': beta if multiphase else None,
+            'kappa': kappa if multiphase else None, 'beta': self.update.macroscopic.beta if multiphase else None,
             'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None,
             'interface_width': self.interface_width
         }
@@ -75,7 +75,7 @@ class Run:
         """
         # Initialize the population distribution based on the simulation type
         if self.multiphase:
-            f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
+            f_prev = self.initialiser.initialise_multiphase_droplet(self.rho_l, self.rho_v, self.interface_width)
         else:
             f_prev = self.initialiser.initialise_standard()
 
@@ -85,18 +85,18 @@ class Run:
 
         # Main simulation loop
         for it in range(self.nt):
-            f_next = self.update_op(f_prev)
+            f_next = self.update(f_prev)
             f_prev = f_next
 
             # Save data at the specified interval
             if it % self.save_interval == 0 or it == self.nt - 1:
                 if self.multiphase:
-                    rho, u, force = self.macroscopic_op(f_prev)
+                    rho, u, force = self.macroscopic_multiphase(f_prev)
                     data_to_save = {
                         'rho': np.array(rho), 'u': np.array(u), 'force': np.array(force)
                     }
                 else:
-                    rho, u = self.macroscopic_op(f_prev)
+                    rho, u = self.macroscopic(f_prev)
                     data_to_save = {'rho': np.array(rho), 'u': np.array(u)}
 
                 self.io_handler.save_data_step(it, data_to_save)

@@ -1,0 +1,16 @@
+{
+    "grid_shape": [
+        200,
+        200
+    ],
+    "lattice_type": "D2Q9",
+    "tau": 0.9,
+    "nt": 50,
+    "multiphase": true,
+    "save_interval": 1,
+    "kappa": 0.01,
+    "beta": 0.0027434842249657062,
+    "rho_l": 1.0,
+    "rho_v": 0.1,
+    "interface_width": 6
+}

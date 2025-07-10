@@ -14,12 +14,12 @@ class UpdateMultiphase(Update):
             lattice: Lattice,
             tau: float,
             kappa: float,
-            beta: float,
+            interface_width: int,
             rho_l: float,
             rho_v: float
     ):
         super().__init__(grid, lattice, tau)
-        self.macroscopic = MacroscopicMultiphase(grid, lattice, kappa, beta, rho_l, rho_v)
+        self.macroscopic = MacroscopicMultiphase(grid, lattice, kappa, interface_width, rho_l, rho_v)
         self.collision = CollisionMultiphase(grid, lattice, tau)
 
     def __call__(self, f: jnp.array):
