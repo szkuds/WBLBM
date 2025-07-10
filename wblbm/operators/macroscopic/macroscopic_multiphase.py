@@ -13,14 +13,14 @@ class MacroscopicMultiphase(Macroscopic):
     Inherits from Macroscopic and adds multiphase-specific methods.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice, kappa: float, beta: float, rho_l: float, rho_v: float):
+    def __init__(self, grid: Grid, lattice: Lattice, kappa: float, interface_width: int, rho_l: float, rho_v: float):
         super().__init__(grid, lattice)
         self.kappa = kappa
-        self.beta = beta
         self.rho_l = rho_l
         self.rho_v = rho_v
         self.gradient = Gradient(lattice)
         self.laplacian = Laplacian(lattice)
+        self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
 
     def __call__(self, f: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """

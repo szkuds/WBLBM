@@ -39,7 +39,7 @@ class Initialise:
         # Return the equilibrium distribution for this state
         return self.equilibrium(rho, u)
 
-    def initialise_multiphase_bubble(self, rho_l: float, rho_v: float, interface_width: int):
+    def initialise_multiphase_droplet(self, rho_l: float, rho_v: float, interface_width: int):
         """
         Initialises a multiphase simulation with a low-density bubble in the center.
 

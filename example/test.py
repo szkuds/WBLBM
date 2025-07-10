@@ -25,8 +25,8 @@ def test_multiphase_simulation():
         grid_shape=(200, 200),
         lattice_type="D2Q9",
         tau=0.9,
-        nt=50,
-        save_interval=1,
+        nt=5000,
+        save_interval=100,
         multiphase=True,
         kappa=0.01,
         rho_l=1.0,
@@ -42,12 +42,12 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulations
-    sim_basic = test_basic_simulation()
+    #sim_basic = test_basic_simulation()
     sim_multiphase = test_multiphase_simulation()
 
     # Visualize results using the new, centralized function
     print("\n=== Visualizing Results ===")
-    visualize_all_steps(sim_basic, "Basic LBM Simulation")
+    #visualize_all_steps(sim_basic, "Basic LBM Simulation")
     visualize_all_steps(sim_multiphase, "Multiphase LBM Simulation")
 
     print("\nAll tests completed!")

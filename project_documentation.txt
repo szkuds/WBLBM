@@ -334,7 +334,10 @@ wblbm/
         update/
             update.py
             --- Code in update.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
             
             from wblbm.grid import Grid
             from wblbm.lattice import Lattice
@@ -360,15 +363,13 @@ wblbm/
                     self.source_term = SourceTerm(grid, lattice)
                     self.streaming = Streaming(lattice)
             
+                @partial(jit, static_argnums=(0,))
                 def __call__(self, f: jnp.ndarray):
                     rho, u = self.macroscopic(f)
                     feq = self.equilibrium(rho, u)
                     fcol = self.collision(f, feq)
                     fstream = self.streaming(fcol)
                     return fstream
-            
-            
-            
             --- End of update.py ---
 
             __init__.py
@@ -505,7 +506,7 @@ wblbm/
                     # Return the equilibrium distribution for this state
                     return self.equilibrium(rho, u)
             
-                def initialise_multiphase_bubble(self, rho_l: float, rho_v: float):
+                def initialise_multiphase_bubble(self, rho_l: float, rho_v: float, interface_width: int):
                     """
                     Initialises a multiphase simulation with a low-density bubble in the center.
             
@@ -522,7 +523,6 @@ wblbm/
                     radius = min(self.nx, self.ny) // 4
             
                     # Use tanh for a smooth, stable interface
-                    interface_width = 2.0
                     distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
                     rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh((distance - radius) / interface_width)
             
@@ -557,7 +557,6 @@ wblbm/
 
             equilibirum.py
             --- Code in equilibirum.py ---
-            # wblbm/operators/equilibrium/equilibirum.py
             import jax.numpy as jnp
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
@@ -611,7 +610,7 @@ wblbm/
                         f_eq = f_eq.at[:, :, i, :].set(
                             w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2)
                         )
-                    f_eq = f_eq.at[:, :, 0, :].set(rho[:, :, :] * (1 - w[0] * (1.5 * (ux * ux + uy * uy))))
+                    f_eq = f_eq.at[:, :, 0, :].set(rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy))))
             
                     return f_eq
             --- End of equilibirum.py ---
@@ -649,6 +648,7 @@ wblbm/
                         beta: float = 1.0,
                         rho_l: float = 1.0,
                         rho_v: float = 0.1,
+                        interface_width: int = 4,
                         save_interval: int = 100,
                         results_dir: str = "results"
                 ):
@@ -660,6 +660,7 @@ wblbm/
                     # Store multiphase params
                     self.rho_l = rho_l
                     self.rho_v = rho_v
+                    self.interface_width = interface_width if multiphase else None
             
                     # Initialize core components
                     self.grid = Grid(grid_shape)
@@ -682,7 +683,8 @@ wblbm/
                         'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
                         'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
                         'kappa': kappa if multiphase else None, 'beta': beta if multiphase else None,
-                        'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None
+                        'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None,
+                        'interface_width': self.interface_width
                     }
                     self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
             
@@ -696,7 +698,7 @@ wblbm/
                     """
                     # Initialize the population distribution based on the simulation type
                     if self.multiphase:
-                        f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v)
+                        f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
                     else:
                         f_prev = self.initialiser.initialise_standard()
             
@@ -904,6 +906,7 @@ wblbm/
         def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
             """
             Visualizes simulation results by loading and plotting every saved timestep.
+            This version includes a vector plot overlay on the velocity magnitude heatmap.
         
             Args:
                 sim_instance: The completed simulation instance from the Run class.
@@ -943,11 +946,33 @@ wblbm/
                     axes[0].set_title(f'Density (t={timestep})')
                     plt.colorbar(im1, ax=axes[0], label="Density")
         
-                    # Plot velocity magnitude
+                    # --- Velocity Plotting with Vector Overlay ---
+        
+                    # 1. Plot velocity magnitude heatmap
                     vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
                     im2 = axes[1].imshow(vel_mag.T, origin='lower', cmap='plasma')
-                    axes[1].set_title('Velocity Magnitude')
-                    plt.colorbar(im2, ax=axes[1], label="Velocity")
+                    axes[1].set_title('Velocity Magnitude & Vectors')
+                    plt.colorbar(im2, ax=axes[1], label="Velocity Magnitude")
+        
+                    # 2. Overlay velocity vector plot (quiver)
+                    nx, ny = final_u.shape[0], final_u.shape[1]
+                    x = np.arange(0, nx)
+                    y = np.arange(0, ny)
+                    X, Y = np.meshgrid(x, y)
+        
+                    # Extract velocity components
+                    U = final_u[:, :, 0, 0]
+                    V = final_u[:, :, 0, 1]
+        
+                    # Downsample the vectors to avoid a cluttered plot
+                    # Plot one vector every `skip` grid points
+                    skip = 10
+        
+                    # Plotting quiver requires transposing U and V to match the meshgrid and imshow orientation
+                    axes[1].quiver(X[::skip, ::skip], Y[::skip, ::skip], U.T[::skip, ::skip], V.T[::skip, ::skip],
+                                   color='white', scale=None, scale_units='xy', angles='xy')
+        
+                    # --- End of Velocity Plotting Section ---
         
                     for ax in axes:
                         ax.set_xlabel('x')
@@ -967,7 +992,6 @@ wblbm/
                 print("Matplotlib not found. Please install it to visualize results.")
             except Exception as e:
                 print(f"An error occurred during visualization: {e}")
-        
         --- End of plotting.py ---
 
         io.py
@@ -1207,7 +1231,8 @@ example/
     --- Code in test.py ---
     import numpy as np
     from wblbm.operators.run.run import Run
-    from wblbm.utils.plotting import visualize_all_steps # Import the new function
+    from wblbm.utils.plotting import visualize_all_steps  # Import the new function
+    
     
     def test_basic_simulation():
         """Test a basic single-phase LBM simulation."""
@@ -1223,22 +1248,25 @@ example/
         sim.run(init_type='standard', verbose=True)
         return sim
     
+    
     def test_multiphase_simulation():
         """Test a multiphase LBM simulation with a central bubble."""
         print("\n=== Multiphase LBM Simulation Test ===")
         sim = Run(
-            grid_shape=(80, 80),
+            grid_shape=(200, 200),
             lattice_type="D2Q9",
             tau=0.9,
-            nt=300,
-            save_interval=50,
+            nt=50,
+            save_interval=1,
             multiphase=True,
-            kappa=0.05,
+            kappa=0.01,
             rho_l=1.0,
-            rho_v=0.1
+            rho_v=0.1,
+            interface_width=6
         )
         sim.run(init_type='multiphase_bubble', verbose=True)
         return sim
+    
     
     if __name__ == "__main__":
         print("Testing LBM Codebase with Refactored IO and Initialization")
@@ -1254,7 +1282,121 @@ example/
         visualize_all_steps(sim_multiphase, "Multiphase LBM Simulation")
     
         print("\nAll tests completed!")
-    
     --- End of test.py ---
 
     results/
+        2025-07-10/
+            11-55-14/
+                config.json
+                data/
+                    timestep_13.npz
+                    timestep_12.npz
+                    timestep_10.npz
+                    timestep_38.npz
+                    timestep_39.npz
+                    timestep_11.npz
+                    timestep_29.npz
+                    timestep_15.npz
+                    timestep_14.npz
+                    timestep_28.npz
+                    timestep_16.npz
+                    timestep_17.npz
+                    timestep_9.npz
+                    timestep_8.npz
+                    timestep_49.npz
+                    timestep_48.npz
+                    timestep_45.npz
+                    timestep_0.npz
+                    timestep_1.npz
+                    timestep_44.npz
+                    timestep_46.npz
+                    timestep_3.npz
+                    timestep_2.npz
+                    timestep_47.npz
+                    timestep_400.npz
+                    timestep_43.npz
+                    timestep_6.npz
+                    timestep_7.npz
+                    timestep_42.npz
+                    timestep_40.npz
+                    timestep_5.npz
+                    timestep_4.npz
+                    timestep_200.npz
+                    timestep_41.npz
+                    timestep_26.npz
+                    timestep_32.npz
+                    timestep_33.npz
+                    timestep_27.npz
+                    timestep_31.npz
+                    timestep_25.npz
+                    timestep_19.npz
+                    timestep_18.npz
+                    timestep_24.npz
+                    timestep_30.npz
+                    timestep_34.npz
+                    timestep_20.npz
+                    timestep_21.npz
+                    timestep_35.npz
+                    timestep_499.npz
+                    timestep_300.npz
+                    timestep_100.npz
+                    timestep_23.npz
+                    timestep_37.npz
+                    timestep_36.npz
+                    timestep_22.npz
+                plots/
+                    timestep_13.png
+                    timestep_12.png
+                    timestep_10.png
+                    timestep_38.png
+                    timestep_39.png
+                    timestep_11.png
+                    timestep_29.png
+                    timestep_15.png
+                    timestep_14.png
+                    timestep_28.png
+                    timestep_16.png
+                    timestep_17.png
+                    timestep_9.png
+                    timestep_8.png
+                    timestep_49.png
+                    timestep_48.png
+                    timestep_45.png
+                    timestep_0.png
+                    timestep_1.png
+                    timestep_44.png
+                    timestep_46.png
+                    timestep_3.png
+                    timestep_2.png
+                    timestep_400.png
+                    timestep_47.png
+                    timestep_43.png
+                    timestep_6.png
+                    timestep_7.png
+                    timestep_42.png
+                    timestep_40.png
+                    timestep_5.png
+                    timestep_4.png
+                    timestep_200.png
+                    timestep_41.png
+                    timestep_26.png
+                    timestep_32.png
+                    timestep_33.png
+                    timestep_27.png
+                    timestep_31.png
+                    timestep_25.png
+                    timestep_19.png
+                    timestep_18.png
+                    timestep_24.png
+                    timestep_30.png
+                    timestep_34.png
+                    timestep_20.png
+                    timestep_300.png
+                    timestep_499.png
+                    timestep_21.png
+                    timestep_35.png
+                    timestep_100.png
+                    timestep_23.png
+                    timestep_37.png
+                    timestep_36.png
+                    timestep_22.png

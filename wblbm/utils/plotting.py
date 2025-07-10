@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
     """
     Visualizes simulation results by loading and plotting every saved timestep.
+    This version includes a vector plot overlay on the velocity magnitude heatmap.
 
     Args:
         sim_instance: The completed simulation instance from the Run class.
@@ -45,11 +46,33 @@ def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
             axes[0].set_title(f'Density (t={timestep})')
             plt.colorbar(im1, ax=axes[0], label="Density")
 
-            # Plot velocity magnitude
+            # --- Velocity Plotting with Vector Overlay ---
+
+            # 1. Plot velocity magnitude heatmap
             vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
             im2 = axes[1].imshow(vel_mag.T, origin='lower', cmap='plasma')
-            axes[1].set_title('Velocity Magnitude')
-            plt.colorbar(im2, ax=axes[1], label="Velocity")
+            axes[1].set_title('Velocity Magnitude & Vectors')
+            plt.colorbar(im2, ax=axes[1], label="Velocity Magnitude")
+
+            # 2. Overlay velocity vector plot (quiver)
+            nx, ny = final_u.shape[0], final_u.shape[1]
+            x = np.arange(0, nx)
+            y = np.arange(0, ny)
+            X, Y = np.meshgrid(x, y)
+
+            # Extract velocity components
+            U = final_u[:, :, 0, 0]
+            V = final_u[:, :, 0, 1]
+
+            # Downsample the vectors to avoid a cluttered plot
+            # Plot one vector every `skip` grid points
+            skip = 10
+
+            # Plotting quiver requires transposing U and V to match the meshgrid and imshow orientation
+            axes[1].quiver(X[::skip, ::skip], Y[::skip, ::skip], U.T[::skip, ::skip], V.T[::skip, ::skip],
+                           color='white', scale=None, scale_units='xy', angles='xy')
+
+            # --- End of Velocity Plotting Section ---
 
             for ax in axes:
                 ax.set_xlabel('x')
@@ -69,4 +92,3 @@ def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
         print("Matplotlib not found. Please install it to visualize results.")
     except Exception as e:
         print(f"An error occurred during visualization: {e}")
-
