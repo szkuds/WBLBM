@@ -35,6 +35,11 @@ class SimulationIO:
     def save_config(self, config: Dict):
         """Saves the simulation configuration to a JSON file."""
         config_path = os.path.join(self.run_dir, "config.json")
+        
+        # Rename boundary condition details if present (avoids duplication)
+        if 'bc_config' in config:
+            config['boundary_conditions'] = config.pop('bc_config')  # Rename without copying
+        
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=4)
         print(f"Configuration saved to {config_path}")

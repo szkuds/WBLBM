@@ -7,7 +7,7 @@ from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from typing import Tuple
 from wblbm.operators.differential.gradient import Gradient
-from wblbm.utils.timing import time_function
+from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
 class Macroscopic:
@@ -24,7 +24,7 @@ class Macroscopic:
         self.cy: jnp.ndarray = jnp.array(lattice.c[1])
         self.gradient = Gradient(lattice)
 
-    @time_function
+    @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """

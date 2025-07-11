@@ -8,6 +8,7 @@ from wblbm.operators.update.update_multiphase import UpdateMultiphase
 from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
 from wblbm.utils.io import SimulationIO
 from wblbm.utils.profiler import JAXProfiler
+from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
 
 
 class Run:
@@ -27,7 +28,8 @@ class Run:
             rho_v: float = 0.1,
             interface_width: int = 4,
             save_interval: int = 100,
-            results_dir: str = "results"
+            results_dir: str = "results",
+            bc_config: dict = None
     ):
         self.grid_shape = grid_shape
         self.nt = nt
@@ -44,6 +46,11 @@ class Run:
         self.lattice = Lattice(lattice_type)
         self.initialiser = Initialise(self.grid, self.lattice)
 
+        # Boundary condition handler
+        self.boundary_condition = None
+        if bc_config is not None:
+            self.boundary_condition = BoundaryCondition(self.grid, self.lattice, bc_config)
+
         # Select the appropriate update and macroscopic operators
         if multiphase:
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
@@ -58,11 +65,18 @@ class Run:
 
         # Prepare config dictionary for the IO handler
         self.config = {
-            'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
-            'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
-            'kappa': kappa if multiphase else None, 'beta': self.update.macroscopic.beta if multiphase else None,
-            'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None,
-            'interface_width': self.interface_width
+            'grid_shape': grid_shape,
+            'lattice_type': lattice_type,
+            'tau': tau,
+            'nt': nt,
+            'multiphase': multiphase,
+            'save_interval': save_interval,
+            'kappa': kappa if multiphase else None,
+            'beta': self.update.macroscopic.beta if multiphase else None,
+            'rho_l': rho_l if multiphase else None,
+            'rho_v': rho_v if multiphase else None,
+            'interface_width': self.interface_width,
+            'bc_config': bc_config
         }
         self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
 
@@ -89,6 +103,10 @@ class Run:
         # Main simulation loop
         for it in range(self.nt):
             f_next = self.update(f_prev)
+            # Apply boundary conditions if present
+            if self.boundary_condition is not None:
+                # For Update/UpdateMultiphase, fcol is not directly available, so pass f_next twice
+                f_next = self.boundary_condition(f_next, f_next)
             f_prev = f_next
 
             # Save data at the specified interval
@@ -132,12 +150,16 @@ class Run:
         # Warm up JAX compilation first (shorter warmup)
         for it in range(5):
             f_next = self.update(f_prev)
+            if self.boundary_condition is not None:
+                f_next = self.boundary_condition(f_next, f_next)
             f_prev = f_next
 
         # Profile the actual operations
         with JAXProfiler("./profiler_output"):
             for it in range(profile_steps):
                 f_next = self.update(f_prev)
+                if self.boundary_condition is not None:
+                    f_next = self.boundary_condition(f_next, f_next)
                 f_prev = f_next
                 # Ensure computation completes before continuing
                 if hasattr(f_next, 'block_until_ready'):

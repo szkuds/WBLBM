@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from wblbm.lattice.lattice import Lattice
-from wblbm.utils.timing import time_function
+from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
 class Streaming:
@@ -12,7 +12,7 @@ class Streaming:
         self.c = lattice.c  # Shape: (2, Q)
         self.q = lattice.q
 
-    @time_function
+    @time_function(enable_timing=TIMING_ENABLED)
     def __call__(self, f):
         """
         Perform the streaming step of the LBM.

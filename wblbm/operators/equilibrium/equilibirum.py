@@ -5,7 +5,7 @@ from jax import jit
 
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
-from wblbm.utils.timing import time_function  # <-- Add import
+from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
 class Equilibrium:
@@ -22,7 +22,7 @@ class Equilibrium:
         self.cx = lattice.c[0]
         self.cy = lattice.c[1]
 
-    @time_function
+    @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))
     def __call__(self, rho_, u_):
         """
