@@ -1,4 +1,7 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
@@ -22,6 +25,7 @@ class MacroscopicMultiphase(Macroscopic):
         self.laplacian = Laplacian(lattice)
         self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
 
+    @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
         Calculate the macroscopic density and velocity fields from the population distribution.
@@ -40,6 +44,7 @@ class MacroscopicMultiphase(Macroscopic):
         u_updated = self.u_new(u, rho, force_int)
         return rho, u_updated, force_int
 
+    @partial(jit, static_argnums=(0,))
     def eos(self, rho):
         """Equation of state - extract 2D data for computation"""
         rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
@@ -50,6 +55,7 @@ class MacroscopicMultiphase(Macroscopic):
         eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
         return eos_4d
 
+    @partial(jit, static_argnums=(0,))
     def chem_pot(self, rho):
         """
         Calculate the chemical potential.
@@ -58,6 +64,7 @@ class MacroscopicMultiphase(Macroscopic):
         chem_pot__ = mu_0 - self.kappa * self.laplacian(rho)
         return chem_pot__
 
+    @partial(jit, static_argnums=(0,))
     def force_int(self, rho):
         """
         Calculate the interaction force.
@@ -66,6 +73,7 @@ class MacroscopicMultiphase(Macroscopic):
         # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
         return -rho * grad_chem_pot
 
+    @partial(jit, static_argnums=(0,))
     def u_new(self, u, rho, force):
         """
         Update velocity with interaction force.

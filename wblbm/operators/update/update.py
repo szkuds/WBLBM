@@ -9,6 +9,7 @@ from wblbm.operators.collision import Collision, SourceTerm
 from wblbm.operators.equilibrium.equilibirum import Equilibrium
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.stream import Streaming
+from wblbm.utils.timing import time_function  # <-- Add import
 
 
 class Update(object):
@@ -28,6 +29,7 @@ class Update(object):
         self.streaming = Streaming(lattice)
 
     @partial(jit, static_argnums=(0,))
+    @time_function
     def __call__(self, f: jnp.ndarray):
         rho, u = self.macroscopic(f)
         feq = self.equilibrium(rho, u)

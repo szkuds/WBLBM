@@ -1,4 +1,8 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
+
 from wblbm.lattice.lattice import Lattice
 
 
@@ -11,6 +15,7 @@ class Gradient:
         self.w = lattice.w
         self.c = lattice.c
 
+    @partial(jit, static_argnums=(0,))
     def __call__(self, grid):
         """
         Calculate the gradient using the provided stencil.

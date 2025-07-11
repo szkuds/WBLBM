@@ -663,6 +663,7 @@ wblbm/
             from wblbm.operators.update.update_multiphase import UpdateMultiphase
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
             from wblbm.utils.io import SimulationIO
+            from wblbm.utils.profiler import JAXProfiler
             
             
             class Run:
@@ -767,7 +768,41 @@ wblbm/
                     if verbose:
                         print("Simulation completed!")
                         print(f"Results saved in: {self.io_handler.run_dir}")
-            --- End of run.py ---
+            
+                def run_with_profiling(self, init_type: str = 'standard', verbose: bool = True, profile_steps: int = 100):
+                    """
+                    Run simulation with JAX profiling enabled for a subset of steps.
+            
+                    Args:
+                        profile_steps (int): Number of steps to profile (should be small, e.g., 100-1000)
+                    """
+                    # Initialize as normal
+                    if self.multiphase and init_type == 'multiphase_bubble':
+                        f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
+                    else:
+                        f_prev = self.initialiser.initialise_standard()
+            
+                    if verbose:
+                        print(f"Starting LBM simulation with profiling for {profile_steps} steps...")
+            
+                    # Warm up JAX compilation first (shorter warmup)
+                    for it in range(5):
+                        f_next = self.update(f_prev)
+                        f_prev = f_next
+            
+                    # Profile the actual operations
+                    with JAXProfiler("./profiler_output"):
+                        for it in range(profile_steps):
+                            f_next = self.update(f_prev)
+                            f_prev = f_next
+                            # Ensure computation completes before continuing
+                            if hasattr(f_next, 'block_until_ready'):
+                                f_next.block_until_ready()
+            
+                            if verbose and it % 10 == 0:
+                                print(f"Profiling step {it}/{profile_steps}")
+            
+                    print("Profiling completed! Check ./profiler_output directory")            --- End of run.py ---
 
             __init__.py
             --- Code in __init__.py ---
@@ -938,7 +973,7 @@ wblbm/
         import matplotlib.pyplot as plt
         
         
-        def visualize_all_steps(sim_instance, title="LBM Simulation Results"):
+        def visualise(sim_instance, title="LBM Simulation Results"):
             """
             Visualizes simulation results by loading and plotting every saved timestep.
             This version includes a vector plot overlay on the velocity magnitude heatmap.
@@ -1082,8 +1117,65 @@ wblbm/
         --- Code in __init__.py ---
         --- End of __init__.py ---
 
+        timing.py
+        --- Code in timing.py ---
+        import time
+        from functools import wraps
+        import jax.numpy as jnp
+        
+        def time_function(func):
+            @wraps(func)
+            def wrapper(*args, **kwargs):
+                start = time.perf_counter()
+                result = func(*args, **kwargs)
+                # Block until computation completes (important for JAX)
+                if hasattr(result, 'block_until_ready'):
+                    result.block_until_ready()
+                elif isinstance(result, tuple):
+                    # Handle multiple return values
+                    for item in result:
+                        if hasattr(item, 'block_until_ready'):
+                            item.block_until_ready()
+                end = time.perf_counter()
+                print(f"{func.__name__}: {end - start:.4f} seconds")
+                return result
+            return wrapper
+        --- End of timing.py ---
+
+        profiler.py
+        --- Code in profiler.py ---
+        import jax
+        from jax import profiler
+        import os
+        
+        
+        class JAXProfiler:
+            def __init__(self, output_dir="./profiler_output", create_perfetto_link=True):
+                self.output_dir = output_dir
+                self.create_perfetto_link = create_perfetto_link
+                os.makedirs(output_dir, exist_ok=True)
+        
+            def __enter__(self):
+                # Configure profiler options for better traces
+                options = jax.profiler.ProfileOptions()
+                options.host_tracer_level = 2  # Include high-level program execution details
+                options.python_tracer_level = 1  # Enable Python tracing
+        
+                profiler.start_trace(self.output_dir, profiler_options=options)
+                return self
+        
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                profiler.stop_trace()
+                if self.create_perfetto_link:
+                    print(f"Profiling completed! Trace saved to: {self.output_dir}")
+                    print("To view the trace, you can:")
+                    print("1. Use TensorBoard: tensorboard --logdir=" + self.output_dir)
+                    print("2. Or upload the .pb files to https://ui.perfetto.dev/")
+        --- End of profiler.py ---
+
         __pycache__/
             io.cpython-312.pyc
+            profiler.cpython-312.pyc
             __init__.cpython-312.pyc
             plotting.cpython-312.pyc
     __pycache__/
@@ -1213,6 +1305,13 @@ wblbm/
         __pycache__/
             lattice.cpython-312.pyc
             __init__.cpython-312.pyc
+    operator/
+        collision/
+            collision.py
+            --- Code in collision.py ---
+            
+            --- End of collision.py ---
+
     grid/
         grid.py
         --- Code in grid.py ---
@@ -1262,11 +1361,41 @@ wblbm/
             grid.cpython-312.pyc
             __init__.cpython-312.pyc
 example/
+    test_bubble_profiler.py
+    --- Code in test_bubble_profiler.py ---
+    from wblbm.operators.run.run import Run
+    
+    
+    def profile_lbm():
+        """Profile a small LBM simulation to identify bottlenecks."""
+    
+        # Use a smaller grid for profiling to focus on computational patterns
+        sim = Run(
+            grid_shape=(50, 50),  # Smaller grid for profiling
+            lattice_type="D2Q9",
+            tau=1.0,
+            nt=100,  # Only profile 100 steps
+            multiphase=True,  # Profile the more complex multiphase case
+            kappa=0.01,
+            rho_l=1.0,
+            rho_v=0.1,
+            interface_width=4,
+            save_interval=50
+        )
+    
+        # Run with profiling
+        sim.run_with_profiling(init_type='multiphase_bubble', profile_steps=100)
+    
+    
+    if __name__ == "__main__":
+        profile_lbm()
+    --- End of test_bubble_profiler.py ---
+
     test.py
     --- Code in test.py ---
     import numpy as np
     from wblbm.operators.run.run import Run
-    from wblbm.utils.plotting import visualize_all_steps  # Import the new function
+    from wblbm.utils.plotting import visualise  # Import the new function
     
     
     def test_basic_simulation():
@@ -1299,7 +1428,7 @@ example/
             rho_v=0.001,
             interface_width=10
         )
-        sim.run(init_type='multiphase_bubble', verbose=True)
+        sim.run(init_type='multiphase_droplet', verbose=True)
         return sim
     
     
@@ -1308,71 +1437,1281 @@ example/
         print("=" * 60)
     
         # Run simulations
-        #sim_basic = test_basic_simulation()
+        sim_basic = test_basic_simulation()
         sim_multiphase = test_multiphase_simulation()
     
         # Visualize results using the new, centralized function
         print("\n=== Visualizing Results ===")
-        #visualize_all_steps(sim_basic, "Basic LBM Simulation")
-        visualize_all_steps(sim_multiphase, "Multiphase LBM Simulation")
+        visualise(sim_basic, "Basic LBM Simulation")
+        visualise(sim_multiphase, "Multiphase LBM Simulation")
     
         print("\nAll tests completed!")
     --- End of test.py ---
 
+    bubble_high_density.py
+    --- Code in bubble_high_density.py ---
+    from wblbm.operators.run.run import Run
+    from wblbm.utils.plotting import visualise
+    
+    
+    def test_multiphase_simulation():
+        """
+        Test a multiphase LBM simulation with a central bubble.
+    
+        This function sets up and runs a multiphase lattice Boltzmann method (LBM) simulation
+        using a high density ratio and a central bubble. The simulation parameters are specified
+        for a 2D grid with D2Q9 lattice, and the results are returned for further analysis or visualization.
+    
+        Returns:
+            Run: The simulation object after running the multiphase bubble test.
+        """
+        print("\n=== Multiphase LBM Simulation Test ===")
+        sim = Run(
+            grid_shape=(400, 400),
+            lattice_type="D2Q9",
+            tau=0.9,
+            nt=500000,
+            save_interval=1000,
+            multiphase=True,
+            kappa=0.01,
+            rho_l=1.0,
+            rho_v=0.001,
+            interface_width=10
+        )
+        sim.run(init_type='multiphase_bubble', verbose=True)
+        return sim
+    
+    
+    if __name__ == "__main__":
+        """
+        Main entry point for running and visualizing the high density ratio static bubble simulation.
+    
+        This script runs the multiphase LBM simulation and visualizes the results using the centralized
+        plotting function. It prints status messages to indicate progress and completion.
+        """
+        print("Testing LBM Codebase with high density ratio static bubble simulation.")
+        print("=" * 60)
+    
+        sim_multiphase = test_multiphase_simulation()
+    
+        # Visualize results using the new, centralized function
+        print("\n=== Visualizing Results ===")
+        # visualize_all_steps(sim_basic, "Basic LBM Simulation")
+        visualise(sim_multiphase, "Multiphase LBM Simulation")
+    
+        print("\nAll tests completed!")
+    --- End of bubble_high_density.py ---
+
+    profiler_output/
+        plugins/
+            profile/
+                2025_07_11_10_40_03/
+                    jit_add(43).hlo_proto.pb
+                    jit_scatter(61).hlo_proto.pb
+                    jit_multiply(51).hlo_proto.pb
+                    jit_integer_pow(11).hlo_proto.pb
+                    ALL_HOSTS.op_stats.pb
+                    jit_broadcast_in_dim(5).hlo_proto.pb
+                    jit_broadcast_in_dim(57).hlo_proto.pb
+                    jit_multiply(41).hlo_proto.pb
+                    jit_convert_element_type(1).hlo_proto.pb
+                    jit_true_divide(19).hlo_proto.pb
+                    jit_multiply(45).hlo_proto.pb
+                    jit_iota(3).hlo_proto.pb
+                    jit_convert_element_type(29).hlo_proto.pb
+                    jit_add(13).hlo_proto.pb
+                    jit___call__(65).hlo_proto.pb
+                    jit_broadcast_in_dim(39).hlo_proto.pb
+                    jit_subtract(9).hlo_proto.pb
+                    cache_version.txt
+                    jit_squeeze(35).hlo_proto.pb
+                    TUD501814.xplane.pb
+                    jit_reshape(27).hlo_proto.pb
+                    jit_sqrt(15).hlo_proto.pb
+                    jit_multiply(49).hlo_proto.pb
+                    jit_subtract(53).hlo_proto.pb
+                    jit__squeeze(37).hlo_proto.pb
+                    TUD501814.trace.json.gz
+                    jit_multiply(23).hlo_proto.pb
+                    jit_broadcast_in_dim(31).hlo_proto.pb
+                    TUD501814.SSTABLE
+                    jit_multiply(47).hlo_proto.pb
+                    jit_convert_element_type(55).hlo_proto.pb
+                    jit__squeeze(59).hlo_proto.pb
+                    jit_subtract(63).hlo_proto.pb
+                    jit_dynamic_slice(33).hlo_proto.pb
+                    jit_tanh(21).hlo_proto.pb
+                    jit_subtract(17).hlo_proto.pb
+                    jit_broadcast_in_dim(7).hlo_proto.pb
+                    jit_add(25).hlo_proto.pb
+                2025_07_10_17_11_58/
+                    jit_add(43).hlo_proto.pb
+                    jit_scatter(61).hlo_proto.pb
+                    jit_multiply(51).hlo_proto.pb
+                    jit_integer_pow(11).hlo_proto.pb
+                    ALL_HOSTS.op_stats.pb
+                    jit_broadcast_in_dim(5).hlo_proto.pb
+                    jit_broadcast_in_dim(57).hlo_proto.pb
+                    jit_multiply(41).hlo_proto.pb
+                    jit_convert_element_type(1).hlo_proto.pb
+                    jit_true_divide(19).hlo_proto.pb
+                    jit_multiply(45).hlo_proto.pb
+                    jit_iota(3).hlo_proto.pb
+                    jit_convert_element_type(29).hlo_proto.pb
+                    jit_add(13).hlo_proto.pb
+                    jit___call__(65).hlo_proto.pb
+                    jit_broadcast_in_dim(39).hlo_proto.pb
+                    jit_subtract(9).hlo_proto.pb
+                    cache_version.txt
+                    jit_squeeze(35).hlo_proto.pb
+                    TUD501814.xplane.pb
+                    jit_reshape(27).hlo_proto.pb
+                    jit_sqrt(15).hlo_proto.pb
+                    jit_multiply(49).hlo_proto.pb
+                    jit_subtract(53).hlo_proto.pb
+                    jit__squeeze(37).hlo_proto.pb
+                    TUD501814.trace.json.gz
+                    jit_multiply(23).hlo_proto.pb
+                    jit_broadcast_in_dim(31).hlo_proto.pb
+                    jit_multiply(47).hlo_proto.pb
+                    jit_convert_element_type(55).hlo_proto.pb
+                    jit__squeeze(59).hlo_proto.pb
+                    jit_subtract(63).hlo_proto.pb
+                    jit_dynamic_slice(33).hlo_proto.pb
+                    jit_tanh(21).hlo_proto.pb
+                    jit_subtract(17).hlo_proto.pb
+                    jit_broadcast_in_dim(7).hlo_proto.pb
+                    jit_add(25).hlo_proto.pb
+                2025_07_10_16_59_05/
+                    TUD501814.xplane.pb
+                    TUD501814.trace.json.gz
     results/
         2025-07-10/
-            14-28-58/
+            16-35-46/
                 config.json
                 data/
-                    timestep_7000.npz
-                    timestep_15000.npz
-                    timestep_19000.npz
-                    timestep_5000.npz
-                    timestep_9000.npz
-                    timestep_17000.npz
-                    timestep_13000.npz
-                    timestep_1000.npz
-                    timestep_11000.npz
-                    timestep_3000.npz
-                    timestep_0.npz
-                    timestep_14000.npz
-                    timestep_18000.npz
-                    timestep_6000.npz
-                    timestep_16000.npz
-                    timestep_20000.npz
-                    timestep_4000.npz
-                    timestep_8000.npz
-                    timestep_12000.npz
-                    timestep_2000.npz
-                    timestep_10000.npz
-            14-06-40/
-                config.json
-                data/
+                    timestep_31000.npz
                     timestep_7000.npz
                     timestep_23000.npz
+                    timestep_40000.npz
                     timestep_15000.npz
                     timestep_19000.npz
+                    timestep_49999.npz
+                    timestep_42000.npz
                     timestep_5000.npz
                     timestep_21000.npz
                     timestep_9000.npz
+                    timestep_33000.npz
                     timestep_17000.npz
                     timestep_13000.npz
+                    timestep_29000.npz
+                    timestep_37000.npz
+                    timestep_46000.npz
                     timestep_1000.npz
                     timestep_25000.npz
                     timestep_11000.npz
                     timestep_3000.npz
                     timestep_27000.npz
+                    timestep_39000.npz
+                    timestep_44000.npz
+                    timestep_35000.npz
+                    timestep_48000.npz
                     timestep_0.npz
                     timestep_14000.npz
                     timestep_18000.npz
+                    timestep_30000.npz
+                    timestep_41000.npz
                     timestep_22000.npz
                     timestep_6000.npz
                     timestep_16000.npz
                     timestep_20000.npz
                     timestep_4000.npz
+                    timestep_43000.npz
+                    timestep_32000.npz
                     timestep_8000.npz
+                    timestep_36000.npz
+                    timestep_28000.npz
                     timestep_24000.npz
+                    timestep_47000.npz
                     timestep_12000.npz
+                    timestep_45000.npz
+                    timestep_38000.npz
                     timestep_26000.npz
                     timestep_2000.npz
+                    timestep_49000.npz
+                    timestep_34000.npz
                     timestep_10000.npz
+                plots/
+                    timestep_31000.png
+                    timestep_40000.png
+                    timestep_7000.png
+                    timestep_23000.png
+                    timestep_15000.png
+                    timestep_19000.png
+                    timestep_49999.png
+                    timestep_5000.png
+                    timestep_21000.png
+                    timestep_42000.png
+                    timestep_33000.png
+                    timestep_9000.png
+                    timestep_17000.png
+                    timestep_13000.png
+                    timestep_37000.png
+                    timestep_29000.png
+                    timestep_1000.png
+                    timestep_25000.png
+                    timestep_46000.png
+                    timestep_11000.png
+                    timestep_44000.png
+                    timestep_39000.png
+                    timestep_3000.png
+                    timestep_27000.png
+                    timestep_48000.png
+                    timestep_35000.png
+                    timestep_0.png
+                    timestep_14000.png
+                    timestep_18000.png
+                    timestep_30000.png
+                    timestep_22000.png
+                    timestep_6000.png
+                    timestep_41000.png
+                    timestep_16000.png
+                    timestep_43000.png
+                    timestep_20000.png
+                    timestep_4000.png
+                    timestep_8000.png
+                    timestep_32000.png
+                    timestep_28000.png
+                    timestep_36000.png
+                    timestep_47000.png
+                    timestep_24000.png
+                    timestep_12000.png
+                    timestep_26000.png
+                    timestep_2000.png
+                    timestep_38000.png
+                    timestep_45000.png
+                    timestep_34000.png
+                    timestep_49000.png
+                    timestep_10000.png
+            17-11-55/
+                config.json
+                data/
+            14-28-58/
+                config.json
+                data/
+                    timestep_120000.npz
+                    timestep_397000.npz
+                    timestep_297000.npz
+                    timestep_31000.npz
+                    timestep_52000.npz
+                    timestep_143000.npz
+                    timestep_389000.npz
+                    timestep_289000.npz
+                    timestep_285000.npz
+                    timestep_385000.npz
+                    timestep_132000.npz
+                    timestep_7000.npz
+                    timestep_23000.npz
+                    timestep_40000.npz
+                    timestep_151000.npz
+                    timestep_68000.npz
+                    timestep_179000.npz
+                    timestep_15000.npz
+                    timestep_104000.npz
+                    timestep_481000.npz
+                    timestep_167000.npz
+                    timestep_76000.npz
+                    timestep_116000.npz
+                    timestep_175000.npz
+                    timestep_493000.npz
+                    timestep_64000.npz
+                    timestep_108000.npz
+                    timestep_19000.npz
+                    timestep_439000.npz
+                    timestep_368000.npz
+                    timestep_268000.npz
+                    timestep_444000.npz
+                    timestep_315000.npz
+                    timestep_215000.npz
+                    timestep_427000.npz
+                    timestep_376000.npz
+                    timestep_276000.npz
+                    timestep_207000.npz
+                    timestep_307000.npz
+                    timestep_456000.npz
+                    timestep_264000.npz
+                    timestep_364000.npz
+                    timestep_435000.npz
+                    timestep_219000.npz
+                    timestep_319000.npz
+                    timestep_448000.npz
+                    timestep_97000.npz
+                    timestep_231000.npz
+                    timestep_460000.npz
+                    timestep_331000.npz
+                    timestep_186000.npz
+                    timestep_252000.npz
+                    timestep_403000.npz
+                    timestep_352000.npz
+                    timestep_198000.npz
+                    timestep_89000.npz
+                    timestep_85000.npz
+                    timestep_194000.npz
+                    timestep_323000.npz
+                    timestep_472000.npz
+                    timestep_223000.npz
+                    timestep_340000.npz
+                    timestep_411000.npz
+                    timestep_240000.npz
+                    timestep_266000.npz
+                    timestep_366000.npz
+                    timestep_437000.npz
+                    timestep_278000.npz
+                    timestep_378000.npz
+                    timestep_429000.npz
+                    timestep_205000.npz
+                    timestep_305000.npz
+                    timestep_454000.npz
+                    timestep_425000.npz
+                    timestep_374000.npz
+                    timestep_274000.npz
+                    timestep_458000.npz
+                    timestep_309000.npz
+                    timestep_209000.npz
+                    timestep_446000.npz
+                    timestep_317000.npz
+                    timestep_217000.npz
+                    timestep_342000.npz
+                    timestep_413000.npz
+                    timestep_242000.npz
+                    timestep_99000.npz
+                    timestep_188000.npz
+                    timestep_196000.npz
+                    timestep_321000.npz
+                    timestep_470000.npz
+                    timestep_221000.npz
+                    timestep_87000.npz
+                    timestep_250000.npz
+                    timestep_401000.npz
+                    timestep_350000.npz
+                    timestep_233000.npz
+                    timestep_462000.npz
+                    timestep_333000.npz
+                    timestep_184000.npz
+                    timestep_95000.npz
+                    timestep_153000.npz
+                    timestep_42000.npz
+                    timestep_299000.npz
+                    timestep_399000.npz
+                    timestep_5000.npz
+                    timestep_21000.npz
+                    timestep_287000.npz
+                    timestep_387000.npz
+                    timestep_130000.npz
+                    timestep_141000.npz
+                    timestep_50000.npz
+                    timestep_9000.npz
+                    timestep_33000.npz
+                    timestep_122000.npz
+                    timestep_395000.npz
+                    timestep_295000.npz
+                    timestep_66000.npz
+                    timestep_177000.npz
+                    timestep_491000.npz
+                    timestep_169000.npz
+                    timestep_78000.npz
+                    timestep_114000.npz
+                    timestep_74000.npz
+                    timestep_483000.npz
+                    timestep_165000.npz
+                    timestep_118000.npz
+                    timestep_106000.npz
+                    timestep_17000.npz
+                    timestep_229000.npz
+                    timestep_329000.npz
+                    timestep_478000.npz
+                    timestep_254000.npz
+                    timestep_354000.npz
+                    timestep_405000.npz
+                    timestep_237000.npz
+                    timestep_337000.npz
+                    timestep_466000.npz
+                    timestep_180000.npz
+                    timestep_91000.npz
+                    timestep_417000.npz
+                    timestep_346000.npz
+                    timestep_246000.npz
+                    timestep_192000.npz
+                    timestep_474000.npz
+                    timestep_325000.npz
+                    timestep_225000.npz
+                    timestep_83000.npz
+                    timestep_409000.npz
+                    timestep_358000.npz
+                    timestep_258000.npz
+                    timestep_370000.npz
+                    timestep_421000.npz
+                    timestep_270000.npz
+                    timestep_313000.npz
+                    timestep_442000.npz
+                    timestep_213000.npz
+                    timestep_262000.npz
+                    timestep_433000.npz
+                    timestep_362000.npz
+                    timestep_201000.npz
+                    timestep_450000.npz
+                    timestep_301000.npz
+                    timestep_70000.npz
+                    timestep_487000.npz
+                    timestep_161000.npz
+                    timestep_102000.npz
+                    timestep_13000.npz
+                    timestep_499000.npz
+                    timestep_62000.npz
+                    timestep_173000.npz
+                    timestep_495000.npz
+                    timestep_110000.npz
+                    timestep_138000.npz
+                    timestep_29000.npz
+                    timestep_145000.npz
+                    timestep_54000.npz
+                    timestep_37000.npz
+                    timestep_126000.npz
+                    timestep_391000.npz
+                    timestep_291000.npz
+                    timestep_157000.npz
+                    timestep_46000.npz
+                    timestep_1000.npz
+                    timestep_25000.npz
+                    timestep_283000.npz
+                    timestep_383000.npz
+                    timestep_134000.npz
+                    timestep_58000.npz
+                    timestep_149000.npz
+                    timestep_112000.npz
+                    timestep_489000.npz
+                    timestep_171000.npz
+                    timestep_497000.npz
+                    timestep_60000.npz
+                    timestep_11000.npz
+                    timestep_100000.npz
+                    timestep_485000.npz
+                    timestep_163000.npz
+                    timestep_72000.npz
+                    timestep_281000.npz
+                    timestep_381000.npz
+                    timestep_136000.npz
+                    timestep_3000.npz
+                    timestep_27000.npz
+                    timestep_39000.npz
+                    timestep_128000.npz
+                    timestep_44000.npz
+                    timestep_155000.npz
+                    timestep_124000.npz
+                    timestep_393000.npz
+                    timestep_293000.npz
+                    timestep_35000.npz
+                    timestep_159000.npz
+                    timestep_48000.npz
+                    timestep_56000.npz
+                    timestep_147000.npz
+                    timestep_81000.npz
+                    timestep_190000.npz
+                    timestep_476000.npz
+                    timestep_327000.npz
+                    timestep_227000.npz
+                    timestep_468000.npz
+                    timestep_339000.npz
+                    timestep_239000.npz
+                    timestep_415000.npz
+                    timestep_344000.npz
+                    timestep_244000.npz
+                    timestep_93000.npz
+                    timestep_235000.npz
+                    timestep_335000.npz
+                    timestep_464000.npz
+                    timestep_182000.npz
+                    timestep_248000.npz
+                    timestep_348000.npz
+                    timestep_419000.npz
+                    timestep_256000.npz
+                    timestep_356000.npz
+                    timestep_407000.npz
+                    timestep_203000.npz
+                    timestep_452000.npz
+                    timestep_303000.npz
+                    timestep_260000.npz
+                    timestep_431000.npz
+                    timestep_360000.npz
+                    timestep_311000.npz
+                    timestep_440000.npz
+                    timestep_211000.npz
+                    timestep_372000.npz
+                    timestep_423000.npz
+                    timestep_272000.npz
+                    timestep_199000.npz
+                    timestep_88000.npz
+                    timestep_402000.npz
+                    timestep_353000.npz
+                    timestep_253000.npz
+                    timestep_96000.npz
+                    timestep_461000.npz
+                    timestep_330000.npz
+                    timestep_187000.npz
+                    timestep_230000.npz
+                    timestep_241000.npz
+                    timestep_341000.npz
+                    timestep_410000.npz
+                    timestep_84000.npz
+                    timestep_0.npz
+                    timestep_222000.npz
+                    timestep_195000.npz
+                    timestep_322000.npz
+                    timestep_473000.npz
+                    timestep_277000.npz
+                    timestep_426000.npz
+                    timestep_377000.npz
+                    timestep_214000.npz
+                    timestep_445000.npz
+                    timestep_314000.npz
+                    timestep_269000.npz
+                    timestep_438000.npz
+                    timestep_369000.npz
+                    timestep_318000.npz
+                    timestep_449000.npz
+                    timestep_218000.npz
+                    timestep_365000.npz
+                    timestep_434000.npz
+                    timestep_265000.npz
+                    timestep_306000.npz
+                    timestep_457000.npz
+                    timestep_206000.npz
+                    timestep_480000.npz
+                    timestep_166000.npz
+                    timestep_77000.npz
+                    timestep_14000.npz
+                    timestep_105000.npz
+                    timestep_69000.npz
+                    timestep_178000.npz
+                    timestep_109000.npz
+                    timestep_18000.npz
+                    timestep_174000.npz
+                    timestep_492000.npz
+                    timestep_65000.npz
+                    timestep_117000.npz
+                    timestep_288000.npz
+                    timestep_388000.npz
+                    timestep_53000.npz
+                    timestep_142000.npz
+                    timestep_296000.npz
+                    timestep_121000.npz
+                    timestep_396000.npz
+                    timestep_30000.npz
+                    timestep_41000.npz
+                    timestep_150000.npz
+                    timestep_384000.npz
+                    timestep_133000.npz
+                    timestep_284000.npz
+                    timestep_22000.npz
+                    timestep_6000.npz
+                    timestep_115000.npz
+                    timestep_168000.npz
+                    timestep_79000.npz
+                    timestep_67000.npz
+                    timestep_176000.npz
+                    timestep_490000.npz
+                    timestep_107000.npz
+                    timestep_16000.npz
+                    timestep_119000.npz
+                    timestep_75000.npz
+                    timestep_482000.npz
+                    timestep_164000.npz
+                    timestep_20000.npz
+                    timestep_4000.npz
+                    timestep_386000.npz
+                    timestep_131000.npz
+                    timestep_286000.npz
+                    timestep_398000.npz
+                    timestep_298000.npz
+                    timestep_152000.npz
+                    timestep_43000.npz
+                    timestep_32000.npz
+                    timestep_294000.npz
+                    timestep_123000.npz
+                    timestep_394000.npz
+                    timestep_8000.npz
+                    timestep_140000.npz
+                    timestep_51000.npz
+                    timestep_220000.npz
+                    timestep_197000.npz
+                    timestep_320000.npz
+                    timestep_471000.npz
+                    timestep_86000.npz
+                    timestep_98000.npz
+                    timestep_189000.npz
+                    timestep_243000.npz
+                    timestep_499999.npz
+                    timestep_343000.npz
+                    timestep_412000.npz
+                    timestep_463000.npz
+                    timestep_332000.npz
+                    timestep_185000.npz
+                    timestep_232000.npz
+                    timestep_94000.npz
+                    timestep_400000.npz
+                    timestep_351000.npz
+                    timestep_251000.npz
+                    timestep_304000.npz
+                    timestep_455000.npz
+                    timestep_204000.npz
+                    timestep_379000.npz
+                    timestep_428000.npz
+                    timestep_279000.npz
+                    timestep_367000.npz
+                    timestep_436000.npz
+                    timestep_267000.npz
+                    timestep_216000.npz
+                    timestep_447000.npz
+                    timestep_316000.npz
+                    timestep_208000.npz
+                    timestep_459000.npz
+                    timestep_308000.npz
+                    timestep_275000.npz
+                    timestep_424000.npz
+                    timestep_375000.npz
+                    timestep_36000.npz
+                    timestep_290000.npz
+                    timestep_127000.npz
+                    timestep_390000.npz
+                    timestep_144000.npz
+                    timestep_55000.npz
+                    timestep_139000.npz
+                    timestep_28000.npz
+                    timestep_59000.npz
+                    timestep_148000.npz
+                    timestep_24000.npz
+                    timestep_382000.npz
+                    timestep_135000.npz
+                    timestep_282000.npz
+                    timestep_156000.npz
+                    timestep_47000.npz
+                    timestep_498000.npz
+                    timestep_103000.npz
+                    timestep_12000.npz
+                    timestep_71000.npz
+                    timestep_486000.npz
+                    timestep_160000.npz
+                    timestep_111000.npz
+                    timestep_63000.npz
+                    timestep_172000.npz
+                    timestep_494000.npz
+                    timestep_212000.npz
+                    timestep_312000.npz
+                    timestep_443000.npz
+                    timestep_271000.npz
+                    timestep_371000.npz
+                    timestep_420000.npz
+                    timestep_451000.npz
+                    timestep_300000.npz
+                    timestep_200000.npz
+                    timestep_432000.npz
+                    timestep_363000.npz
+                    timestep_263000.npz
+                    timestep_336000.npz
+                    timestep_467000.npz
+                    timestep_181000.npz
+                    timestep_236000.npz
+                    timestep_90000.npz
+                    timestep_355000.npz
+                    timestep_404000.npz
+                    timestep_255000.npz
+                    timestep_328000.npz
+                    timestep_479000.npz
+                    timestep_228000.npz
+                    timestep_259000.npz
+                    timestep_408000.npz
+                    timestep_359000.npz
+                    timestep_224000.npz
+                    timestep_193000.npz
+                    timestep_475000.npz
+                    timestep_324000.npz
+                    timestep_82000.npz
+                    timestep_247000.npz
+                    timestep_416000.npz
+                    timestep_347000.npz
+                    timestep_430000.npz
+                    timestep_361000.npz
+                    timestep_261000.npz
+                    timestep_453000.npz
+                    timestep_302000.npz
+                    timestep_202000.npz
+                    timestep_273000.npz
+                    timestep_373000.npz
+                    timestep_422000.npz
+                    timestep_210000.npz
+                    timestep_310000.npz
+                    timestep_441000.npz
+                    timestep_245000.npz
+                    timestep_414000.npz
+                    timestep_345000.npz
+                    timestep_238000.npz
+                    timestep_469000.npz
+                    timestep_338000.npz
+                    timestep_80000.npz
+                    timestep_226000.npz
+                    timestep_191000.npz
+                    timestep_477000.npz
+                    timestep_326000.npz
+                    timestep_357000.npz
+                    timestep_406000.npz
+                    timestep_257000.npz
+                    timestep_349000.npz
+                    timestep_418000.npz
+                    timestep_249000.npz
+                    timestep_92000.npz
+                    timestep_334000.npz
+                    timestep_465000.npz
+                    timestep_183000.npz
+                    timestep_234000.npz
+                    timestep_45000.npz
+                    timestep_154000.npz
+                    timestep_38000.npz
+                    timestep_129000.npz
+                    timestep_380000.npz
+                    timestep_137000.npz
+                    timestep_280000.npz
+                    timestep_26000.npz
+                    timestep_2000.npz
+                    timestep_57000.npz
+                    timestep_146000.npz
+                    timestep_158000.npz
+                    timestep_49000.npz
+                    timestep_292000.npz
+                    timestep_125000.npz
+                    timestep_392000.npz
+                    timestep_34000.npz
+                    timestep_170000.npz
+                    timestep_496000.npz
+                    timestep_61000.npz
+                    timestep_488000.npz
+                    timestep_113000.npz
+                    timestep_484000.npz
+                    timestep_162000.npz
+                    timestep_73000.npz
+                    timestep_10000.npz
+                    timestep_101000.npz
+                plots/
+                    timestep_389000.png
+                    timestep_289000.png
+                    timestep_52000.png
+                    timestep_143000.png
+                    timestep_397000.png
+                    timestep_120000.png
+                    timestep_297000.png
+                    timestep_31000.png
+                    timestep_40000.png
+                    timestep_151000.png
+                    timestep_285000.png
+                    timestep_132000.png
+                    timestep_385000.png
+                    timestep_7000.png
+                    timestep_23000.png
+                    timestep_167000.png
+                    timestep_481000.png
+                    timestep_76000.png
+                    timestep_15000.png
+                    timestep_104000.png
+                    timestep_68000.png
+                    timestep_179000.png
+                    timestep_108000.png
+                    timestep_19000.png
+                    timestep_493000.png
+                    timestep_175000.png
+                    timestep_64000.png
+                    timestep_116000.png
+                    timestep_376000.png
+                    timestep_427000.png
+                    timestep_276000.png
+                    timestep_315000.png
+                    timestep_444000.png
+                    timestep_215000.png
+                    timestep_368000.png
+                    timestep_439000.png
+                    timestep_268000.png
+                    timestep_219000.png
+                    timestep_448000.png
+                    timestep_319000.png
+                    timestep_264000.png
+                    timestep_435000.png
+                    timestep_364000.png
+                    timestep_207000.png
+                    timestep_456000.png
+                    timestep_307000.png
+                    timestep_198000.png
+                    timestep_89000.png
+                    timestep_252000.png
+                    timestep_352000.png
+                    timestep_403000.png
+                    timestep_97000.png
+                    timestep_231000.png
+                    timestep_186000.png
+                    timestep_331000.png
+                    timestep_460000.png
+                    timestep_411000.png
+                    timestep_340000.png
+                    timestep_240000.png
+                    timestep_85000.png
+                    timestep_472000.png
+                    timestep_323000.png
+                    timestep_194000.png
+                    timestep_223000.png
+                    timestep_205000.png
+                    timestep_454000.png
+                    timestep_305000.png
+                    timestep_278000.png
+                    timestep_429000.png
+                    timestep_378000.png
+                    timestep_266000.png
+                    timestep_437000.png
+                    timestep_366000.png
+                    timestep_317000.png
+                    timestep_446000.png
+                    timestep_217000.png
+                    timestep_309000.png
+                    timestep_458000.png
+                    timestep_209000.png
+                    timestep_374000.png
+                    timestep_425000.png
+                    timestep_274000.png
+                    timestep_470000.png
+                    timestep_321000.png
+                    timestep_196000.png
+                    timestep_221000.png
+                    timestep_87000.png
+                    timestep_99000.png
+                    timestep_188000.png
+                    timestep_413000.png
+                    timestep_342000.png
+                    timestep_242000.png
+                    timestep_233000.png
+                    timestep_184000.png
+                    timestep_333000.png
+                    timestep_462000.png
+                    timestep_95000.png
+                    timestep_250000.png
+                    timestep_350000.png
+                    timestep_401000.png
+                    timestep_5000.png
+                    timestep_21000.png
+                    timestep_287000.png
+                    timestep_130000.png
+                    timestep_387000.png
+                    timestep_299000.png
+                    timestep_399000.png
+                    timestep_153000.png
+                    timestep_42000.png
+                    timestep_33000.png
+                    timestep_395000.png
+                    timestep_122000.png
+                    timestep_295000.png
+                    timestep_9000.png
+                    timestep_141000.png
+                    timestep_50000.png
+                    timestep_114000.png
+                    timestep_169000.png
+                    timestep_78000.png
+                    timestep_66000.png
+                    timestep_491000.png
+                    timestep_177000.png
+                    timestep_106000.png
+                    timestep_17000.png
+                    timestep_118000.png
+                    timestep_74000.png
+                    timestep_165000.png
+                    timestep_483000.png
+                    timestep_237000.png
+                    timestep_180000.png
+                    timestep_466000.png
+                    timestep_337000.png
+                    timestep_91000.png
+                    timestep_254000.png
+                    timestep_405000.png
+                    timestep_354000.png
+                    timestep_229000.png
+                    timestep_478000.png
+                    timestep_329000.png
+                    timestep_358000.png
+                    timestep_409000.png
+                    timestep_258000.png
+                    timestep_325000.png
+                    timestep_474000.png
+                    timestep_192000.png
+                    timestep_225000.png
+                    timestep_83000.png
+                    timestep_346000.png
+                    timestep_417000.png
+                    timestep_246000.png
+                    timestep_442000.png
+                    timestep_313000.png
+                    timestep_213000.png
+                    timestep_421000.png
+                    timestep_370000.png
+                    timestep_270000.png
+                    timestep_201000.png
+                    timestep_301000.png
+                    timestep_450000.png
+                    timestep_262000.png
+                    timestep_362000.png
+                    timestep_433000.png
+                    timestep_499000.png
+                    timestep_102000.png
+                    timestep_13000.png
+                    timestep_70000.png
+                    timestep_161000.png
+                    timestep_487000.png
+                    timestep_110000.png
+                    timestep_62000.png
+                    timestep_495000.png
+                    timestep_173000.png
+                    timestep_37000.png
+                    timestep_391000.png
+                    timestep_126000.png
+                    timestep_291000.png
+                    timestep_145000.png
+                    timestep_54000.png
+                    timestep_138000.png
+                    timestep_29000.png
+                    timestep_58000.png
+                    timestep_149000.png
+                    timestep_1000.png
+                    timestep_25000.png
+                    timestep_283000.png
+                    timestep_134000.png
+                    timestep_383000.png
+                    timestep_157000.png
+                    timestep_46000.png
+                    timestep_497000.png
+                    timestep_171000.png
+                    timestep_60000.png
+                    timestep_489000.png
+                    timestep_112000.png
+                    timestep_163000.png
+                    timestep_485000.png
+                    timestep_72000.png
+                    timestep_11000.png
+                    timestep_100000.png
+                    timestep_44000.png
+                    timestep_155000.png
+                    timestep_39000.png
+                    timestep_128000.png
+                    timestep_281000.png
+                    timestep_136000.png
+                    timestep_381000.png
+                    timestep_3000.png
+                    timestep_27000.png
+                    timestep_56000.png
+                    timestep_147000.png
+                    timestep_159000.png
+                    timestep_48000.png
+                    timestep_393000.png
+                    timestep_124000.png
+                    timestep_293000.png
+                    timestep_35000.png
+                    timestep_344000.png
+                    timestep_415000.png
+                    timestep_244000.png
+                    timestep_339000.png
+                    timestep_468000.png
+                    timestep_239000.png
+                    timestep_81000.png
+                    timestep_327000.png
+                    timestep_476000.png
+                    timestep_190000.png
+                    timestep_227000.png
+                    timestep_256000.png
+                    timestep_407000.png
+                    timestep_356000.png
+                    timestep_248000.png
+                    timestep_419000.png
+                    timestep_348000.png
+                    timestep_93000.png
+                    timestep_235000.png
+                    timestep_182000.png
+                    timestep_464000.png
+                    timestep_335000.png
+                    timestep_260000.png
+                    timestep_360000.png
+                    timestep_431000.png
+                    timestep_203000.png
+                    timestep_303000.png
+                    timestep_452000.png
+                    timestep_423000.png
+                    timestep_372000.png
+                    timestep_272000.png
+                    timestep_440000.png
+                    timestep_311000.png
+                    timestep_211000.png
+                    timestep_96000.png
+                    timestep_187000.png
+                    timestep_330000.png
+                    timestep_461000.png
+                    timestep_230000.png
+                    timestep_353000.png
+                    timestep_402000.png
+                    timestep_253000.png
+                    timestep_199000.png
+                    timestep_88000.png
+                    timestep_0.png
+                    timestep_84000.png
+                    timestep_222000.png
+                    timestep_473000.png
+                    timestep_322000.png
+                    timestep_195000.png
+                    timestep_241000.png
+                    timestep_410000.png
+                    timestep_341000.png
+                    timestep_269000.png
+                    timestep_369000.png
+                    timestep_438000.png
+                    timestep_214000.png
+                    timestep_314000.png
+                    timestep_445000.png
+                    timestep_277000.png
+                    timestep_377000.png
+                    timestep_426000.png
+                    timestep_457000.png
+                    timestep_306000.png
+                    timestep_206000.png
+                    timestep_434000.png
+                    timestep_365000.png
+                    timestep_265000.png
+                    timestep_449000.png
+                    timestep_318000.png
+                    timestep_218000.png
+                    timestep_69000.png
+                    timestep_178000.png
+                    timestep_14000.png
+                    timestep_105000.png
+                    timestep_166000.png
+                    timestep_480000.png
+                    timestep_77000.png
+                    timestep_117000.png
+                    timestep_492000.png
+                    timestep_174000.png
+                    timestep_65000.png
+                    timestep_109000.png
+                    timestep_18000.png
+                    timestep_296000.png
+                    timestep_396000.png
+                    timestep_121000.png
+                    timestep_30000.png
+                    timestep_53000.png
+                    timestep_142000.png
+                    timestep_288000.png
+                    timestep_388000.png
+                    timestep_133000.png
+                    timestep_384000.png
+                    timestep_284000.png
+                    timestep_22000.png
+                    timestep_6000.png
+                    timestep_41000.png
+                    timestep_150000.png
+                    timestep_67000.png
+                    timestep_490000.png
+                    timestep_176000.png
+                    timestep_168000.png
+                    timestep_79000.png
+                    timestep_115000.png
+                    timestep_75000.png
+                    timestep_164000.png
+                    timestep_482000.png
+                    timestep_119000.png
+                    timestep_107000.png
+                    timestep_16000.png
+                    timestep_152000.png
+                    timestep_43000.png
+                    timestep_398000.png
+                    timestep_298000.png
+                    timestep_20000.png
+                    timestep_4000.png
+                    timestep_131000.png
+                    timestep_386000.png
+                    timestep_286000.png
+                    timestep_140000.png
+                    timestep_51000.png
+                    timestep_8000.png
+                    timestep_32000.png
+                    timestep_294000.png
+                    timestep_394000.png
+                    timestep_123000.png
+                    timestep_243000.png
+                    timestep_499999.png
+                    timestep_412000.png
+                    timestep_343000.png
+                    timestep_98000.png
+                    timestep_189000.png
+                    timestep_220000.png
+                    timestep_471000.png
+                    timestep_320000.png
+                    timestep_197000.png
+                    timestep_86000.png
+                    timestep_351000.png
+                    timestep_400000.png
+                    timestep_251000.png
+                    timestep_185000.png
+                    timestep_332000.png
+                    timestep_463000.png
+                    timestep_232000.png
+                    timestep_94000.png
+                    timestep_436000.png
+                    timestep_367000.png
+                    timestep_267000.png
+                    timestep_428000.png
+                    timestep_379000.png
+                    timestep_279000.png
+                    timestep_455000.png
+                    timestep_304000.png
+                    timestep_204000.png
+                    timestep_275000.png
+                    timestep_375000.png
+                    timestep_424000.png
+                    timestep_208000.png
+                    timestep_308000.png
+                    timestep_459000.png
+                    timestep_216000.png
+                    timestep_316000.png
+                    timestep_447000.png
+                    timestep_139000.png
+                    timestep_28000.png
+                    timestep_144000.png
+                    timestep_55000.png
+                    timestep_36000.png
+                    timestep_290000.png
+                    timestep_390000.png
+                    timestep_127000.png
+                    timestep_156000.png
+                    timestep_47000.png
+                    timestep_24000.png
+                    timestep_135000.png
+                    timestep_382000.png
+                    timestep_282000.png
+                    timestep_59000.png
+                    timestep_148000.png
+                    timestep_71000.png
+                    timestep_160000.png
+                    timestep_486000.png
+                    timestep_103000.png
+                    timestep_12000.png
+                    timestep_498000.png
+                    timestep_63000.png
+                    timestep_494000.png
+                    timestep_172000.png
+                    timestep_111000.png
+                    timestep_271000.png
+                    timestep_420000.png
+                    timestep_371000.png
+                    timestep_212000.png
+                    timestep_443000.png
+                    timestep_312000.png
+                    timestep_363000.png
+                    timestep_432000.png
+                    timestep_263000.png
+                    timestep_300000.png
+                    timestep_451000.png
+                    timestep_200000.png
+                    timestep_479000.png
+                    timestep_328000.png
+                    timestep_228000.png
+                    timestep_404000.png
+                    timestep_355000.png
+                    timestep_255000.png
+                    timestep_181000.png
+                    timestep_467000.png
+                    timestep_336000.png
+                    timestep_236000.png
+                    timestep_90000.png
+                    timestep_247000.png
+                    timestep_347000.png
+                    timestep_416000.png
+                    timestep_224000.png
+                    timestep_324000.png
+                    timestep_475000.png
+                    timestep_193000.png
+                    timestep_82000.png
+                    timestep_259000.png
+                    timestep_359000.png
+                    timestep_408000.png
+                    timestep_302000.png
+                    timestep_453000.png
+                    timestep_202000.png
+                    timestep_361000.png
+                    timestep_430000.png
+                    timestep_261000.png
+                    timestep_210000.png
+                    timestep_441000.png
+                    timestep_310000.png
+                    timestep_273000.png
+                    timestep_422000.png
+                    timestep_373000.png
+                    timestep_80000.png
+                    timestep_226000.png
+                    timestep_326000.png
+                    timestep_477000.png
+                    timestep_191000.png
+                    timestep_238000.png
+                    timestep_338000.png
+                    timestep_469000.png
+                    timestep_245000.png
+                    timestep_345000.png
+                    timestep_414000.png
+                    timestep_92000.png
+                    timestep_183000.png
+                    timestep_465000.png
+                    timestep_334000.png
+                    timestep_234000.png
+                    timestep_418000.png
+                    timestep_349000.png
+                    timestep_249000.png
+                    timestep_406000.png
+                    timestep_357000.png
+                    timestep_257000.png
+                    timestep_137000.png
+                    timestep_380000.png
+                    timestep_280000.png
+                    timestep_26000.png
+                    timestep_2000.png
+                    timestep_38000.png
+                    timestep_129000.png
+                    timestep_45000.png
+                    timestep_154000.png
+                    timestep_292000.png
+                    timestep_392000.png
+                    timestep_125000.png
+                    timestep_34000.png
+                    timestep_158000.png
+                    timestep_49000.png
+                    timestep_57000.png
+                    timestep_146000.png
+                    timestep_113000.png
+                    timestep_488000.png
+                    timestep_496000.png
+                    timestep_170000.png
+                    timestep_61000.png
+                    timestep_10000.png
+                    timestep_101000.png
+                    timestep_162000.png
+                    timestep_484000.png
+                    timestep_73000.png
+            16-58-56/
+                config.json
+                data/
+            16-52-09/
+                config.json
+                data/
+            16-56-47/
+                config.json
+                data/
+        2025-07-11/
+            10-40-00/
+                config.json
+                data/

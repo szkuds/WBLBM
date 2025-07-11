@@ -7,6 +7,7 @@ from wblbm.operators.update.update import Update
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
 from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
 from wblbm.utils.io import SimulationIO
+from wblbm.utils.profiler import JAXProfiler
 
 
 class Run:
@@ -111,3 +112,38 @@ class Run:
         if verbose:
             print("Simulation completed!")
             print(f"Results saved in: {self.io_handler.run_dir}")
+
+    def run_with_profiling(self, init_type: str = 'standard', verbose: bool = True, profile_steps: int = 100):
+        """
+        Run simulation with JAX profiling enabled for a subset of steps.
+
+        Args:
+            profile_steps (int): Number of steps to profile (should be small, e.g., 100-1000)
+        """
+        # Initialize as normal
+        if self.multiphase and init_type == 'multiphase_bubble':
+            f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
+        else:
+            f_prev = self.initialiser.initialise_standard()
+
+        if verbose:
+            print(f"Starting LBM simulation with profiling for {profile_steps} steps...")
+
+        # Warm up JAX compilation first (shorter warmup)
+        for it in range(5):
+            f_next = self.update(f_prev)
+            f_prev = f_next
+
+        # Profile the actual operations
+        with JAXProfiler("./profiler_output"):
+            for it in range(profile_steps):
+                f_next = self.update(f_prev)
+                f_prev = f_next
+                # Ensure computation completes before continuing
+                if hasattr(f_next, 'block_until_ready'):
+                    f_next.block_until_ready()
+
+                if verbose and it % 10 == 0:
+                    print(f"Profiling step {it}/{profile_steps}")
+
+        print("Profiling completed! Check ./profiler_output directory")
