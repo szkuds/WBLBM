@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from wblbm.operators.run.run import Run
-from wblbm.utils.timing import time_function
+from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
 def detailed_timing_analysis():
@@ -20,7 +20,8 @@ def detailed_timing_analysis():
         rho_l=1.0,
         rho_v=0.1,
         interface_width=4,
-        save_interval=50
+        save_interval=50,
+        bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
     )
 
     # Initialize
@@ -32,6 +33,9 @@ def detailed_timing_analysis():
     print("Warming up JAX compilation...")
     for _ in range(5):
         f_next = sim.update(f_prev)
+        # Apply boundary conditions if present
+        if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+            f_next = sim.boundary_condition(f_next, f_next)
         f_prev = f_next
 
     print("\nStarting detailed timing analysis...")
@@ -83,6 +87,11 @@ def detailed_timing_analysis():
             fstream.block_until_ready()
         stream_time = time.perf_counter() - start
 
+        # Apply boundary conditions if present
+        if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+            fstream = sim.boundary_condition(fstream, fcol)
+            if hasattr(fstream, 'block_until_ready'):
+                fstream.block_until_ready()
         total_time = time.perf_counter() - start_total
 
         # Store times

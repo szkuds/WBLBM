@@ -23,7 +23,8 @@ def complexity_analysis():
             rho_l=1.0,
             rho_v=0.1,
             interface_width=4,
-            save_interval=10
+            save_interval=10,
+            bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
         )
 
         f_prev = sim.initialiser.initialise_multiphase_bubble(
@@ -33,6 +34,9 @@ def complexity_analysis():
         # Warm up
         for _ in range(3):
             f_next = sim.update(f_prev)
+            # Apply boundary conditions if present
+            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                f_next = sim.boundary_condition(f_next, f_next)
             f_prev = f_next
 
         # Time multiple iterations
@@ -40,6 +44,9 @@ def complexity_analysis():
         for _ in range(10):
             start = time.perf_counter()
             f_next = sim.update(f_prev)
+            # Apply boundary conditions if present
+            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                f_next = sim.boundary_condition(f_next, f_next)
             if hasattr(f_next, 'block_until_ready'):
                 f_next.block_until_ready()
             end = time.perf_counter()
