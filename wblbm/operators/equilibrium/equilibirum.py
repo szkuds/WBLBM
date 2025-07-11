@@ -1,6 +1,11 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
+
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
+from wblbm.utils.timing import time_function  # <-- Add import
 
 
 class Equilibrium:
@@ -17,6 +22,8 @@ class Equilibrium:
         self.cx = lattice.c[0]
         self.cy = lattice.c[1]
 
+    @time_function
+    @partial(jit, static_argnums=(0,))
     def __call__(self, rho_, u_):
         """
         Calculate the equilibrium distribution function.

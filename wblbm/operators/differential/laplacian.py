@@ -1,4 +1,8 @@
+from functools import partial
+
 import jax.numpy as jnp
+from jax import jit
+
 from wblbm.lattice.lattice import Lattice
 
 
@@ -10,6 +14,7 @@ class Laplacian:
     def __init__(self, lattice: Lattice):
         self.w = lattice.w
 
+    @partial(jit, static_argnums=(0,))
     def __call__(self, grid):
         """
         Calculate the Laplacian of a 2D grid.
