@@ -29,7 +29,9 @@ class Run:
             interface_width: int = 4,
             save_interval: int = 100,
             results_dir: str = "results",
-            bc_config: dict = None
+            bc_config: dict = None,
+            force_enabled: bool = False,
+            force_obj=None  # New parameter for force object
     ):
         self.grid_shape = grid_shape
         self.nt = nt
@@ -40,6 +42,8 @@ class Run:
         self.rho_l = rho_l
         self.rho_v = rho_v
         self.interface_width = interface_width if multiphase else None
+        self.force_enabled = force_enabled
+        self.force_obj = force_obj
 
         # Initialize core components
         self.grid = Grid(grid_shape)
@@ -55,13 +59,15 @@ class Run:
         if multiphase:
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
             self.update = UpdateMultiphase(
-                self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v
+                self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v, bc_config=bc_config, force_enabled=force_enabled
             )
-            self.macroscopic_multiphase = MacroscopicMultiphase(self.grid, self.lattice, kappa, interface_width, rho_l, rho_v)
+            self.macroscopic_multiphase = MacroscopicMultiphase(
+                self.grid, self.lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled  # Add this
+            )
         else:
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
-            self.update = Update(self.grid, self.lattice, tau)
-            self.macroscopic = Macroscopic(self.grid, self.lattice)
+            self.update = Update(self.grid, self.lattice, tau, bc_config=bc_config, force_enabled=force_enabled)
+            self.macroscopic = Macroscopic(self.grid, self.lattice, force_enabled=force_enabled)
 
         # Prepare config dictionary for the IO handler
         self.config = {
@@ -76,7 +82,9 @@ class Run:
             'rho_l': rho_l if multiphase else None,
             'rho_v': rho_v if multiphase else None,
             'interface_width': self.interface_width,
-            'bc_config': bc_config
+            'bc_config': bc_config,
+            'force_enabled': force_enabled,
+            'force_obj': str(type(force_obj)) if force_obj is not None else None
         }
         self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
 
@@ -102,10 +110,19 @@ class Run:
 
         # Main simulation loop
         for it in range(self.nt):
-            f_next = self.update(f_prev)
+            force = None
+            if self.force_enabled and self.force_obj is not None:
+                # Compute force using the force object (optionally pass rho if needed)
+                if self.multiphase:
+                    rho, _, _ = self.macroscopic_multiphase(f_prev)
+                else:
+                    rho, _ = self.macroscopic(f_prev)
+                force = self.force_obj.compute_force(rho)
+            elif self.force_enabled:
+                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+            f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
             # Apply boundary conditions if present
             if self.boundary_condition is not None:
-                # For Update/UpdateMultiphase, fcol is not directly available, so pass f_next twice
                 f_next = self.boundary_condition(f_next, f_next)
             f_prev = f_next
 
@@ -149,7 +166,16 @@ class Run:
 
         # Warm up JAX compilation first (shorter warmup)
         for it in range(5):
-            f_next = self.update(f_prev)
+            force = None
+            if self.force_enabled and self.force_obj is not None:
+                if self.multiphase:
+                    rho, _, _ = self.macroscopic_multiphase(f_prev)
+                else:
+                    rho, _ = self.macroscopic(f_prev)
+                force = self.force_obj.compute_force(rho)
+            elif self.force_enabled:
+                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+            f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
             if self.boundary_condition is not None:
                 f_next = self.boundary_condition(f_next, f_next)
             f_prev = f_next
@@ -157,7 +183,16 @@ class Run:
         # Profile the actual operations
         with JAXProfiler("./profiler_output"):
             for it in range(profile_steps):
-                f_next = self.update(f_prev)
+                force = None
+                if self.force_enabled and self.force_obj is not None:
+                    if self.multiphase:
+                        rho, _, _ = self.macroscopic_multiphase(f_prev)
+                    else:
+                        rho, _ = self.macroscopic(f_prev)
+                    force = self.force_obj.compute_force(rho)
+                elif self.force_enabled:
+                    force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
                 if self.boundary_condition is not None:
                     f_next = self.boundary_condition(f_next, f_next)
                 f_prev = f_next

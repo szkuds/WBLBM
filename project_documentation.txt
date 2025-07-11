@@ -45,7 +45,11 @@ wblbm/
         differential/
             gradient.py
             --- Code in gradient.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
+            
             from wblbm.lattice.lattice import Lattice
             
             
@@ -58,6 +62,7 @@ wblbm/
                     self.w = lattice.w
                     self.c = lattice.c
             
+                @partial(jit, static_argnums=(0,))
                 def __call__(self, grid):
                     """
                     Calculate the gradient using the provided stencil.
@@ -126,7 +131,11 @@ wblbm/
 
             laplacian.py
             --- Code in laplacian.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
+            
             from wblbm.lattice.lattice import Lattice
             
             
@@ -138,6 +147,7 @@ wblbm/
                 def __init__(self, lattice: Lattice):
                     self.w = lattice.w
             
+                @partial(jit, static_argnums=(0,))
                 def __call__(self, grid):
                     """
                     Calculate the Laplacian of a 2D grid.
@@ -200,11 +210,16 @@ wblbm/
         macroscopic/
             macroscopic.py
             --- Code in macroscopic.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
+            
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
             from typing import Tuple
             from wblbm.operators.differential.gradient import Gradient
+            from wblbm.utils.timing import time_function, TIMING_ENABLED
             
             
             class Macroscopic:
@@ -212,7 +227,7 @@ wblbm/
                 Calculates the macroscopic density and velocity fields from the population distribution.
                 """
             
-                def __init__(self, grid: Grid, lattice: Lattice) -> None:
+                def __init__(self, grid: Grid, lattice: Lattice, force_enabled: bool = False) -> None:
                     self.nx: int = grid.nx
                     self.ny: int = grid.ny
                     self.q: int = lattice.q
@@ -220,17 +235,21 @@ wblbm/
                     self.cx: jnp.ndarray = jnp.array(lattice.c[0])
                     self.cy: jnp.ndarray = jnp.array(lattice.c[1])
                     self.gradient = Gradient(lattice)
+                    self.force_enabled = force_enabled
             
-                def __call__(self, f: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+                @time_function(enable_timing=TIMING_ENABLED)
+                @partial(jit, static_argnums=(0,))
+                def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None) -> Tuple[jnp.ndarray, jnp.ndarray]:
                     """
                     Args:
                         f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
+                        force (jnp.ndarray, optional): Force field, shape (nx, ny, 1, 2). Required if force_enabled is True.
+            
                     Returns:
                         tuple: (rho, u)
                             rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
                             u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
                     """
-                    gradient = self.gradient
                     if self.d == 2:
                         # Compute density
                         rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
@@ -241,6 +260,14 @@ wblbm/
                         ux = jnp.sum(f * cx, axis=2, keepdims=True)
                         uy = jnp.sum(f * cy, axis=2, keepdims=True)
                         u = jnp.concatenate([ux, uy], axis=-1) / rho  # (nx, ny, 1, 2)
+            
+                        # New: Optional force update, similar to MacroscopicMultiphase
+                        if self.force_enabled:
+                            if force is None:
+                                # Default to zero force if not provided (or raise error if strict enforcement needed)
+                                force = jnp.zeros_like(u)
+                            u = u + force / 2  # Update velocity as in multiphase class
+            
                         return rho, u
                     elif self.d == 3:
                         raise NotImplementedError("Dimension larger than 2 not supported.")            --- End of macroscopic.py ---
@@ -251,7 +278,10 @@ wblbm/
 
             macroscopic_multiphase.py
             --- Code in macroscopic_multiphase.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
             
             from wblbm.grid import Grid
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
@@ -275,6 +305,7 @@ wblbm/
                     self.laplacian = Laplacian(lattice)
                     self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
             
+                @partial(jit, static_argnums=(0,))
                 def __call__(self, f: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
                     """
                     Calculate the macroscopic density and velocity fields from the population distribution.
@@ -290,9 +321,10 @@ wblbm/
                     """
                     rho, u = super().__call__(f)
                     force_int = self.force_int(rho)
-                    u_updated = self.u_new(u, rho, force_int)
+                    u_updated = self.u_new(u, force_int)
                     return rho, u_updated, force_int
             
+                @partial(jit, static_argnums=(0,))
                 def eos(self, rho):
                     """Equation of state - extract 2D data for computation"""
                     rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
@@ -303,6 +335,7 @@ wblbm/
                     eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
                     return eos_4d
             
+                @partial(jit, static_argnums=(0,))
                 def chem_pot(self, rho):
                     """
                     Calculate the chemical potential.
@@ -311,6 +344,7 @@ wblbm/
                     chem_pot__ = mu_0 - self.kappa * self.laplacian(rho)
                     return chem_pot__
             
+                @partial(jit, static_argnums=(0,))
                 def force_int(self, rho):
                     """
                     Calculate the interaction force.
@@ -319,7 +353,8 @@ wblbm/
                     # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
                     return -rho * grad_chem_pot
             
-                def u_new(self, u, rho, force):
+                @partial(jit, static_argnums=(0,))
+                def u_new(self, u, force):
                     """
                     Update velocity with interaction force.
                     """
@@ -341,10 +376,12 @@ wblbm/
             
             from wblbm.grid import Grid
             from wblbm.lattice import Lattice
+            from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             from wblbm.operators.collision import Collision, SourceTerm
             from wblbm.operators.equilibrium.equilibirum import Equilibrium
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
             from wblbm.operators.stream import Streaming
+            from wblbm.utils.timing import time_function, TIMING_ENABLED
             
             
             class Update(object):
@@ -352,23 +389,37 @@ wblbm/
                         self,
                         grid: Grid,
                         lattice: Lattice,
-                        tau: float
+                        tau: float,
+                        bc_config: dict = None,
+                        force_enabled: bool = False
                 ):
                     self.grid = grid
                     self.lattice = lattice
                     self.tau = tau
-                    self.macroscopic = Macroscopic(grid, lattice)
+                    self.macroscopic = Macroscopic(grid, lattice, force_enabled=force_enabled)
                     self.equilibrium = Equilibrium(grid, lattice)
                     self.collision = Collision(grid, lattice, tau)
                     self.source_term = SourceTerm(grid, lattice)
                     self.streaming = Streaming(lattice)
+                    if bc_config is not None:
+                        self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
+                    else:
+                        self.boundary_condition = None
+                    self.force_enabled = force_enabled
             
                 @partial(jit, static_argnums=(0,))
-                def __call__(self, f: jnp.ndarray):
-                    rho, u = self.macroscopic(f)
+                @time_function(enable_timing=TIMING_ENABLED)
+                def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None):
+                    # If force_enabled and no force provided, use a simple constant force for testing
+                    if self.force_enabled and force is None:
+                        # Example: uniform force in x-direction
+                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                    rho, u = self.macroscopic(f, force=force) if self.force_enabled else self.macroscopic(f)
                     feq = self.equilibrium(rho, u)
                     fcol = self.collision(f, feq)
                     fstream = self.streaming(fcol)
+                    if self.boundary_condition is not None:
+                        fstream = self.boundary_condition(fstream, fcol)
                     return fstream
             --- End of update.py ---
 
@@ -388,6 +439,7 @@ wblbm/
             from wblbm.operators.collision.collision_multiphase import CollisionMultiphase
             from wblbm.operators.update.update import Update
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             
             
             class UpdateMultiphase(Update):
@@ -399,21 +451,32 @@ wblbm/
                         kappa: float,
                         interface_width: int,
                         rho_l: float,
-                        rho_v: float
+                        rho_v: float,
+                        bc_config: dict = None,
+                        force_enabled: bool = False
                 ):
-                    super().__init__(grid, lattice, tau)
+                    super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
                     self.macroscopic = MacroscopicMultiphase(grid, lattice, kappa, interface_width, rho_l, rho_v)
                     self.collision = CollisionMultiphase(grid, lattice, tau)
+                    if bc_config is not None:
+                        self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
+                    else:
+                        self.boundary_condition = None
+                    self.force_enabled = force_enabled
             
                 @partial(jit, static_argnums=(0,))
-                def __call__(self, f: jnp.array):
-                    rho, u, force = self.macroscopic(f)
+                def __call__(self, f: jnp.array, force: jnp.ndarray = None):
+                    # If force_enabled and no force provided, use a simple constant force for testing
+                    if self.force_enabled and force is None:
+                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                    rho, u, force_int = self.macroscopic(f, force=force) if self.force_enabled else self.macroscopic(f)
                     feq = self.equilibrium(rho, u)
-                    source = self.source_term(rho, u, force)
+                    source = self.source_term(rho, u, force_int)
                     fcol = self.collision(f, feq, source)
                     fstream = self.streaming(fcol)
+                    if self.boundary_condition is not None:
+                        fstream = self.boundary_condition(fstream, fcol)
                     return fstream
-            
             --- End of update_multiphase.py ---
 
             __pycache__/
@@ -430,6 +493,7 @@ wblbm/
             --- Code in stream.py ---
             import jax.numpy as jnp
             from wblbm.lattice.lattice import Lattice
+            from wblbm.utils.timing import time_function, TIMING_ENABLED
             
             
             class Streaming:
@@ -441,6 +505,7 @@ wblbm/
                     self.c = lattice.c  # Shape: (2, Q)
                     self.q = lattice.q
             
+                @time_function(enable_timing=TIMING_ENABLED)
                 def __call__(self, f):
                     """
                     Perform the streaming step of the LBM.
@@ -577,12 +642,130 @@ wblbm/
         boundary_condition/
             boundary_condition.py
             --- Code in boundary_condition.py ---
+            from functools import partial
+            import jax.numpy as jnp
+            from jax import jit
+            from typing import Dict
+            from wblbm.grid.grid import Grid
+            from wblbm.lattice.lattice import Lattice
+            from wblbm.utils.timing import time_function, TIMING_ENABLED
+            
+            class BoundaryCondition:
+                """
+                Applies boundary conditions to the post-streaming distribution function.
+                Supports bounce-back, symmetry, and periodic BCs on specified grid edges.
+                Uses dynamic indices from Lattice class instead of hardcoding.
+                """
+            
+                def __init__(self, grid: Grid, lattice: Lattice, bc_config: Dict[str, str]):
+                    self.grid = grid
+                    self.lattice = lattice
+                    self.bc_config = bc_config
+                    self.opp_indices = lattice.opp_indices
+                    self.edges = grid.get_edges()
+                    valid_edges = ['top', 'bottom', 'left', 'right']
+                    valid_types = ['bounce-back', 'symmetry', 'periodic']
+                    for edge, bc_type in bc_config.items():
+                        if edge not in valid_edges:
+                            raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
+                        if bc_type not in valid_types:
+                            raise ValueError(f"Invalid BC type: {bc_type}. Must be one of {valid_types}.")
+            
+                @time_function(enable_timing=TIMING_ENABLED)
+                @partial(jit, static_argnums=(0,))
+                def __call__(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray) -> jnp.ndarray:
+                    for edge, bc_type in self.bc_config.items():
+                        if bc_type == 'bounce-back':
+                            f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
+                        elif bc_type == 'symmetry':
+                            f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
+                        elif bc_type == 'periodic':
+                            f_streamed = self._apply_periodic(f_streamed, edge)
+                    return f_streamed
+            
+                @partial(jit, static_argnums=(0, 3))
+                def _apply_bounce_back(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    lattice = self.lattice
+                    if edge == 'bottom':
+                        idx = 0
+                        incoming_dirs = lattice.construct_top_indices
+                        for i in incoming_dirs:
+                            opp_i = self.opp_indices[i]
+                            f_streamed = f_streamed.at[:, idx, i, 0].set(f_collision[:, idx, opp_i, 0])
+                    elif edge == 'top':
+                        idx = -1
+                        incoming_dirs = lattice.construct_bottom_indices
+                        for i in incoming_dirs:
+                            opp_i = self.opp_indices[i]
+                            f_streamed = f_streamed.at[:, idx, i, 0].set(f_collision[:, idx, opp_i, 0])
+                    elif edge == 'left':
+                        idx = 0
+                        incoming_dirs = lattice.construct_right_indices
+                        for i in incoming_dirs:
+                            opp_i = self.opp_indices[i]
+                            f_streamed = f_streamed.at[idx, :, i, 0].set(f_collision[idx, :, opp_i, 0])
+                    elif edge == 'right':
+                        idx = -1
+                        incoming_dirs = lattice.construct_left_indices
+                        for i in incoming_dirs:
+                            opp_i = self.opp_indices[i]
+                            f_streamed = f_streamed.at[idx, :, i, 0].set(f_collision[idx, :, opp_i, 0])
+                    return f_streamed
+            
+                @partial(jit, static_argnums=(0, 3))
+                def _apply_symmetry(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    lattice = self.lattice
+                    if edge == 'bottom':
+                        idx = 0
+                        top_dirs = lattice.construct_top_indices
+                        bottom_dirs = lattice.construct_bottom_indices
+                        diag_top_right = lattice.construct_top_indices[2]
+                        diag_bottom_right = lattice.construct_bottom_indices[2]
+                        diag_top_left = lattice.construct_top_indices[1]
+                        diag_bottom_left = lattice.construct_bottom_indices[1]
+                        f_streamed = f_streamed.at[:, idx, top_dirs[0], 0].set(f_collision[:, idx, bottom_dirs[0], 0])
+                        f_streamed = f_streamed.at[:, idx, diag_top_right, 0].set(f_collision[:, idx, diag_bottom_right, 0])
+                        f_streamed = f_streamed.at[:, idx, diag_top_left, 0].set(f_collision[:, idx, diag_bottom_left, 0])
+                    elif edge == 'top':
+                        idx = -1
+                        bottom_dirs = lattice.construct_bottom_indices
+                        top_dirs = lattice.construct_top_indices
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[0], 0].set(f_collision[:, idx, top_dirs[0], 0])
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[1], 0].set(jnp.roll(f_collision[:, idx, top_dirs[1], 0], 1, axis=0))
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[2], 0].set(jnp.roll(f_collision[:, idx, top_dirs[2], 0], -1, axis=0))
+                    elif edge == 'left':
+                        idx = 0
+                        right_dirs = lattice.construct_right_indices
+                        left_dirs = lattice.construct_left_indices
+                        f_streamed = f_streamed.at[idx, :, right_dirs[0], 0].set(f_collision[idx, :, left_dirs[0], 0])
+                        f_streamed = f_streamed.at[idx, :, right_dirs[1], 0].set(f_collision[idx, :, left_dirs[1], 0])
+                        f_streamed = f_streamed.at[idx, :, right_dirs[2], 0].set(f_collision[idx, :, left_dirs[2], 0])
+                    elif edge == 'right':
+                        idx = -1
+                        left_dirs = lattice.construct_left_indices
+                        right_dirs = lattice.construct_right_indices
+                        f_streamed = f_streamed.at[idx, :, left_dirs[0], 0].set(f_collision[idx, :, right_dirs[0], 0])
+                        f_streamed = f_streamed.at[idx, :, left_dirs[1], 0].set(f_collision[idx, :, right_dirs[1], 0])
+                        f_streamed = f_streamed.at[idx, :, left_dirs[2], 0].set(f_collision[idx, :, right_dirs[2], 0])
+                    return f_streamed
+            
+                @partial(jit, static_argnums=(0, 2))
+                def _apply_periodic(self, f_streamed: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    if edge in ['left', 'right']:
+                        axis = 0
+                    elif edge in ['bottom', 'top']:
+                        axis = 1
+                    f_streamed = jnp.roll(f_streamed, shift=1, axis=axis)
+                    return f_streamed
             --- End of boundary_condition.py ---
 
             __init__.py
             --- Code in __init__.py ---
             --- End of __init__.py ---
 
+            __pycache__/
+                boundary_condition.cpython-312.pyc
+                __init__.cpython-312.pyc
         equilibrium/
             __init__.py
             --- Code in __init__.py ---
@@ -590,9 +773,14 @@ wblbm/
 
             equilibirum.py
             --- Code in equilibirum.py ---
+            from functools import partial
+            
             import jax.numpy as jnp
+            from jax import jit
+            
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
+            from wblbm.utils.timing import time_function, TIMING_ENABLED
             
             
             class Equilibrium:
@@ -609,6 +797,8 @@ wblbm/
                     self.cx = lattice.c[0]
                     self.cy = lattice.c[1]
             
+                @time_function(enable_timing=TIMING_ENABLED)
+                @partial(jit, static_argnums=(0,))
                 def __call__(self, rho_, u_):
                     """
                     Calculate the equilibrium distribution function.
@@ -664,6 +854,7 @@ wblbm/
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
             from wblbm.utils.io import SimulationIO
             from wblbm.utils.profiler import JAXProfiler
+            from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             
             
             class Run:
@@ -683,7 +874,10 @@ wblbm/
                         rho_v: float = 0.1,
                         interface_width: int = 4,
                         save_interval: int = 100,
-                        results_dir: str = "results"
+                        results_dir: str = "results",
+                        bc_config: dict = None,
+                        force_enabled: bool = False,
+                        force_obj=None  # New parameter for force object
                 ):
                     self.grid_shape = grid_shape
                     self.nt = nt
@@ -694,31 +888,47 @@ wblbm/
                     self.rho_l = rho_l
                     self.rho_v = rho_v
                     self.interface_width = interface_width if multiphase else None
+                    self.force_enabled = force_enabled
+                    self.force_obj = force_obj
             
                     # Initialize core components
                     self.grid = Grid(grid_shape)
                     self.lattice = Lattice(lattice_type)
                     self.initialiser = Initialise(self.grid, self.lattice)
             
+                    # Boundary condition handler
+                    self.boundary_condition = None
+                    if bc_config is not None:
+                        self.boundary_condition = BoundaryCondition(self.grid, self.lattice, bc_config)
+            
                     # Select the appropriate update and macroscopic operators
                     if multiphase:
                         from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
                         self.update = UpdateMultiphase(
-                            self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v
+                            self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v, bc_config=bc_config, force_enabled=force_enabled
                         )
                         self.macroscopic_multiphase = MacroscopicMultiphase(self.grid, self.lattice, kappa, interface_width, rho_l, rho_v)
                     else:
                         from wblbm.operators.macroscopic.macroscopic import Macroscopic
-                        self.update = Update(self.grid, self.lattice, tau)
-                        self.macroscopic = Macroscopic(self.grid, self.lattice)
+                        self.update = Update(self.grid, self.lattice, tau, bc_config=bc_config, force_enabled=force_enabled)
+                        self.macroscopic = Macroscopic(self.grid, self.lattice, force_enabled=force_enabled)
             
                     # Prepare config dictionary for the IO handler
                     self.config = {
-                        'grid_shape': grid_shape, 'lattice_type': lattice_type, 'tau': tau,
-                        'nt': nt, 'multiphase': multiphase, 'save_interval': save_interval,
-                        'kappa': kappa if multiphase else None, 'beta': self.update.macroscopic.beta if multiphase else None,
-                        'rho_l': rho_l if multiphase else None, 'rho_v': rho_v if multiphase else None,
-                        'interface_width': self.interface_width
+                        'grid_shape': grid_shape,
+                        'lattice_type': lattice_type,
+                        'tau': tau,
+                        'nt': nt,
+                        'multiphase': multiphase,
+                        'save_interval': save_interval,
+                        'kappa': kappa if multiphase else None,
+                        'beta': self.update.macroscopic.beta if multiphase else None,
+                        'rho_l': rho_l if multiphase else None,
+                        'rho_v': rho_v if multiphase else None,
+                        'interface_width': self.interface_width,
+                        'bc_config': bc_config,
+                        'force_enabled': force_enabled,
+                        'force_obj': str(type(force_obj)) if force_obj is not None else None
                     }
                     self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
             
@@ -744,7 +954,20 @@ wblbm/
             
                     # Main simulation loop
                     for it in range(self.nt):
-                        f_next = self.update(f_prev)
+                        force = None
+                        if self.force_enabled and self.force_obj is not None:
+                            # Compute force using the force object (optionally pass rho if needed)
+                            if self.multiphase:
+                                rho, _, _ = self.macroscopic_multiphase(f_prev)
+                            else:
+                                rho, _ = self.macroscopic(f_prev)
+                            force = self.force_obj.compute_force(rho)
+                        elif self.force_enabled:
+                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                        f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
+                        # Apply boundary conditions if present
+                        if self.boundary_condition is not None:
+                            f_next = self.boundary_condition(f_next, f_next)
                         f_prev = f_next
             
                         # Save data at the specified interval
@@ -787,13 +1010,35 @@ wblbm/
             
                     # Warm up JAX compilation first (shorter warmup)
                     for it in range(5):
-                        f_next = self.update(f_prev)
+                        force = None
+                        if self.force_enabled and self.force_obj is not None:
+                            if self.multiphase:
+                                rho, _, _ = self.macroscopic_multiphase(f_prev)
+                            else:
+                                rho, _ = self.macroscopic(f_prev)
+                            force = self.force_obj.compute_force(rho)
+                        elif self.force_enabled:
+                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                        f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
+                        if self.boundary_condition is not None:
+                            f_next = self.boundary_condition(f_next, f_next)
                         f_prev = f_next
             
                     # Profile the actual operations
                     with JAXProfiler("./profiler_output"):
                         for it in range(profile_steps):
-                            f_next = self.update(f_prev)
+                            force = None
+                            if self.force_enabled and self.force_obj is not None:
+                                if self.multiphase:
+                                    rho, _, _ = self.macroscopic_multiphase(f_prev)
+                                else:
+                                    rho, _ = self.macroscopic(f_prev)
+                                force = self.force_obj.compute_force(rho)
+                            elif self.force_enabled:
+                                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
+                            f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
+                            if self.boundary_condition is not None:
+                                f_next = self.boundary_condition(f_next, f_next)
                             f_prev = f_next
                             # Ensure computation completes before continuing
                             if hasattr(f_next, 'block_until_ready'):
@@ -1008,8 +1253,9 @@ wblbm/
                     data = np.load(file_path)
                     final_rho = data['rho']
                     final_u = data['u']
+                    final_force = data.get('force', None)
         
-                    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+                    fig, axes = plt.subplots(1, 2 if final_force is None else 3, figsize=(12 if final_force is None else 18, 5))
         
                     # Plot density
                     im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin='lower', cmap='viridis')
@@ -1043,6 +1289,17 @@ wblbm/
                                    color='white', scale=None, scale_units='xy', angles='xy')
         
                     # --- End of Velocity Plotting Section ---
+        
+                    if final_force is not None:
+                        # Plot force magnitude and vectors
+                        force_mag = np.sqrt(final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2)
+                        im3 = axes[2].imshow(force_mag.T, origin='lower', cmap='cividis')
+                        axes[2].set_title('Force Magnitude & Vectors')
+                        plt.colorbar(im3, ax=axes[2], label="Force Magnitude")
+                        U_force = final_force[:, :, 0, 0]
+                        V_force = final_force[:, :, 0, 1]
+                        axes[2].quiver(X[::skip, ::skip], Y[::skip, ::skip], U_force.T[::skip, ::skip], V_force.T[::skip, ::skip],
+                                       color='white', scale=None, scale_units='xy', angles='xy')
         
                     for ax in axes:
                         ax.set_xlabel('x')
@@ -1103,6 +1360,11 @@ wblbm/
             def save_config(self, config: Dict):
                 """Saves the simulation configuration to a JSON file."""
                 config_path = os.path.join(self.run_dir, "config.json")
+                
+                # Rename boundary condition details if present (avoids duplication)
+                if 'bc_config' in config:
+                    config['boundary_conditions'] = config.pop('bc_config')  # Rename without copying
+                
                 with open(config_path, 'w') as f:
                     json.dump(config, f, indent=4)
                 print(f"Configuration saved to {config_path}")
@@ -1123,23 +1385,32 @@ wblbm/
         from functools import wraps
         import jax.numpy as jnp
         
-        def time_function(func):
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                start = time.perf_counter()
-                result = func(*args, **kwargs)
-                # Block until computation completes (important for JAX)
-                if hasattr(result, 'block_until_ready'):
-                    result.block_until_ready()
-                elif isinstance(result, tuple):
-                    # Handle multiple return values
-                    for item in result:
-                        if hasattr(item, 'block_until_ready'):
-                            item.block_until_ready()
-                end = time.perf_counter()
-                print(f"{func.__name__}: {end - start:.4f} seconds")
-                return result
-            return wrapper
+        TIMING_ENABLED = False  # Default: no timing print; set to True to enable
+        
+        
+        def time_function(enable_timing=TIMING_ENABLED):
+            def decorator(func):
+                @wraps(func)
+                def wrapper(*args, **kwargs):
+                    if not enable_timing:
+                        return func(*args, **kwargs)
+                    start = time.perf_counter()
+                    result = func(*args, **kwargs)
+                    # Block until computation completes (important for JAX)
+                    if hasattr(result, 'block_until_ready'):
+                        result.block_until_ready()
+                    elif isinstance(result, tuple):
+                        # Handle multiple return values
+                        for item in result:
+                            if hasattr(item, 'block_until_ready'):
+                                item.block_until_ready()
+                    end = time.perf_counter()
+                    print(f"{func.__name__}: {end - start:.4f} seconds")
+                    return result
+        
+                return wrapper
+        
+            return decorator
         --- End of timing.py ---
 
         profiler.py
@@ -1176,6 +1447,7 @@ wblbm/
         __pycache__/
             io.cpython-312.pyc
             profiler.cpython-312.pyc
+            timing.cpython-312.pyc
             __init__.cpython-312.pyc
             plotting.cpython-312.pyc
     __pycache__/
@@ -1305,12 +1577,67 @@ wblbm/
         __pycache__/
             lattice.cpython-312.pyc
             __init__.cpython-312.pyc
-    operator/
-        collision/
-            collision.py
-            --- Code in collision.py ---
-            
-            --- End of collision.py ---
+    force/
+        force.py
+        --- Code in force.py ---
+        from abc import ABC, abstractmethod
+        import jax.numpy as jnp
+        
+        
+        class Force(ABC):
+            """
+            Abstract base class for forces in the simulation.
+            Holds a force array of shape (nx, ny, 1, d).
+            """
+        
+            def __init__(self, force_array: jnp.ndarray):
+                if force_array.ndim != 4 or force_array.shape[2] != 1:
+                    raise ValueError("Force array must have shape (nx, ny, 1, d)")
+                self.force = force_array
+        
+            @abstractmethod
+            def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
+                """
+                Compute the force field based on the density field rho.
+                Must return an array of shape (nx, ny, 1, d).
+                """
+                pass
+        --- End of force.py ---
+
+        __init__.py
+        --- Code in __init__.py ---
+        --- End of __init__.py ---
+
+        gravitational_force.py
+        --- Code in gravitational_force.py ---
+        import jax.numpy as jnp
+        from wblbm.force.force import Force
+        
+        class GravityForce(Force):
+            """
+            Subclass for gravitational force, constant across the grid.
+            """
+            def __init__(self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float):
+                if d != 2:
+                    raise ValueError("Currently supports 2D (d=2) only")
+        
+                force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
+                force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+        
+                force_array = jnp.zeros((nx, ny, 1, d))
+                force_array = force_array.at[:, :, 0, 0].set(force_x)
+                force_array = force_array.at[:, :, 0, 1].set(force_y)
+        
+                super().__init__(force_array)
+        
+            def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
+                """
+                Returns the constant gravitational force field.
+                Ignores rho as gravity is density-independent.
+                """
+                return self.force
+        
+        --- End of gravitational_force.py ---
 
     grid/
         grid.py
@@ -1361,6 +1688,318 @@ wblbm/
             grid.cpython-312.pyc
             __init__.cpython-312.pyc
 example/
+    single_phase_gravity_test.py
+    --- Code in single_phase_gravity_test.py ---
+    from wblbm.operators.run.run import Run
+    from wblbm.force.gravitational_force import GravityForce
+    from wblbm.utils.plotting import visualise
+    
+    grid_shape = (200, 200)
+    tau = 1.0
+    nt = 10000
+    save_interval = 2000
+    
+    force_g = 0.01
+    inclination_angle = 45
+    gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    
+    sim = Run(
+        grid_shape=grid_shape,
+        lattice_type="D2Q9",
+        tau=tau,
+        nt=nt,
+        multiphase=False,
+        save_interval=save_interval,
+        force_enabled=True,
+        force_obj=gravity
+    )
+    sim.run(init_type='standard', verbose=True)
+    
+    visualise(sim, "Single-Phase with Gravity Force")
+    
+    --- End of single_phase_gravity_test.py ---
+
+    test_bc.py
+    --- Code in test_bc.py ---
+    import numpy as np
+    from wblbm.operators.run.run import Run
+    from wblbm.utils.plotting import visualise
+    
+    
+    def test_boundary_conditions():
+        """
+        Test various boundary conditions in the LBM simulation.
+    
+        This function configures a small multiphase simulation with custom boundary conditions,
+        runs it for a limited number of steps, and visualizes the results to verify BC behavior.
+        """
+        print("\n=== Testing LBM Boundary Conditions ===")
+    
+        # Define boundary configuration
+        bc_config = {
+            'top': 'bounce-back',  # No-slip wall at top
+            'bottom': 'bounce-back',  # Symmetric boundary at bottom
+            'left': 'bounce-back',  # Periodic left-right wrapping
+            'right': 'bounce-back'
+        }
+    
+        # Set up the simulation
+        sim = Run(
+            grid_shape=(200, 200),  # Small grid for quick testing
+            lattice_type="D2Q9",
+            tau=0.8,
+            nt=10000,  # Short run to observe BC effects
+            multiphase=True,
+            kappa=0.01,
+            rho_l=1.0,
+            rho_v=0.1,
+            interface_width=5,
+            save_interval=2000,
+            bc_config=bc_config  # Apply custom BCs
+        )
+    
+        # Run the simulation with a droplet initialization to test interactions with boundaries
+        sim.run(init_type='multiphase_bubble', verbose=True)
+    
+        # Visualize results
+        print("\n=== Visualizing Boundary Condition Effects ===")
+        visualise(sim, "LBM Boundary Condition Test")
+    
+        print("\nTest completed! Check the 'results' directory for saved data and plots.")
+    
+    
+    if __name__ == "__main__":
+        test_boundary_conditions()
+    --- End of test_bc.py ---
+
+    timing_analysis.py
+    --- Code in timing_analysis.py ---
+    import time
+    import numpy as np
+    from wblbm.operators.run.run import Run
+    from wblbm.utils.timing import time_function, TIMING_ENABLED
+    
+    
+    def detailed_timing_analysis():
+        """Run a small simulation with detailed timing for each component."""
+    
+        print("=== Detailed Timing Analysis ===")
+    
+        # Use a moderate grid size for meaningful timing
+        sim = Run(
+            grid_shape=(1000, 1000),
+            lattice_type="D2Q9",
+            tau=1.0,
+            nt=100,  # Fewer steps for timing analysis
+            multiphase=True,
+            kappa=0.01,
+            rho_l=1.0,
+            rho_v=0.1,
+            interface_width=4,
+            save_interval=50,
+            bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
+        )
+    
+        # Initialize
+        f_prev = sim.initialiser.initialise_multiphase_bubble(
+            sim.rho_l, sim.rho_v, sim.interface_width
+        )
+    
+        # Warm up JAX compilation
+        print("Warming up JAX compilation...")
+        for _ in range(5):
+            f_next = sim.update(f_prev)
+            # Apply boundary conditions if present
+            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                f_next = sim.boundary_condition(f_next, f_next)
+            f_prev = f_next
+    
+        print("\nStarting detailed timing analysis...")
+    
+        # Time individual components
+        total_times = {
+            'macroscopic': [],
+            'equilibrium': [],
+            'collision': [],
+            'streaming': [],
+            'total_update': []
+        }
+    
+        for i in range(50):  # Time 50 iterations
+            start_total = time.perf_counter()
+    
+            # Time macroscopic calculation
+            start = time.perf_counter()
+            rho, u, force = sim.macroscopic_multiphase(f_prev)
+            if hasattr(rho, 'block_until_ready'):
+                rho.block_until_ready()
+            macro_time = time.perf_counter() - start
+    
+            # Time equilibrium calculation
+            start = time.perf_counter()
+            feq = sim.update.equilibrium(rho, u)
+            if hasattr(feq, 'block_until_ready'):
+                feq.block_until_ready()
+            eq_time = time.perf_counter() - start
+    
+            # Time source term
+            start = time.perf_counter()
+            source = sim.update.source_term(rho, u, force)
+            if hasattr(source, 'block_until_ready'):
+                source.block_until_ready()
+            source_time = time.perf_counter() - start
+    
+            # Time collision
+            start = time.perf_counter()
+            fcol = sim.update.collision(f_prev, feq, source)
+            if hasattr(fcol, 'block_until_ready'):
+                fcol.block_until_ready()
+            collision_time = time.perf_counter() - start
+    
+            # Time streaming
+            start = time.perf_counter()
+            fstream = sim.update.streaming(fcol)
+            if hasattr(fstream, 'block_until_ready'):
+                fstream.block_until_ready()
+            stream_time = time.perf_counter() - start
+    
+            # Apply boundary conditions if present
+            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                fstream = sim.boundary_condition(fstream, fcol)
+                if hasattr(fstream, 'block_until_ready'):
+                    fstream.block_until_ready()
+            total_time = time.perf_counter() - start_total
+    
+            # Store times
+            total_times['macroscopic'].append(macro_time + source_time)  # Include source term
+            total_times['equilibrium'].append(eq_time)
+            total_times['collision'].append(collision_time)
+            total_times['streaming'].append(stream_time)
+            total_times['total_update'].append(total_time)
+    
+            f_prev = fstream
+    
+            if i % 10 == 0:
+                print(f"Completed {i + 1}/50 timing iterations")
+    
+        # Calculate and display statistics
+        print("\n=== Timing Results (milliseconds) ===")
+        print(f"{'Component':<15} {'Mean':<8} {'Std':<8} {'Min':<8} {'Max':<8} {'% of Total':<12}")
+        print("-" * 70)
+    
+        total_mean = np.mean(total_times['total_update']) * 1000
+    
+        for component, times in total_times.items():
+            if component != 'total_update':
+                times_ms = np.array(times) * 1000
+                mean_time = np.mean(times_ms)
+                std_time = np.std(times_ms)
+                min_time = np.min(times_ms)
+                max_time = np.max(times_ms)
+                percentage = (mean_time / total_mean) * 100
+    
+                print(
+                    f"{component:<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {percentage:<12.1f}")
+    
+        # Total
+        times_ms = np.array(total_times['total_update']) * 1000
+        mean_time = np.mean(times_ms)
+        std_time = np.std(times_ms)
+        min_time = np.min(times_ms)
+        max_time = np.max(times_ms)
+    
+        print("-" * 70)
+        print(f"{'TOTAL':<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {'100.0':<12}")
+    
+    
+    if __name__ == "__main__":
+        detailed_timing_analysis()
+    --- End of timing_analysis.py ---
+
+    complexity_analysis.py
+    --- Code in complexity_analysis.py ---
+    import time
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from wblbm.operators.run.run import Run
+    
+    
+    def complexity_analysis():
+        """Analyze how timing scales with grid size."""
+    
+        grid_sizes = [(50, 50), (100, 100), (150, 150), (200, 200), (1000, 1000)]
+        timing_results = []
+    
+        for nx, ny in grid_sizes:
+            print(f"\nTesting grid size: {nx}x{ny}")
+    
+            sim = Run(
+                grid_shape=(nx, ny),
+                lattice_type="D2Q9",
+                tau=1.0,
+                nt=10,  # Just a few steps for timing
+                multiphase=True,
+                kappa=0.01,
+                rho_l=1.0,
+                rho_v=0.1,
+                interface_width=4,
+                save_interval=10,
+                bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
+            )
+    
+            f_prev = sim.initialiser.initialise_multiphase_bubble(
+                sim.rho_l, sim.rho_v, sim.interface_width
+            )
+    
+            # Warm up
+            for _ in range(3):
+                f_next = sim.update(f_prev)
+                # Apply boundary conditions if present
+                if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                    f_next = sim.boundary_condition(f_next, f_next)
+                f_prev = f_next
+    
+            # Time multiple iterations
+            times = []
+            for _ in range(10):
+                start = time.perf_counter()
+                f_next = sim.update(f_prev)
+                # Apply boundary conditions if present
+                if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                    f_next = sim.boundary_condition(f_next, f_next)
+                if hasattr(f_next, 'block_until_ready'):
+                    f_next.block_until_ready()
+                end = time.perf_counter()
+                times.append(end - start)
+                f_prev = f_next
+    
+            avg_time = np.mean(times) * 1000  # Convert to ms
+            grid_points = nx * ny
+    
+            timing_results.append({
+                'grid_size': f"{nx}x{ny}",
+                'grid_points': grid_points,
+                'avg_time_ms': avg_time,
+                'time_per_point_us': (avg_time * 1000) / grid_points
+            })
+    
+            print(f"Average time per iteration: {avg_time:.3f} ms")
+            print(f"Time per grid point: {(avg_time * 1000) / grid_points:.3f} μs")
+    
+        # Display results
+        print("\n=== Complexity Analysis Results ===")
+        print(f"{'Grid Size':<12} {'Points':<10} {'Time (ms)':<12} {'μs/point':<12}")
+        print("-" * 50)
+    
+        for result in timing_results:
+            print(f"{result['grid_size']:<12} {result['grid_points']:<10} "
+                  f"{result['avg_time_ms']:<12.3f} {result['time_per_point_us']:<12.3f}")
+    
+    
+    if __name__ == "__main__":
+        complexity_analysis()
+    --- End of complexity_analysis.py ---
+
     test_bubble_profiler.py
     --- Code in test_bubble_profiler.py ---
     from wblbm.operators.run.run import Run
@@ -1470,7 +2109,7 @@ example/
             grid_shape=(400, 400),
             lattice_type="D2Q9",
             tau=0.9,
-            nt=500000,
+            nt=5000,
             save_interval=1000,
             multiphase=True,
             kappa=0.01,
@@ -1502,200 +2141,47 @@ example/
         print("\nAll tests completed!")
     --- End of bubble_high_density.py ---
 
-    profiler_output/
-        plugins/
-            profile/
-                2025_07_11_10_40_03/
-                    jit_add(43).hlo_proto.pb
-                    jit_scatter(61).hlo_proto.pb
-                    jit_multiply(51).hlo_proto.pb
-                    jit_integer_pow(11).hlo_proto.pb
-                    ALL_HOSTS.op_stats.pb
-                    jit_broadcast_in_dim(5).hlo_proto.pb
-                    jit_broadcast_in_dim(57).hlo_proto.pb
-                    jit_multiply(41).hlo_proto.pb
-                    jit_convert_element_type(1).hlo_proto.pb
-                    jit_true_divide(19).hlo_proto.pb
-                    jit_multiply(45).hlo_proto.pb
-                    jit_iota(3).hlo_proto.pb
-                    jit_convert_element_type(29).hlo_proto.pb
-                    jit_add(13).hlo_proto.pb
-                    jit___call__(65).hlo_proto.pb
-                    jit_broadcast_in_dim(39).hlo_proto.pb
-                    jit_subtract(9).hlo_proto.pb
-                    cache_version.txt
-                    jit_squeeze(35).hlo_proto.pb
-                    TUD501814.xplane.pb
-                    jit_reshape(27).hlo_proto.pb
-                    jit_sqrt(15).hlo_proto.pb
-                    jit_multiply(49).hlo_proto.pb
-                    jit_subtract(53).hlo_proto.pb
-                    jit__squeeze(37).hlo_proto.pb
-                    TUD501814.trace.json.gz
-                    jit_multiply(23).hlo_proto.pb
-                    jit_broadcast_in_dim(31).hlo_proto.pb
-                    TUD501814.SSTABLE
-                    jit_multiply(47).hlo_proto.pb
-                    jit_convert_element_type(55).hlo_proto.pb
-                    jit__squeeze(59).hlo_proto.pb
-                    jit_subtract(63).hlo_proto.pb
-                    jit_dynamic_slice(33).hlo_proto.pb
-                    jit_tanh(21).hlo_proto.pb
-                    jit_subtract(17).hlo_proto.pb
-                    jit_broadcast_in_dim(7).hlo_proto.pb
-                    jit_add(25).hlo_proto.pb
-                2025_07_10_17_11_58/
-                    jit_add(43).hlo_proto.pb
-                    jit_scatter(61).hlo_proto.pb
-                    jit_multiply(51).hlo_proto.pb
-                    jit_integer_pow(11).hlo_proto.pb
-                    ALL_HOSTS.op_stats.pb
-                    jit_broadcast_in_dim(5).hlo_proto.pb
-                    jit_broadcast_in_dim(57).hlo_proto.pb
-                    jit_multiply(41).hlo_proto.pb
-                    jit_convert_element_type(1).hlo_proto.pb
-                    jit_true_divide(19).hlo_proto.pb
-                    jit_multiply(45).hlo_proto.pb
-                    jit_iota(3).hlo_proto.pb
-                    jit_convert_element_type(29).hlo_proto.pb
-                    jit_add(13).hlo_proto.pb
-                    jit___call__(65).hlo_proto.pb
-                    jit_broadcast_in_dim(39).hlo_proto.pb
-                    jit_subtract(9).hlo_proto.pb
-                    cache_version.txt
-                    jit_squeeze(35).hlo_proto.pb
-                    TUD501814.xplane.pb
-                    jit_reshape(27).hlo_proto.pb
-                    jit_sqrt(15).hlo_proto.pb
-                    jit_multiply(49).hlo_proto.pb
-                    jit_subtract(53).hlo_proto.pb
-                    jit__squeeze(37).hlo_proto.pb
-                    TUD501814.trace.json.gz
-                    jit_multiply(23).hlo_proto.pb
-                    jit_broadcast_in_dim(31).hlo_proto.pb
-                    jit_multiply(47).hlo_proto.pb
-                    jit_convert_element_type(55).hlo_proto.pb
-                    jit__squeeze(59).hlo_proto.pb
-                    jit_subtract(63).hlo_proto.pb
-                    jit_dynamic_slice(33).hlo_proto.pb
-                    jit_tanh(21).hlo_proto.pb
-                    jit_subtract(17).hlo_proto.pb
-                    jit_broadcast_in_dim(7).hlo_proto.pb
-                    jit_add(25).hlo_proto.pb
-                2025_07_10_16_59_05/
-                    TUD501814.xplane.pb
-                    TUD501814.trace.json.gz
+    multiphase_gravity_test.py
+    --- Code in multiphase_gravity_test.py ---
+    from wblbm.operators.run.run import Run
+    from wblbm.force.gravitational_force import GravityForce
+    from wblbm.utils.plotting import visualise
+    
+    grid_shape = (400, 400)
+    tau = 0.9
+    nt = 50000
+    save_interval = 5000
+    kappa = 0.01
+    rho_l = 1.0
+    rho_v = 0.001
+    interface_width = 10
+    
+    force_g = 0.005
+    inclination_angle = 30
+    gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    
+    sim = Run(
+        grid_shape=grid_shape,
+        lattice_type="D2Q9",
+        tau=tau,
+        nt=nt,
+        multiphase=True,
+        kappa=kappa,
+        rho_l=rho_l,
+        rho_v=rho_v,
+        interface_width=interface_width,
+        save_interval=save_interval,
+        force_enabled=True,
+        force_obj=gravity
+    )
+    sim.run(init_type='multiphase_droplet', verbose=True)
+    
+    visualise(sim, "Multiphase with Gravity Force")
+    
+    --- End of multiphase_gravity_test.py ---
+
     results/
         2025-07-10/
-            16-35-46/
-                config.json
-                data/
-                    timestep_31000.npz
-                    timestep_7000.npz
-                    timestep_23000.npz
-                    timestep_40000.npz
-                    timestep_15000.npz
-                    timestep_19000.npz
-                    timestep_49999.npz
-                    timestep_42000.npz
-                    timestep_5000.npz
-                    timestep_21000.npz
-                    timestep_9000.npz
-                    timestep_33000.npz
-                    timestep_17000.npz
-                    timestep_13000.npz
-                    timestep_29000.npz
-                    timestep_37000.npz
-                    timestep_46000.npz
-                    timestep_1000.npz
-                    timestep_25000.npz
-                    timestep_11000.npz
-                    timestep_3000.npz
-                    timestep_27000.npz
-                    timestep_39000.npz
-                    timestep_44000.npz
-                    timestep_35000.npz
-                    timestep_48000.npz
-                    timestep_0.npz
-                    timestep_14000.npz
-                    timestep_18000.npz
-                    timestep_30000.npz
-                    timestep_41000.npz
-                    timestep_22000.npz
-                    timestep_6000.npz
-                    timestep_16000.npz
-                    timestep_20000.npz
-                    timestep_4000.npz
-                    timestep_43000.npz
-                    timestep_32000.npz
-                    timestep_8000.npz
-                    timestep_36000.npz
-                    timestep_28000.npz
-                    timestep_24000.npz
-                    timestep_47000.npz
-                    timestep_12000.npz
-                    timestep_45000.npz
-                    timestep_38000.npz
-                    timestep_26000.npz
-                    timestep_2000.npz
-                    timestep_49000.npz
-                    timestep_34000.npz
-                    timestep_10000.npz
-                plots/
-                    timestep_31000.png
-                    timestep_40000.png
-                    timestep_7000.png
-                    timestep_23000.png
-                    timestep_15000.png
-                    timestep_19000.png
-                    timestep_49999.png
-                    timestep_5000.png
-                    timestep_21000.png
-                    timestep_42000.png
-                    timestep_33000.png
-                    timestep_9000.png
-                    timestep_17000.png
-                    timestep_13000.png
-                    timestep_37000.png
-                    timestep_29000.png
-                    timestep_1000.png
-                    timestep_25000.png
-                    timestep_46000.png
-                    timestep_11000.png
-                    timestep_44000.png
-                    timestep_39000.png
-                    timestep_3000.png
-                    timestep_27000.png
-                    timestep_48000.png
-                    timestep_35000.png
-                    timestep_0.png
-                    timestep_14000.png
-                    timestep_18000.png
-                    timestep_30000.png
-                    timestep_22000.png
-                    timestep_6000.png
-                    timestep_41000.png
-                    timestep_16000.png
-                    timestep_43000.png
-                    timestep_20000.png
-                    timestep_4000.png
-                    timestep_8000.png
-                    timestep_32000.png
-                    timestep_28000.png
-                    timestep_36000.png
-                    timestep_47000.png
-                    timestep_24000.png
-                    timestep_12000.png
-                    timestep_26000.png
-                    timestep_2000.png
-                    timestep_38000.png
-                    timestep_45000.png
-                    timestep_34000.png
-                    timestep_49000.png
-                    timestep_10000.png
-            17-11-55/
-                config.json
-                data/
             14-28-58/
                 config.json
                 data/
@@ -2702,16 +3188,36 @@ example/
                     timestep_162000.png
                     timestep_484000.png
                     timestep_73000.png
-            16-58-56/
-                config.json
-                data/
-            16-52-09/
-                config.json
-                data/
-            16-56-47/
-                config.json
-                data/
         2025-07-11/
-            10-40-00/
+            14-05-43/
                 config.json
                 data/
+                    timestep_0.npz
+                    timestep_6000.npz
+                    timestep_4000.npz
+                    timestep_8000.npz
+                    timestep_9999.npz
+                    timestep_2000.npz
+                plots/
+                    timestep_0.png
+                    timestep_6000.png
+                    timestep_4000.png
+                    timestep_8000.png
+                    timestep_9999.png
+                    timestep_2000.png
+            15-38-48/
+                config.json
+                data/
+                    timestep_4999.npz
+                    timestep_1000.npz
+                    timestep_3000.npz
+                    timestep_0.npz
+                    timestep_4000.npz
+                    timestep_2000.npz
+                plots/
+                    timestep_4999.png
+                    timestep_1000.png
+                    timestep_3000.png
+                    timestep_0.png
+                    timestep_4000.png
+                    timestep_2000.png

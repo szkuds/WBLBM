@@ -38,8 +38,9 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             data = np.load(file_path)
             final_rho = data['rho']
             final_u = data['u']
+            final_force = data.get('force', None)
 
-            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+            fig, axes = plt.subplots(1, 2 if final_force is None else 3, figsize=(12 if final_force is None else 18, 5))
 
             # Plot density
             im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin='lower', cmap='viridis')
@@ -73,6 +74,17 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                            color='white', scale=None, scale_units='xy', angles='xy')
 
             # --- End of Velocity Plotting Section ---
+
+            if final_force is not None:
+                # Plot force magnitude and vectors
+                force_mag = np.sqrt(final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2)
+                im3 = axes[2].imshow(force_mag.T, origin='lower', cmap='cividis')
+                axes[2].set_title('Force Magnitude & Vectors')
+                plt.colorbar(im3, ax=axes[2], label="Force Magnitude")
+                U_force = final_force[:, :, 0, 0]
+                V_force = final_force[:, :, 0, 1]
+                axes[2].quiver(X[::skip, ::skip], Y[::skip, ::skip], U_force.T[::skip, ::skip], V_force.T[::skip, ::skip],
+                               color='white', scale=None, scale_units='xy', angles='xy')
 
             for ax in axes:
                 ax.set_xlabel('x')

@@ -15,7 +15,7 @@ class Macroscopic:
     Calculates the macroscopic density and velocity fields from the population distribution.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice) -> None:
+    def __init__(self, grid: Grid, lattice: Lattice, force_enabled: bool = False) -> None:
         self.nx: int = grid.nx
         self.ny: int = grid.ny
         self.q: int = lattice.q
@@ -23,19 +23,21 @@ class Macroscopic:
         self.cx: jnp.ndarray = jnp.array(lattice.c[0])
         self.cy: jnp.ndarray = jnp.array(lattice.c[1])
         self.gradient = Gradient(lattice)
+        self.force_enabled = force_enabled
 
     @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))
-    def __call__(self, f: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Args:
             f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
+            force (jnp.ndarray, optional): Force field, shape (nx, ny, 1, 2). Required if force_enabled is True.
+
         Returns:
             tuple: (rho, u)
                 rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
                 u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
         """
-        gradient = self.gradient
         if self.d == 2:
             # Compute density
             rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
@@ -46,6 +48,14 @@ class Macroscopic:
             ux = jnp.sum(f * cx, axis=2, keepdims=True)
             uy = jnp.sum(f * cy, axis=2, keepdims=True)
             u = jnp.concatenate([ux, uy], axis=-1) / rho  # (nx, ny, 1, 2)
+
+            # New: Optional force update, similar to MacroscopicMultiphase
+            if self.force_enabled:
+                if force is None:
+                    # Default to zero force if not provided (or raise error if strict enforcement needed)
+                    force = jnp.zeros_like(u)
+                u = u + force / 2  # Update velocity as in multiphase class
+
             return rho, u
         elif self.d == 3:
             raise NotImplementedError("Dimension larger than 2 not supported.")
