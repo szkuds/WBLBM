@@ -1,8 +1,18 @@
 from wblbm.operators.run.run import Run
 from wblbm.utils.plotting import visualise
 
+
 def test_multiphase_simulation():
-    """Test a multiphase LBM simulation with a central bubble."""
+    """
+    Test a multiphase LBM simulation with a central bubble.
+
+    This function sets up and runs a multiphase lattice Boltzmann method (LBM) simulation
+    using a high density ratio and a central bubble. The simulation parameters are specified
+    for a 2D grid with D2Q9 lattice, and the results are returned for further analysis or visualization.
+
+    Returns:
+        Run: The simulation object after running the multiphase bubble test.
+    """
     print("\n=== Multiphase LBM Simulation Test ===")
     sim = Run(
         grid_shape=(400, 400),
@@ -19,7 +29,14 @@ def test_multiphase_simulation():
     sim.run(init_type='multiphase_bubble', verbose=True)
     return sim
 
+
 if __name__ == "__main__":
+    """
+    Main entry point for running and visualizing the high density ratio static bubble simulation.
+
+    This script runs the multiphase LBM simulation and visualizes the results using the centralized
+    plotting function. It prints status messages to indicate progress and completion.
+    """
     print("Testing LBM Codebase with high density ratio static bubble simulation.")
     print("=" * 60)
 
