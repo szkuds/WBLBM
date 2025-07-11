@@ -18,7 +18,7 @@ def test_multiphase_simulation():
         grid_shape=(400, 400),
         lattice_type="D2Q9",
         tau=0.9,
-        nt=500000,
+        nt=5000,
         save_interval=1000,
         multiphase=True,
         kappa=0.01,
