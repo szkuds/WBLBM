@@ -1,5 +1,5 @@
-from wblbm.operators.run.run import Run
-from wblbm.utils.plotting import visualise
+from wblbm import Run
+from wblbm import visualise
 
 
 def test_multiphase_simulation():

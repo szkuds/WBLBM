@@ -7,7 +7,7 @@ from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
 from wblbm.operators.collision import Collision, SourceTerm
-from wblbm.operators.equilibrium.equilibirum import Equilibrium
+from wblbm.operators.equilibrium.equilibrium import Equilibrium
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.stream import Streaming
 from wblbm.utils.timing import time_function, TIMING_ENABLED

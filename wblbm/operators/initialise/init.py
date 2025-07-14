@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
-from wblbm.operators.equilibrium.equilibirum import Equilibrium
+from wblbm.operators.equilibrium.equilibrium import Equilibrium
 
 
 class Initialise:

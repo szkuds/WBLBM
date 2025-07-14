@@ -1,6 +1,6 @@
 import numpy as np
-from wblbm.operators.run.run import Run
-from wblbm.utils.plotting import visualise  # Import the new function
+from wblbm import Run
+from wblbm import visualise  # Import the new function
 
 
 def test_basic_simulation():

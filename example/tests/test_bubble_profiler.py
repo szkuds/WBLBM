@@ -1,4 +1,4 @@
-from wblbm.operators.run.run import Run
+from wblbm import Run
 
 
 def profile_lbm():
