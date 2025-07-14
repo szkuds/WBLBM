@@ -26,6 +26,7 @@ class Streaming:
         for i in range(self.q):
             f = f.at[:, :, i, 0].set(
                 jnp.roll(
-                    jnp.roll(f[:, :, i, 0], self.c[0, i], axis=0),
-                    self.c[1, i], axis=1))
+                    jnp.roll(f[:, :, i, 0], self.c[0, i], axis=0), self.c[1, i], axis=1
+                )
+            )
         return f

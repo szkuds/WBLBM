@@ -14,12 +14,12 @@ def time_function(enable_timing=TIMING_ENABLED):
             start = time.perf_counter()
             result = func(*args, **kwargs)
             # Block until computation completes (important for JAX)
-            if hasattr(result, 'block_until_ready'):
+            if hasattr(result, "block_until_ready"):
                 result.block_until_ready()
             elif isinstance(result, tuple):
                 # Handle multiple return values
                 for item in result:
-                    if hasattr(item, 'block_until_ready'):
+                    if hasattr(item, "block_until_ready"):
                         item.block_until_ready()
             end = time.perf_counter()
             print(f"{func.__name__}: {end - start:.4f} seconds")

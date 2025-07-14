@@ -33,9 +33,9 @@ def test_multiphase_gravity_simulation():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=gravity
+        force_obj=gravity,
     )
-    sim.run(init_type='multiphase_droplet', verbose=True)
+    sim.run(init_type="multiphase_droplet", verbose=True)
     return sim
 
 

@@ -22,37 +22,43 @@ def visualise(sim_instance, title="LBM Simulation Results"):
         print(f"Saving plots to: {plot_dir}")
 
         # Get all data files and sort them by timestep
-        files = [f for f in os.listdir(data_dir) if f.endswith('.npz')]
+        files = [f for f in os.listdir(data_dir) if f.endswith(".npz")]
         if not files:
             print("No data files found to visualize.")
             return
 
         # Sort files based on the iteration number in the filename
-        files.sort(key=lambda f: int(f.split('_')[-1].split('.')[0]))
+        files.sort(key=lambda f: int(f.split("_")[-1].split(".")[0]))
 
         # Loop through each timestep file and generate a plot
         for filename in files:
             file_path = os.path.join(data_dir, filename)
-            timestep = int(filename.split('_')[-1].split('.')[0])
+            timestep = int(filename.split("_")[-1].split(".")[0])
 
             data = np.load(file_path)
-            final_rho = data['rho']
-            final_u = data['u']
-            final_force = data.get('force', None)
+            final_rho = data["rho"]
+            final_u = data["u"]
+            final_force = data.get("force", None)
 
-            fig, axes = plt.subplots(1, 2 if final_force is None else 3, figsize=(12 if final_force is None else 18, 5))
+            fig, axes = plt.subplots(
+                1,
+                2 if final_force is None else 3,
+                figsize=(12 if final_force is None else 18, 5),
+            )
 
             # Plot density
-            im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin='lower', cmap='viridis')
-            axes[0].set_title(f'Density (t={timestep})')
+            im1 = axes[0].imshow(
+                final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis"
+            )
+            axes[0].set_title(f"Density (t={timestep})")
             plt.colorbar(im1, ax=axes[0], label="Density")
 
             # --- Velocity Plotting with Vector Overlay ---
 
             # 1. Plot velocity magnitude heatmap
             vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
-            im2 = axes[1].imshow(vel_mag.T, origin='lower', cmap='plasma')
-            axes[1].set_title('Velocity Magnitude & Vectors')
+            im2 = axes[1].imshow(vel_mag.T, origin="lower", cmap="plasma")
+            axes[1].set_title("Velocity Magnitude & Vectors")
             plt.colorbar(im2, ax=axes[1], label="Velocity Magnitude")
 
             # 2. Overlay velocity vector plot (quiver)
@@ -70,25 +76,43 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             skip = 10
 
             # Plotting quiver requires transposing U and V to match the meshgrid and imshow orientation
-            axes[1].quiver(X[::skip, ::skip], Y[::skip, ::skip], U.T[::skip, ::skip], V.T[::skip, ::skip],
-                           color='white', scale=None, scale_units='xy', angles='xy')
+            axes[1].quiver(
+                X[::skip, ::skip],
+                Y[::skip, ::skip],
+                U.T[::skip, ::skip],
+                V.T[::skip, ::skip],
+                color="white",
+                scale=None,
+                scale_units="xy",
+                angles="xy",
+            )
 
             # --- End of Velocity Plotting Section ---
 
             if final_force is not None:
                 # Plot force magnitude and vectors
-                force_mag = np.sqrt(final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2)
-                im3 = axes[2].imshow(force_mag.T, origin='lower', cmap='cividis')
-                axes[2].set_title('Force Magnitude & Vectors')
+                force_mag = np.sqrt(
+                    final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2
+                )
+                im3 = axes[2].imshow(force_mag.T, origin="lower", cmap="cividis")
+                axes[2].set_title("Force Magnitude & Vectors")
                 plt.colorbar(im3, ax=axes[2], label="Force Magnitude")
                 U_force = final_force[:, :, 0, 0]
                 V_force = final_force[:, :, 0, 1]
-                axes[2].quiver(X[::skip, ::skip], Y[::skip, ::skip], U_force.T[::skip, ::skip], V_force.T[::skip, ::skip],
-                               color='white', scale=None, scale_units='xy', angles='xy')
+                axes[2].quiver(
+                    X[::skip, ::skip],
+                    Y[::skip, ::skip],
+                    U_force.T[::skip, ::skip],
+                    V_force.T[::skip, ::skip],
+                    color="white",
+                    scale=None,
+                    scale_units="xy",
+                    angles="xy",
+                )
 
             for ax in axes:
-                ax.set_xlabel('x')
-                ax.set_ylabel('y')
+                ax.set_xlabel("x")
+                ax.set_ylabel("y")
 
             plt.suptitle(f"{title} - Timestep {timestep}")
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])

@@ -55,9 +55,9 @@ class Equilibrium:
             cu2 = cu * cu
             u2 = ux * ux + uy * uy
 
-            f_eq = f_eq.at[:, :, i, :].set(
-                w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2)
-            )
-        f_eq = f_eq.at[:, :, 0, :].set(rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy))))
+            f_eq = f_eq.at[:, :, i, :].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
+        f_eq = f_eq.at[:, :, 0, :].set(
+            rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy)))
+        )
 
         return f_eq

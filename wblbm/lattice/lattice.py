@@ -8,7 +8,7 @@ class Lattice(object):
 
     def __init__(self, name: str) -> None:
         self.name: str = name
-        dq = re.findall(r'\d+', name)
+        dq = re.findall(r"\d+", name)
         self.d: int = int(dq[0])
         self.q: int = int(dq[1])
 
@@ -32,18 +32,24 @@ class Lattice(object):
             cy = [0, 0, 1, 0, -1, 1, 1, -1, -1]
             c = np.array(tuple(zip(cx, cy)))
         else:
-            raise ValueError("Lattice not supported, D2Q9 is currently the only supported lattice.")
+            raise ValueError(
+                "Lattice not supported, D2Q9 is currently the only supported lattice."
+            )
 
         return c.T
 
     @property
     def construct_lattice_weigths(self) -> ndarray:
         if self.name == "D2Q9":
-            w = np.array([4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36])
+            w = np.array(
+                [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36]
+            )
         elif self.name == "D3Q15":
             raise NotImplementedError("Dimension larger than 2 not supported.")
         else:
-            raise ValueError("Lattice not supported, D2Q9 is currently the only supported lattice.")
+            raise ValueError(
+                "Lattice not supported, D2Q9 is currently the only supported lattice."
+            )
 
         return w
 

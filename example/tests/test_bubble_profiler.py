@@ -15,11 +15,11 @@ def profile_lbm():
         rho_l=1.0,
         rho_v=0.1,
         interface_width=4,
-        save_interval=50
+        save_interval=50,
     )
 
     # Run with profiling
-    sim.run_with_profiling(init_type='multiphase_bubble', profile_steps=100)
+    sim.run_with_profiling(init_type="multiphase_bubble", profile_steps=100)
 
 
 if __name__ == "__main__":
