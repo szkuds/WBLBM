@@ -10,4 +10,12 @@ from wblbm.operators.collision import Collision, SourceTerm, CollisionMultiphase
 from wblbm.operators.boundary_condition import BoundaryCondition
 from wblbm.operators.run import Run
 from wblbm.force import Force, GravityForce
-from wblbm.utils import SimulationIO, visualise, JAXProfiler, time_function, TIMING_ENABLED
+from wblbm.utils import (
+    SimulationIO,
+    visualise,
+    JAXProfiler,
+    time_function,
+    TIMING_ENABLED,
+)
+from wblbm.lattice.lattice import Lattice
+from wblbm.grid.grid import Grid
