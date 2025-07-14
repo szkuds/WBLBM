@@ -1,7 +1,7 @@
 import numpy as np
-from wblbm.operators.run.run import Run
-from wblbm.force.gravitational_force import GravityForce
-from wblbm.utils.plotting import visualise
+from wblbm import Run
+from wblbm import GravityForce
+from wblbm import visualise
 
 
 def test_single_phase_gravity_simulation():

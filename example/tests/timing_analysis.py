@@ -1,7 +1,7 @@
 import time
 import numpy as np
-from wblbm.operators.run.run import Run
-from wblbm.utils.timing import time_function, TIMING_ENABLED
+from wblbm import Run
+from wblbm import time_function, TIMING_ENABLED
 
 
 def detailed_timing_analysis():

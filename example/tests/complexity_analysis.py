@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from wblbm.operators.run.run import Run
+from wblbm import Run
 
 
 def complexity_analysis():

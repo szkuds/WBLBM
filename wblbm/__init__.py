@@ -1,2 +1,13 @@
 import wblbm.lattice
 import wblbm.grid
+from wblbm.operators.update import Update, UpdateMultiphase
+from wblbm.operators.initialise import Initialise
+from wblbm.operators.equilibrium import Equilibrium
+from wblbm.operators.stream import Streaming
+from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphase
+from wblbm.operators.differential import Gradient, Laplacian
+from wblbm.operators.collision import Collision, SourceTerm, CollisionMultiphase
+from wblbm.operators.boundary_condition import BoundaryCondition
+from wblbm.operators.run import Run
+from wblbm.force import Force, GravityForce
+from wblbm.utils import SimulationIO, visualise, JAXProfiler, time_function, TIMING_ENABLED
