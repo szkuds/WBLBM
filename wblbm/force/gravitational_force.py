@@ -1,11 +1,15 @@
 import jax.numpy as jnp
 from wblbm.force.force import Force
 
+
 class GravityForce(Force):
     """
     Subclass for gravitational force, constant across the grid.
     """
-    def __init__(self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float):
+
+    def __init__(
+        self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float
+    ):
         if d != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
@@ -24,4 +28,3 @@ class GravityForce(Force):
         Ignores rho as gravity is density-independent.
         """
         return self.force
-

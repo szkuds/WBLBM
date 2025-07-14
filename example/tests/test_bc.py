@@ -14,10 +14,10 @@ def test_boundary_conditions():
 
     # Define boundary configuration
     bc_config = {
-        'top': 'bounce-back',  # No-slip wall at top
-        'bottom': 'bounce-back',  # Symmetric boundary at bottom
-        'left': 'bounce-back',  # Periodic left-right wrapping
-        'right': 'bounce-back'
+        "top": "bounce-back",  # No-slip wall at top
+        "bottom": "bounce-back",  # Symmetric boundary at bottom
+        "left": "bounce-back",  # Periodic left-right wrapping
+        "right": "bounce-back",
     }
 
     # Set up the simulation
@@ -32,11 +32,11 @@ def test_boundary_conditions():
         rho_v=0.1,
         interface_width=5,
         save_interval=2000,
-        bc_config=bc_config  # Apply custom BCs
+        bc_config=bc_config,  # Apply custom BCs
     )
 
     # Run the simulation with a droplet initialization to test interactions with boundaries
-    sim.run(init_type='multiphase_bubble', verbose=True)
+    sim.run(init_type="multiphase_bubble", verbose=True)
 
     # Visualize results
     print("\n=== Visualizing Boundary Condition Effects ===")

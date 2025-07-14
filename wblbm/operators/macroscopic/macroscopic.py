@@ -15,7 +15,9 @@ class Macroscopic:
     Calculates the macroscopic density and velocity fields from the population distribution.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice, force_enabled: bool = False) -> None:
+    def __init__(
+        self, grid: Grid, lattice: Lattice, force_enabled: bool = False
+    ) -> None:
         self.nx: int = grid.nx
         self.ny: int = grid.ny
         self.q: int = lattice.q
@@ -27,7 +29,9 @@ class Macroscopic:
 
     @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))
-    def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def __call__(
+        self, f: jnp.ndarray, force: jnp.ndarray = None
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Args:
             f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)

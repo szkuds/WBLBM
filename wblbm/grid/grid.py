@@ -19,7 +19,7 @@ class Grid(object):
                 "left": (grid[0][0, :], grid[1][0, :]),
                 "right": (grid[0][-1, :], grid[1][-1, :]),
                 "bottom": (grid[0][:, 0], grid[1][:, 0]),
-                "top": (grid[0][:, -1], grid[1][:, -1])
+                "top": (grid[0][:, -1], grid[1][:, -1]),
             }
             return edges
         elif self.dim == 3:
@@ -33,4 +33,6 @@ class Grid(object):
             }
             return edges
         else:
-            raise NotImplementedError("Edge extraction for grids with dim != 2 or 3 is not implemented.")
+            raise NotImplementedError(
+                "Edge extraction for grids with dim != 2 or 3 is not implemented."
+            )

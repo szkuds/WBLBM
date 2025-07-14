@@ -24,7 +24,7 @@ def complexity_analysis():
             rho_v=0.1,
             interface_width=4,
             save_interval=10,
-            bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
+            bc_config={"top": "symmetry", "bottom": "bounce-back"},  # Example BCs
         )
 
         f_prev = sim.initialiser.initialise_multiphase_bubble(
@@ -35,7 +35,10 @@ def complexity_analysis():
         for _ in range(3):
             f_next = sim.update(f_prev)
             # Apply boundary conditions if present
-            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+            if (
+                hasattr(sim, "boundary_condition")
+                and sim.boundary_condition is not None
+            ):
                 f_next = sim.boundary_condition(f_next, f_next)
             f_prev = f_next
 
@@ -45,9 +48,12 @@ def complexity_analysis():
             start = time.perf_counter()
             f_next = sim.update(f_prev)
             # Apply boundary conditions if present
-            if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+            if (
+                hasattr(sim, "boundary_condition")
+                and sim.boundary_condition is not None
+            ):
                 f_next = sim.boundary_condition(f_next, f_next)
-            if hasattr(f_next, 'block_until_ready'):
+            if hasattr(f_next, "block_until_ready"):
                 f_next.block_until_ready()
             end = time.perf_counter()
             times.append(end - start)
@@ -56,12 +62,14 @@ def complexity_analysis():
         avg_time = np.mean(times) * 1000  # Convert to ms
         grid_points = nx * ny
 
-        timing_results.append({
-            'grid_size': f"{nx}x{ny}",
-            'grid_points': grid_points,
-            'avg_time_ms': avg_time,
-            'time_per_point_us': (avg_time * 1000) / grid_points
-        })
+        timing_results.append(
+            {
+                "grid_size": f"{nx}x{ny}",
+                "grid_points": grid_points,
+                "avg_time_ms": avg_time,
+                "time_per_point_us": (avg_time * 1000) / grid_points,
+            }
+        )
 
         print(f"Average time per iteration: {avg_time:.3f} ms")
         print(f"Time per grid point: {(avg_time * 1000) / grid_points:.3f} μs")
@@ -72,8 +80,10 @@ def complexity_analysis():
     print("-" * 50)
 
     for result in timing_results:
-        print(f"{result['grid_size']:<12} {result['grid_points']:<10} "
-              f"{result['avg_time_ms']:<12.3f} {result['time_per_point_us']:<12.3f}")
+        print(
+            f"{result['grid_size']:<12} {result['grid_points']:<10} "
+            f"{result['avg_time_ms']:<12.3f} {result['time_per_point_us']:<12.3f}"
+        )
 
 
 if __name__ == "__main__":

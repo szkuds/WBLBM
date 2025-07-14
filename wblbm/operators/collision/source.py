@@ -19,7 +19,9 @@ class SourceTerm:
         self.cy = lattice.c[1]
         self.gradient = Gradient(lattice)
 
-    def __call__(self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray
+    ) -> jnp.ndarray:
         """
         Calculate the source term for the LBM equation.
 
@@ -57,13 +59,19 @@ class SourceTerm:
             source_ = jnp.zeros((nx, ny, q))
 
             for i in range(q):
-                source_ = source_.at[:, :, i].set(w[i] * (
-                        3 * (cx[i] * fx + cy[i] * fy) +
-                        9 * (cx[i] * fx_cor + cy[i] * fy_cor) * (cx[i] * ux + cy[i] * uy) -
-                        3 * (ux * fx_cor + uy * fy_cor) +
-                        0.5 * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d) * (
-                                ux * grad_rho_x + uy * grad_rho_y)
-                ))
+                source_ = source_.at[:, :, i].set(
+                    w[i]
+                    * (
+                        3 * (cx[i] * fx + cy[i] * fy)
+                        + 9
+                        * (cx[i] * fx_cor + cy[i] * fy_cor)
+                        * (cx[i] * ux + cy[i] * uy)
+                        - 3 * (ux * fx_cor + uy * fy_cor)
+                        + 0.5
+                        * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d)
+                        * (ux * grad_rho_x + uy * grad_rho_y)
+                    )
+                )
 
             return source_
 

@@ -18,10 +18,7 @@ def test_single_phase_gravity_simulation():
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
     # Add bounce-back boundary conditions to left and right
-    bc_config = {
-        'left': 'bounce-back',
-        'right': 'bounce-back'
-    }
+    bc_config = {"left": "bounce-back", "right": "bounce-back"}
 
     sim = Run(
         grid_shape=grid_shape,
@@ -32,9 +29,9 @@ def test_single_phase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
-        bc_config=bc_config
+        bc_config=bc_config,
     )
-    sim.run(init_type='standard', verbose=True)
+    sim.run(init_type="standard", verbose=True)
     return sim
 
 

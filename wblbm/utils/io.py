@@ -4,10 +4,12 @@ import numpy as np
 from datetime import datetime
 from typing import Dict
 
+
 class SimulationIO:
     """
     Handles all I/O operations for the simulation, including logging and saving results.
     """
+
     def __init__(self, base_dir: str = "results", config: Dict = None):
         """
         Initializes the IO handler.
@@ -35,12 +37,14 @@ class SimulationIO:
     def save_config(self, config: Dict):
         """Saves the simulation configuration to a JSON file."""
         config_path = os.path.join(self.run_dir, "config.json")
-        
+
         # Rename boundary condition details if present (avoids duplication)
-        if 'bc_config' in config:
-            config['boundary_conditions'] = config.pop('bc_config')  # Rename without copying
-        
-        with open(config_path, 'w') as f:
+        if "bc_config" in config:
+            config["boundary_conditions"] = config.pop(
+                "bc_config"
+            )  # Rename without copying
+
+        with open(config_path, "w") as f:
             json.dump(config, f, indent=4)
         print(f"Configuration saved to {config_path}")
 
