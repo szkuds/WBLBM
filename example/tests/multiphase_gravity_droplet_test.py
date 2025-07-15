@@ -10,8 +10,8 @@ def test_multiphase_gravity_simulation():
 
     grid_shape = (200, 200)
     tau = 0.9
-    nt = 100
-    save_interval = 10
+    nt = 10000
+    save_interval = 1000
     kappa = 0.01
     rho_l = 1.0
     rho_v = 0.001
@@ -23,7 +23,7 @@ def test_multiphase_gravity_simulation():
 
     bc_config = {
         "bottom": "bounce-back",  # Solid wall for wetting
-        "top": "symmetry",  # Open top
+        "top": "bounce-back",  # Open top
         "left": "periodic",  # Periodic sides
         "right": "periodic"
     }
@@ -39,7 +39,7 @@ def test_multiphase_gravity_simulation():
         rho_v=rho_v,
         interface_width=interface_width,
         save_interval=save_interval,
-        bc_config=None,
+        bc_config=bc_config,
         force_enabled=True,
         force_obj=gravity,
     )

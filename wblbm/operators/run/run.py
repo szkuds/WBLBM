@@ -35,6 +35,8 @@ class Run:
             force_obj=None,
             wetting_enabled: bool = False,
             hysteresis_params: dict = None,
+            phi_value: float = 1.0,      # <-- Added
+            d_rho_value: float = 0.0     # <-- Added
     ):
         self.grid_shape = grid_shape
         self.nt = nt
@@ -49,6 +51,8 @@ class Run:
         self.force_obj = force_obj
         self.wetting_enabled = wetting_enabled
         self.hysteresis_params = hysteresis_params
+        self.phi_value = phi_value
+        self.d_rho_value = d_rho_value
 
         # Initialize core components
         self.grid = Grid(grid_shape)
@@ -97,7 +101,7 @@ class Run:
                 force_enabled=force_enabled,
                 wetting_enabled=wetting_enabled,
             )
-            self.macroscopic_multiphase = MacroscopicWetting(
+            self.macroscopic_multiphase_wetting = MacroscopicWetting(
                 self.grid,
                 self.lattice,
                 kappa,
@@ -156,6 +160,8 @@ class Run:
             "force_obj": str(type(force_obj)) if force_obj is not None else None,
             "wetting_enabled": wetting_enabled,
             "hysteresis_params": hysteresis_params,
+            "phi_value": phi_value,      # <-- Added
+            "d_rho_value": d_rho_value   # <-- Added
         }
         self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
 
@@ -176,6 +182,10 @@ class Run:
             f_prev = self.initialiser.initialise_multiphase_bubble(
                 self.rho_l, self.rho_v, self.interface_width
             )
+        elif self.multiphase and init_type == "wetting_chemical_step":
+            f_prev = self.initialiser.initialise_wetting_chemical_step(
+                self.rho_l, self.rho_v, self.interface_width
+            )
         elif self.multiphase and init_type == "wetting":
             f_prev = self.initialiser.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
@@ -191,9 +201,13 @@ class Run:
         if self.wetting_enabled:
             nx = self.grid.nx
             phi_left = jnp.ones(nx)
+            phi_left = phi_left.at[:].set(self.phi_value)
             d_rho_left = jnp.zeros(nx)
+            d_rho_left = d_rho_left.at[:].set(self.d_rho_value)
             phi_right = jnp.ones(nx)
+            phi_right = phi_right.at[:].set(self.phi_value)
             d_rho_right = jnp.zeros(nx)
+            d_rho_right = d_rho_right.at[:].set(self.d_rho_value)
 
         # Initialize hysteresis state variables if hysteresis is enabled
         left_step_passed = False
@@ -213,7 +227,9 @@ class Run:
         for it in range(self.nt):
             force = None
             if self.force_enabled and self.force_obj is not None:
-                if self.multiphase:
+                if self.wetting_enabled and self.multiphase:
+                    rho, _, _ = self.macroscopic_multiphase_wetting(f_prev)
+                elif self.multiphase:
                     rho, _, _ = self.macroscopic_multiphase(f_prev)
                 else:
                     rho, _ = self.macroscopic(f_prev)
@@ -225,7 +241,7 @@ class Run:
             if self.hysteresis is not None and self.wetting_enabled:
                 contact_angle_func = self.contact_angle.compute
                 cll_func = self.contact_line_location.compute
-                get_rho_func = lambda f: self.macroscopic_multiphase(f)[0]
+                get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
                 (phi_left, phi_right, d_rho_left, d_rho_right,
                  left_step_passed, right_step_passed,
                  cah_window_left_philic, cah_window_right_philic,

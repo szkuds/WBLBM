@@ -48,17 +48,21 @@ class MacroscopicMultiphase(Macroscopic):
             force (jnp.ndarray, optional): External force field, shape (nx, ny, 1, 2)
 
         Returns:
-            tuple: (rho, u, force_int)
+            tuple: (rho, u, force_total)
                 rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
                 u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
-                force_int (jnp.ndarray): Interaction force, shape (nx, ny, 1, 2)
+                force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
         """
         rho, u = super().__call__(
             f, force=force
         )  # Pass force to parent for velocity adjustment
         force_int = self.force_int(rho)
         u_updated = self.u_new(u, force_int)
-        return rho, u_updated, force_int
+        if force is None:
+            force_total = force_int
+        else:
+            force_total = force_int + force
+        return rho, u_updated, force_total
 
     @partial(jit, static_argnums=(0,))
     def eos(self, rho):

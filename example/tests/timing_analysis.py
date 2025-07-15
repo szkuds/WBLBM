@@ -54,7 +54,7 @@ def detailed_timing_analysis():
 
         # Time macroscopic calculation
         start = time.perf_counter()
-        rho, u, force = sim.macroscopic_multiphase(f_prev)
+        rho, u, force = sim.macroscopic_multiphase_wetting(f_prev)
         if hasattr(rho, "block_until_ready"):
             rho.block_until_ready()
         macro_time = time.perf_counter() - start
