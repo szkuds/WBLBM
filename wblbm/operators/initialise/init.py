@@ -105,3 +105,44 @@ class Initialise:
 
         # Return the equilibrium distribution
         return self.equilibrium(rho, u)
+
+    def initialise_wetting(
+        self, rho_l: float, rho_v: float, interface_width: int
+    ):
+        """
+        Initialize the simulation with a droplet wetting a solid surface.
+
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase density.
+            interface_width (int): Width of the interface for tanh profile.
+
+        Returns:
+            jnp.ndarray: Initial distribution function.
+        """
+        # Radius of the droplet (adapted from user query)
+        r = (jnp.sqrt(0.33) * self.ny) / 3.3
+
+        # Initialize velocity (zero) and density fields with correct shapes
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+        rho = jnp.zeros((self.nx, self.ny, 1, 1))
+
+        # Create grid (shifted by 0.5 for cell centers)
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+
+        # Calculate center coordinates (droplet centered horizontally, near bottom)
+        xc, yc = self.nx / 2, self.ny / 2
+
+        # Calculate distance from center (shifted to simulate wetting at bottom)
+        distance = jnp.sqrt((x - xc/2) ** 2 + (y) ** 2)
+
+        # Calculate density distribution using tanh for smooth interface
+        rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+            2 * (r - distance) / interface_width
+        )
+
+        # Assign to rho (reshape to 4D)
+        rho = rho.at[:, :, 0, 0].set(rho_2d)
+
+        # Return equilibrium distribution
+        return self.equilibrium(rho, u)

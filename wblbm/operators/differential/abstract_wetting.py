@@ -10,8 +10,9 @@ class AbstractWetting(ABC):
     Supports selectable edges via wetting_config.
     """
 
-    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, wetting_config: Dict[str, str] = None):
+    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, wetting_config: Dict[str, str] = None, interface_width: int = 4):
         self.w = lattice.w
+        self.interface_width = interface_width
         self.c = getattr(lattice, "c", None)
         self.rho_l = rho_l
         self.rho_v = rho_v
@@ -43,10 +44,6 @@ class AbstractWetting(ABC):
             grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="wrap")
             grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="edge")
             grid_padded = grid_padded.T
-        if edge == "top":
-            grid_padded = jnp.flip(grid_padded, axis=1)
-        elif edge == "right":
-            grid_padded = jnp.flip(grid_padded, axis=0)
         return grid_padded
 
     def _apply_wetting_boundary(self, grid_padded: jnp.ndarray, edge: str) -> jnp.ndarray:
@@ -122,6 +119,13 @@ class AbstractWetting(ABC):
         else:
             raise ValueError(f"Unknown edge: {edge}")
 
+        # --- Fix: If any wetting parameter is None, skip mask logic and return grid_padded unchanged ---
+        if (
+            phi_left is None or phi_right is None
+            or d_rho_left is None or d_rho_right is None
+        ):
+            return grid_padded
+
         mask1 = boundary_slice < (0.95 * rho_l + 0.05 * rho_v)
         mask2 = boundary_slice > (0.95 * rho_v + 0.05 * rho_l)
         mask_final = mask1 * mask2
@@ -129,12 +133,13 @@ class AbstractWetting(ABC):
         mask1_int = jnp.array(mask1, dtype=int)
         diff_mask1 = jnp.diff(mask1_int)
 
+        # --- Fix: use self.interface_width instead of self.w ---
         transition_index_left_mask1 = (
-            jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + self.w
+            jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + 2 * self.interface_width
         )
         transition_index_right_mask1 = jnp.where(diff_mask1 == 1, size=1, fill_value=0)[
             0
-        ] - (self.w + 1)
+        ] - (2 * self.interface_width + 1)
 
         indices = jnp.arange(mask_final.shape[0])
         mask_cover_left = jnp.where(
@@ -188,6 +193,22 @@ class AbstractWetting(ABC):
         # Unpad
         grid = grid_padded[1:-1, 1:-1]
         return grid
+
+    def _extract_neighbors(self, grid_padded: jnp.ndarray) -> dict:
+        """
+        Extract neighbor slices for finite difference stencils.
+        """
+        return {
+            "ineg1_j0": grid_padded[:-2, 1:-1],
+            "ipos1_j0": grid_padded[2:, 1:-1],
+            "i0_jneg1": grid_padded[1:-1, :-2],
+            "i0_jpos1": grid_padded[1:-1, 2:],
+            "ipos1_jpos1": grid_padded[2:, 2:],
+            "ineg1_jpos1": grid_padded[:-2, 2:],
+            "ineg1_jneg1": grid_padded[:-2, :-2],
+            "ipos1_jneg1": grid_padded[2:, :-2],
+            "i0_j0": grid_padded[1:-1, 1:-1],
+        }
 
     @abstractmethod
     def compute(self, *args, **kwargs):

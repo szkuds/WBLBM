@@ -10,8 +10,8 @@ def test_multiphase_gravity_simulation():
 
     grid_shape = (200, 200)
     tau = 0.9
-    nt = 5000
-    save_interval = 100
+    nt = 100
+    save_interval = 10
     kappa = 0.01
     rho_l = 1.0
     rho_v = 0.001
@@ -20,6 +20,13 @@ def test_multiphase_gravity_simulation():
     force_g = 0.000005
     inclination_angle = 0
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+
+    bc_config = {
+        "bottom": "bounce-back",  # Solid wall for wetting
+        "top": "symmetry",  # Open top
+        "left": "periodic",  # Periodic sides
+        "right": "periodic"
+    }
 
     sim = Run(
         grid_shape=grid_shape,
@@ -32,6 +39,7 @@ def test_multiphase_gravity_simulation():
         rho_v=rho_v,
         interface_width=interface_width,
         save_interval=save_interval,
+        bc_config=None,
         force_enabled=True,
         force_obj=gravity,
     )

@@ -8,21 +8,9 @@ class GradientWetting(AbstractWetting):
     Calculates gradients for wetting boundary conditions.
     """
 
-    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None):
-        super().__init__(lattice, rho_l, rho_v)
+    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+        super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
         self.c = lattice.c
-
-    def _extract_neighbors(self, grid_padded: jnp.ndarray) -> dict:
-        return {
-            "ineg1_j0": grid_padded[:-2, 1:-1],
-            "ipos1_j0": grid_padded[2:, 1:-1],
-            "i0_jneg1": grid_padded[1:-1, :-2],
-            "i0_jpos1": grid_padded[1:-1, 2:],
-            "ipos1_jpos1": grid_padded[2:, 2:],
-            "ineg1_jpos1": grid_padded[:-2, 2:],
-            "ineg1_jneg1": grid_padded[:-2, :-2],
-            "ipos1_jneg1": grid_padded[2:, :-2],
-        }
 
     def _compute_gradient(self, neighbors: dict, nx: int, ny: int) -> jnp.ndarray:
         grad_ = jnp.zeros((2, nx, ny))
@@ -53,7 +41,11 @@ class GradientWetting(AbstractWetting):
             )
         )
 
-        return grad_
+        # Convert to 4D format: (nx, ny, 1, d)
+        grad_4d = jnp.zeros((nx, ny, 1, 2))
+        grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
+        grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
+        return grad_4d
 
     def gradient_chem_pot(self, grid: jnp.ndarray) -> jnp.ndarray:
         """
@@ -68,12 +60,13 @@ class GradientWetting(AbstractWetting):
             grid_2d = grid[:, :, 0, 0]
         else:
             grid_2d = grid
-        grid_padded = self._pad_grid(grid_2d)
-        grid_padded = self._apply_wetting_boundary(grid_padded)
+        edge = "bottom"
+        grid_padded = self._pad_grid(grid_2d, edge)
+        grid_padded = self._apply_wetting_boundary(grid_padded, edge)
         neighbors = self._extract_neighbors(grid_padded)
         return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
 
-    def gradient_rho(
+    def __call__(
         self, grid: jnp.ndarray, phi_left, phi_right, d_rho_left, d_rho_right
     ) -> jnp.ndarray:
         """
@@ -89,17 +82,18 @@ class GradientWetting(AbstractWetting):
             grid_2d = grid[:, :, 0, 0]
         else:
             grid_2d = grid
-        grid_padded = self._pad_grid(grid_2d)
-        grid_padded = self._apply_wetting_boundary(grid_padded)
+        edge = "bottom"
+        grid_padded = self._pad_grid(grid_2d, edge)
+        grid_padded = self._apply_wetting_boundary(grid_padded, edge)
         grid_padded = self._apply_wetting_mask(
-            grid_padded, phi_left, phi_right, d_rho_left, d_rho_right
+            grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right
         )
         neighbors = self._extract_neighbors(grid_padded)
         return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
 
     def compute(self, *args, **kwargs):
         return (
-            self.gradient_rho(*args, **kwargs)
+            self.__call__(*args, **kwargs)
             if len(args) > 1
             else self.gradient_chem_pot(*args, **kwargs)
         )
