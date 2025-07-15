@@ -41,7 +41,7 @@ class BoundaryCondition:
             elif bc_type == "symmetry":
                 f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
             elif bc_type == "periodic":
-                f_streamed = self._apply_periodic(f_streamed, edge)
+                f_streamed = self._apply_periodic(f_streamed)
         return f_streamed
 
     @partial(jit, static_argnums=(0, 3))
@@ -146,11 +146,9 @@ class BoundaryCondition:
             )
         return f_streamed
 
-    @partial(jit, static_argnums=(0, 2))
-    def _apply_periodic(self, f_streamed: jnp.ndarray, edge: str) -> jnp.ndarray:
-        if edge in ["left", "right"]:
-            axis = 0
-        elif edge in ["bottom", "top"]:
-            axis = 1
-        f_streamed = jnp.roll(f_streamed, shift=1, axis=axis)
+    @partial(jit, static_argnums=(0, ))
+    def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
+        # For periodic boundaries, no additional transformation is needed
+        # The streaming step already handles periodicity correctly
         return f_streamed
+

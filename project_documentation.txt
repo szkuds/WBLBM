@@ -36,6 +36,25 @@ wblbm/
     --- Code in __init__.py ---
     import wblbm.lattice
     import wblbm.grid
+    from wblbm.operators.update import Update, UpdateMultiphase
+    from wblbm.operators.initialise import Initialise
+    from wblbm.operators.equilibrium import Equilibrium
+    from wblbm.operators.stream import Streaming
+    from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphase
+    from wblbm.operators.differential import Gradient, Laplacian, GradientWetting, LaplacianWetting
+    from wblbm.operators.collision import Collision, SourceTerm, CollisionMultiphase
+    from wblbm.operators.boundary_condition import BoundaryCondition
+    from wblbm.operators.run import Run
+    from wblbm.force import Force, GravityForce
+    from wblbm.utils import (
+        SimulationIO,
+        visualise,
+        JAXProfiler,
+        time_function,
+        TIMING_ENABLED,
+    )
+    from wblbm.lattice.lattice import Lattice
+    from wblbm.grid.grid import Grid
     --- End of __init__.py ---
 
     operators/
@@ -44,6 +63,109 @@ wblbm/
         --- End of __init__.py ---
 
         differential/
+            gradient_wetting.py
+            --- Code in gradient_wetting.py ---
+            import jax.numpy as jnp
+            from wblbm.lattice.lattice import Lattice
+            from .abstract_wetting import AbstractWetting
+            
+            
+            class GradientWetting(AbstractWetting):
+                """
+                Calculates gradients for wetting boundary conditions.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+                    super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.c = lattice.c
+            
+                def _compute_gradient(self, neighbors: dict, nx: int, ny: int) -> jnp.ndarray:
+                    grad_ = jnp.zeros((2, nx, ny))
+                    w = self.w
+                    c = self.c
+            
+                    grad_ = grad_.at[0, :, :].set(
+                        3
+                        * (
+                            w[1] * c[0, 1] * neighbors["ipos1_j0"]
+                            + w[3] * c[0, 3] * neighbors["ineg1_j0"]
+                            + w[5] * c[0, 5] * neighbors["ipos1_jpos1"]
+                            + w[6] * c[0, 6] * neighbors["ineg1_jpos1"]
+                            + w[7] * c[0, 7] * neighbors["ineg1_jneg1"]
+                            + w[8] * c[0, 8] * neighbors["ipos1_jneg1"]
+                        )
+                    )
+            
+                    grad_ = grad_.at[1, :, :].set(
+                        3
+                        * (
+                            w[2] * c[1, 2] * neighbors["i0_jpos1"]
+                            + w[4] * c[1, 4] * neighbors["i0_jneg1"]
+                            + w[5] * c[1, 5] * neighbors["ipos1_jpos1"]
+                            + w[6] * c[1, 6] * neighbors["ineg1_jpos1"]
+                            + w[7] * c[1, 7] * neighbors["ineg1_jneg1"]
+                            + w[8] * c[1, 8] * neighbors["ipos1_jneg1"]
+                        )
+                    )
+            
+                    # Convert to 4D format: (nx, ny, 1, d)
+                    grad_4d = jnp.zeros((nx, ny, 1, 2))
+                    grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
+                    grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
+                    return grad_4d
+            
+                def gradient_chem_pot(self, grid: jnp.ndarray) -> jnp.ndarray:
+                    """
+                    Gradient for chemical potential with wetting boundary.
+                    Args:
+                        grid (jnp.ndarray): Input field, shape (nx, ny) or (nx, ny, 1, 1)
+                    Returns:
+                        jnp.ndarray: Gradient, shape (2, nx, ny)
+                    """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    neighbors = self._extract_neighbors(grid_padded)
+                    return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
+            
+                def __call__(
+                    self, grid: jnp.ndarray, phi_left, phi_right, d_rho_left, d_rho_right
+                ) -> jnp.ndarray:
+                    """
+                    Gradient for density with wetting boundary and CA masks.
+                    Args:
+                        grid (jnp.ndarray): Input field, shape (nx, ny) or (nx, ny, 1, 1)
+                        phi_left, phi_right, d_rho_left, d_rho_right: wetting parameters
+                    Returns:
+                        jnp.ndarray: Gradient, shape (2, nx, ny)
+                    """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(
+                        grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right
+                    )
+                    neighbors = self._extract_neighbors(grid_padded)
+                    return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
+            
+                def compute(self, *args, **kwargs):
+                    return (
+                        self.__call__(*args, **kwargs)
+                        if len(args) > 1
+                        else self.gradient_chem_pot(*args, **kwargs)
+                    )
+            --- End of gradient_wetting.py ---
+
             gradient.py
             --- Code in gradient.py ---
             from functools import partial
@@ -132,6 +254,10 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .gradient import Gradient
+            from .laplacian import Laplacian
+            from .gradient_wetting import GradientWetting
+            from .laplacian_wetting import LaplacianWetting
             --- End of __init__.py ---
 
             laplacian.py
@@ -210,7 +336,284 @@ wblbm/
                     return laplacian_4d
             --- End of laplacian.py ---
 
+            abstract_wetting.py
+            --- Code in abstract_wetting.py ---
+            import jax.numpy as jnp
+            from abc import ABC, abstractmethod
+            from typing import Dict
+            from wblbm.lattice.lattice import Lattice
+            
+            
+            class AbstractWetting(ABC):
+                """
+                Abstract base class for wetting boundary condition calculations.
+                Supports selectable edges via wetting_config.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, wetting_config: Dict[str, str] = None, interface_width: int = 4):
+                    self.w = lattice.w
+                    self.interface_width = interface_width
+                    self.c = getattr(lattice, "c", None)
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+                    self.wetting_config = wetting_config or {"bottom": "wetting"}
+                    valid_edges = ["top", "bottom", "left", "right"]
+                    valid_types = ["wetting"]
+                    for edge, wc_type in self.wetting_config.items():
+                        if edge not in valid_edges:
+                            raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
+                        if wc_type not in valid_types:
+                            raise ValueError(f"Invalid wetting type: {wc_type}. Must be one of {valid_types}.")
+            
+                def apply_wetting(self, grid: jnp.ndarray, phi_left, phi_right, d_rho_left, d_rho_right) -> jnp.ndarray:
+                    """
+                    Apply wetting boundary conditions to all configured edges.
+                    """
+                    for edge, wc_type in self.wetting_config.items():
+                        if wc_type == "wetting":
+                            grid = self._apply_wetting_to_edge(grid, edge, phi_left, phi_right, d_rho_left, d_rho_right)
+                    return grid
+            
+                def _pad_grid(self, grid: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    # Pad according to edge orientation
+                    if edge in ["bottom", "top"]:
+                        grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="edge")
+                        grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="wrap")
+                    elif edge in ["left", "right"]:
+                        grid = grid.T
+                        grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="wrap")
+                        grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="edge")
+                        grid_padded = grid_padded.T
+                    return grid_padded
+            
+                def _apply_wetting_boundary(self, grid_padded: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    # Generalize for each edge
+                    if edge == "bottom":
+                        grid_padded = grid_padded.at[1:-1, 0].set(
+                            (1/3 * grid_padded[1:-1, 1] + 1/12 * grid_padded[0:-2, 1] + 1/12 * grid_padded[2:, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, 0].set(
+                            (1/3 * grid_padded[0, 1] + 1/12 * grid_padded[-1, 1] + 1/12 * grid_padded[1, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, 0].set(
+                            (1/3 * grid_padded[-1, 1] + 1/12 * grid_padded[0, 1] + 1/12 * grid_padded[-2, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "top":
+                        grid_padded = grid_padded.at[1:-1, -1].set(
+                            (1/3 * grid_padded[1:-1, -2] + 1/12 * grid_padded[0:-2, -2] + 1/12 * grid_padded[2:, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, -1].set(
+                            (1/3 * grid_padded[0, -2] + 1/12 * grid_padded[-1, -2] + 1/12 * grid_padded[1, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, -1].set(
+                            (1/3 * grid_padded[-1, -2] + 1/12 * grid_padded[0, -2] + 1/12 * grid_padded[-2, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "left":
+                        grid_padded = grid_padded.at[0, 1:-1].set(
+                            (1/3 * grid_padded[1, 1:-1] + 1/12 * grid_padded[1, 0:-2] + 1/12 * grid_padded[1, 2:]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, 0].set(
+                            (1/3 * grid_padded[1, 0] + 1/12 * grid_padded[1, -1] + 1/12 * grid_padded[1, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, -1].set(
+                            (1/3 * grid_padded[1, -1] + 1/12 * grid_padded[1, 0] + 1/12 * grid_padded[1, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "right":
+                        grid_padded = grid_padded.at[-1, 1:-1].set(
+                            (1/3 * grid_padded[-2, 1:-1] + 1/12 * grid_padded[-2, 0:-2] + 1/12 * grid_padded[-2, 2:]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, 0].set(
+                            (1/3 * grid_padded[-2, 0] + 1/12 * grid_padded[-2, -1] + 1/12 * grid_padded[-2, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, -1].set(
+                            (1/3 * grid_padded[-2, -1] + 1/12 * grid_padded[-2, 0] + 1/12 * grid_padded[-2, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    return grid_padded
+            
+                def _apply_wetting_mask(
+                    self, grid_padded: jnp.ndarray, edge: str, phi_left, phi_right, d_rho_left, d_rho_right
+                ) -> jnp.ndarray:
+                    rho_l = self.rho_l
+                    rho_v = self.rho_v
+                    # Select boundary slice based on edge
+                    if edge == "bottom":
+                        boundary_slice = grid_padded[1:-1, 0]
+                    elif edge == "top":
+                        boundary_slice = grid_padded[1:-1, -1]
+                    elif edge == "left":
+                        boundary_slice = grid_padded[0, 1:-1]
+                    elif edge == "right":
+                        boundary_slice = grid_padded[-1, 1:-1]
+                    else:
+                        raise ValueError(f"Unknown edge: {edge}")
+            
+                    # --- Fix: If any wetting parameter is None, skip mask logic and return grid_padded unchanged ---
+                    if (
+                        phi_left is None or phi_right is None
+                        or d_rho_left is None or d_rho_right is None
+                    ):
+                        return grid_padded
+            
+                    mask1 = boundary_slice < (0.95 * rho_l + 0.05 * rho_v)
+                    mask2 = boundary_slice > (0.95 * rho_v + 0.05 * rho_l)
+                    mask_final = mask1 * mask2
+            
+                    mask1_int = jnp.array(mask1, dtype=int)
+                    diff_mask1 = jnp.diff(mask1_int)
+            
+                    # --- Fix: use self.interface_width instead of self.w ---
+                    transition_index_left_mask1 = (
+                        jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + self.interface_width
+                    )
+                    transition_index_right_mask1 = jnp.where(diff_mask1 == 1, size=1, fill_value=0)[
+                        0
+                    ] - (self.interface_width + 1)
+            
+                    indices = jnp.arange(mask_final.shape[0])
+                    mask_cover_left = jnp.where(
+                        indices >= transition_index_right_mask1[0], False, mask_final
+                    )
+                    mask_cover_right = jnp.where(
+                        indices <= transition_index_left_mask1[0], False, mask_final
+                    )
+            
+                    new_values_left = jnp.minimum(
+                        jnp.maximum(
+                            (phi_left * boundary_slice) - d_rho_left,
+                            0.95 * rho_v + 0.05 * rho_l,
+                        ),
+                        0.95 * rho_l + 0.05 * rho_v,
+                    )
+            
+                    new_values_right = jnp.minimum(
+                        jnp.maximum(
+                            (phi_right * boundary_slice) - d_rho_right,
+                            0.95 * rho_v + 0.05 * rho_l,
+                        ),
+                        0.95 * rho_l + 0.05 * rho_v,
+                    )
+            
+                    updated_slice = jnp.where(
+                        mask_cover_left, new_values_left, boundary_slice
+                    )
+                    updated_slice = jnp.where(mask_cover_right, new_values_right, updated_slice)
+            
+                    # Set back to grid_padded
+                    if edge == "bottom":
+                        grid_padded = grid_padded.at[1:-1, 0].set(updated_slice)
+                    elif edge == "top":
+                        grid_padded = grid_padded.at[1:-1, -1].set(updated_slice)
+                    elif edge == "left":
+                        grid_padded = grid_padded.at[0, 1:-1].set(updated_slice)
+                    elif edge == "right":
+                        grid_padded = grid_padded.at[-1, 1:-1].set(updated_slice)
+                    return grid_padded
+            
+                def _apply_wetting_to_edge(self, grid: jnp.ndarray, edge: str, phi_left, phi_right, d_rho_left, d_rho_right) -> jnp.ndarray:
+                    grid_padded = self._pad_grid(grid, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right)
+                    # Unflip if needed
+                    if edge == "top":
+                        grid_padded = jnp.flip(grid_padded, axis=1)
+                    elif edge == "right":
+                        grid_padded = jnp.flip(grid_padded, axis=0)
+                    # Unpad
+                    grid = grid_padded[1:-1, 1:-1]
+                    return grid
+            
+                def _extract_neighbors(self, grid_padded: jnp.ndarray) -> dict:
+                    """
+                    Extract neighbor slices for finite difference stencils.
+                    """
+                    return {
+                        "ineg1_j0": grid_padded[:-2, 1:-1],
+                        "ipos1_j0": grid_padded[2:, 1:-1],
+                        "i0_jneg1": grid_padded[1:-1, :-2],
+                        "i0_jpos1": grid_padded[1:-1, 2:],
+                        "ipos1_jpos1": grid_padded[2:, 2:],
+                        "ineg1_jpos1": grid_padded[:-2, 2:],
+                        "ineg1_jneg1": grid_padded[:-2, :-2],
+                        "ipos1_jneg1": grid_padded[2:, :-2],
+                        "i0_j0": grid_padded[1:-1, 1:-1],
+                    }
+            
+                @abstractmethod
+                def compute(self, *args, **kwargs):
+                    pass
+            --- End of abstract_wetting.py ---
+
+            laplacian_wetting.py
+            --- Code in laplacian_wetting.py ---
+            import jax.numpy as jnp
+            from wblbm.lattice.lattice import Lattice
+            from .abstract_wetting import AbstractWetting
+            
+            
+            class LaplacianWetting(AbstractWetting):
+                """
+                Callable class to calculate the Laplacian of a 2D grid with wetting boundary conditions.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+                    super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
+            
+                def __call__(self, grid, phi_left, phi_right, d_rho_left, d_rho_right):
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+            
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(
+                        grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right
+                    )
+            
+                    w = self.w
+                    neighbors = self._extract_neighbors(grid_padded)
+            
+                    laplacian_2d = jnp.zeros_like(grid_2d)
+                    laplacian_2d = laplacian_2d.at[:, :].set(
+                        6
+                        * (
+                            w[1] * (neighbors["ipos1_j0"] - neighbors["i0_j0"])
+                            + w[2] * (neighbors["i0_jpos1"] - neighbors["i0_j0"])
+                            + w[3] * (neighbors["ineg1_j0"] - neighbors["i0_j0"])
+                            + w[4] * (neighbors["i0_jneg1"] - neighbors["i0_j0"])
+                            + w[5] * (neighbors["ipos1_jpos1"] - neighbors["i0_j0"])
+                            + w[6] * (neighbors["ineg1_jpos1"] - neighbors["i0_j0"])
+                            + w[7] * (neighbors["ineg1_jneg1"] - neighbors["i0_j0"])
+                            + w[8] * (neighbors["ipos1_jneg1"] - neighbors["i0_j0"])
+                        )
+                    )
+            
+                    # Convert to 4D format: (nx, ny, 1, 1)
+                    laplacian_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 1))
+                    laplacian_4d = laplacian_4d.at[:, :, 0, 0].set(laplacian_2d)
+                    return laplacian_4d
+            
+                def compute(self, *args, **kwargs):
+                    return self.__call__(*args, **kwargs)
+            --- End of laplacian_wetting.py ---
+
             __pycache__/
+                abstract_wetting.cpython-312.pyc
+                gradient_wetting.cpython-312.pyc
+                laplacian_wetting.cpython-312.pyc
                 laplacian.cpython-312.pyc
                 gradient.cpython-312.pyc
                 __init__.cpython-312.pyc
@@ -286,6 +689,8 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .macroscopic import Macroscopic
+            from .macroscopic_multiphase import MacroscopicMultiphase
             --- End of __init__.py ---
 
             macroscopic_multiphase.py
@@ -396,8 +801,104 @@ wblbm/
                     return u + force / 2
             --- End of macroscopic_multiphase.py ---
 
+            macroscopic_multiphase_wetting.py
+            --- Code in macroscopic_multiphase_wetting.py ---
+            from functools import partial
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.lattice import Lattice
+            from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.differential.gradient_wetting import GradientWetting
+            from wblbm.operators.differential.laplacian_wetting import LaplacianWetting
+            
+            class MacroscopicWetting(MacroscopicMultiphase):
+                """
+                Calculates macroscopic variables for wetting-aware multiphase simulations.
+                Uses wetting-specific differential operators for gradient and Laplacian.
+                """
+            
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    force_enabled: bool = False,
+                    wetting_enabled: bool = False,  # Flag to enable wetting-specific operators
+                ):
+                    super().__init__(
+                        grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+                    )
+                    if wetting_enabled:
+                        self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                        self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.wetting_enabled = wetting_enabled
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self,
+                    f: jnp.ndarray,
+                    force: jnp.ndarray = None,
+                    phi_left: jnp.ndarray = None,
+                    phi_right: jnp.ndarray = None,
+                    d_rho_left: jnp.ndarray = None,
+                    d_rho_right: jnp.ndarray = None,
+                ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+                    rho, u, force = super().__call__(f, force=force)
+                    if self.wetting_enabled:
+                        force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
+                    else:
+                        force_int = self.force_int(rho)
+                    u_updated = self.u_new(u, force_int)
+                    return rho, u, force
+            
+                @partial(jit, static_argnums=(0,))
+                def chem_pot(
+                    self,
+                    rho,
+                    phi_left=None,
+                    phi_right=None,
+                    d_rho_left=None,
+                    d_rho_right=None,
+                ):
+                    mu_0 = self.eos(rho)
+                    if self.wetting_enabled:
+                        chem_pot__ = mu_0 - self.kappa * self.laplacian(
+                            rho, phi_left, phi_right, d_rho_left, d_rho_right
+                        )
+                    else:
+                        raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+                    return chem_pot__
+            
+                @partial(jit, static_argnums=(0,))
+                def force_int(
+                    self,
+                    rho,
+                    phi_left=None,
+                    phi_right=None,
+                    d_rho_left=None,
+                    d_rho_right=None,
+                ):
+                    if self.wetting_enabled:
+                        grad_chem_pot = self.gradient(
+                            self.chem_pot(rho, phi_left, phi_right, d_rho_left, d_rho_right),
+                            phi_left,
+                            phi_right,
+                            d_rho_left,
+                            d_rho_right,
+                        )
+                    else:
+                        raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+                    return -rho * grad_chem_pot
+            --- End of macroscopic_multiphase_wetting.py ---
+
             __pycache__/
                 macroscopic_multiphase.cpython-312.pyc
+                macroscopic_multiphase_wetting.cpython-312.pyc
                 __init__.cpython-312.pyc
                 macroscopic.cpython-312.pyc
         update/
@@ -412,7 +913,7 @@ wblbm/
             from wblbm.lattice import Lattice
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             from wblbm.operators.collision import Collision, SourceTerm
-            from wblbm.operators.equilibrium.equilibirum import Equilibrium
+            from wblbm.operators.equilibrium.equilibrium import Equilibrium
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
             from wblbm.operators.stream import Streaming
             from wblbm.utils.timing import time_function, TIMING_ENABLED
@@ -465,7 +966,86 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .update import Update
+            from .update_multiphase import UpdateMultiphase
             --- End of __init__.py ---
+
+            update_mutliphase_wetting.py
+            --- Code in update_mutliphase_wetting.py ---
+            from functools import partial
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.lattice import Lattice
+            from wblbm.operators.collision.collision_multiphase import CollisionMultiphase
+            from wblbm.operators.update.update import Update
+            from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
+            from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
+            
+            class UpdateMultiphaseWetting(Update):
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    tau: float,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    bc_config: dict = None,
+                    force_enabled: bool = False,
+                    wetting_enabled: bool = True,  # Always True for this class
+                ):
+                    super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
+                    self.macroscopic = MacroscopicWetting(
+                        grid,
+                        lattice,
+                        kappa,
+                        interface_width,
+                        rho_l,
+                        rho_v,
+                        force_enabled=force_enabled,
+                        wetting_enabled=wetting_enabled,
+                    )
+                    self.collision = CollisionMultiphase(grid, lattice, tau)
+                    if bc_config is not None:
+                        self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
+                    else:
+                        self.boundary_condition = None
+                    self.force_enabled = force_enabled
+                    self.wetting_enabled = wetting_enabled
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self,
+                    f: jnp.array,
+                    force: jnp.ndarray = None,
+                    phi_left: jnp.ndarray = None,
+                    phi_right: jnp.ndarray = None,
+                    d_rho_left: jnp.ndarray = None,
+                    d_rho_right: jnp.ndarray = None,
+                ):
+                    if self.force_enabled and force is None:
+                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+            
+                    rho, u, force_int = self.macroscopic(
+                        f,
+                        force=force,
+                        phi_left=phi_left,
+                        phi_right=phi_right,
+                        d_rho_left=d_rho_left,
+                        d_rho_right=d_rho_right,
+                    )
+            
+                    feq = self.equilibrium(rho, u)
+                    source = self.source_term(rho, u, force_int)
+                    fcol = self.collision(f, feq, source)
+                    fstream = self.streaming(fcol)
+                    if self.boundary_condition is not None:
+                        fstream = self.boundary_condition(fstream, fcol)
+                    return fstream
+            --- End of update_mutliphase_wetting.py ---
 
             update_multiphase.py
             --- Code in update_multiphase.py ---
@@ -536,6 +1116,7 @@ wblbm/
             __pycache__/
                 update_multiphase.cpython-312.pyc
                 update.cpython-312.pyc
+                update_mutliphase_wetting.cpython-312.pyc
                 __init__.cpython-312.pyc
         stream/
             __init__.py
@@ -585,6 +1166,7 @@ wblbm/
         initialise/
             __init__.py
             --- Code in __init__.py ---
+            from .init import Initialise
             --- End of __init__.py ---
 
             init.py
@@ -593,7 +1175,7 @@ wblbm/
             import numpy as np
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
-            from wblbm.operators.equilibrium.equilibirum import Equilibrium
+            from wblbm.operators.equilibrium.equilibrium import Equilibrium
             
             
             class Initialise:
@@ -695,6 +1277,47 @@ wblbm/
                     u = jnp.zeros((self.nx, self.ny, 1, 2))
             
                     # Return the equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
+                def initialise_wetting(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialize the simulation with a droplet wetting a solid surface.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase density.
+                        interface_width (int): Width of the interface for tanh profile.
+            
+                    Returns:
+                        jnp.ndarray: Initial distribution function.
+                    """
+                    # Radius of the droplet (adapted from user query)
+                    r = (jnp.sqrt(0.33) * self.ny) / 3.3
+            
+                    # Initialize velocity (zero) and density fields with correct shapes
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+                    rho = jnp.zeros((self.nx, self.ny, 1, 1))
+            
+                    # Create grid (shifted by 0.5 for cell centers)
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+            
+                    # Calculate center coordinates (droplet centered horizontally, near bottom)
+                    xc, yc = self.nx / 2, self.ny / 2
+            
+                    # Calculate distance from center (shifted to simulate wetting at bottom)
+                    distance = jnp.sqrt((x - xc) ** 2 + (y - yc) ** 2)
+            
+                    # Calculate density distribution using tanh for smooth interface
+                    rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        2 * (r - distance) / interface_width
+                    )
+            
+                    # Assign to rho (reshape to 4D)
+                    rho = rho.at[:, :, 0, 0].set(rho_2d)
+            
+                    # Return equilibrium distribution
                     return self.equilibrium(rho, u)
             --- End of init.py ---
 
@@ -866,18 +1489,15 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .boundary_condition import BoundaryCondition
             --- End of __init__.py ---
 
             __pycache__/
                 boundary_condition.cpython-312.pyc
                 __init__.cpython-312.pyc
         equilibrium/
-            __init__.py
-            --- Code in __init__.py ---
-            --- End of __init__.py ---
-
-            equilibirum.py
-            --- Code in equilibirum.py ---
+            equilibrium.py
+            --- Code in equilibrium.py ---
             from functools import partial
             
             import jax.numpy as jnp
@@ -941,10 +1561,15 @@ wblbm/
                     )
             
                     return f_eq
-            --- End of equilibirum.py ---
+            --- End of equilibrium.py ---
+
+            __init__.py
+            --- Code in __init__.py ---
+            from .equilibrium import Equilibrium
+            --- End of __init__.py ---
 
             __pycache__/
-                equilibirum.cpython-312.pyc
+                equilibrium.cpython-312.pyc
                 __init__.cpython-312.pyc
         run/
             run.py
@@ -957,6 +1582,8 @@ wblbm/
             from wblbm.operators.update.update import Update
             from wblbm.operators.update.update_multiphase import UpdateMultiphase
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
+            from wblbm.operators.update.update_mutliphase_wetting import UpdateMultiphaseWetting
             from wblbm.utils.io import SimulationIO
             from wblbm.utils.profiler import JAXProfiler
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
@@ -968,21 +1595,23 @@ wblbm/
                 """
             
                 def __init__(
-                    self,
-                    grid_shape: tuple,
-                    lattice_type: str = "D2Q9",
-                    tau: float = 1.0,
-                    nt: int = 1000,
-                    multiphase: bool = False,
-                    kappa: float = 0.1,
-                    rho_l: float = 1.0,
-                    rho_v: float = 0.1,
-                    interface_width: int = 4,
-                    save_interval: int = 100,
-                    results_dir: str = "results",
-                    bc_config: dict = None,
-                    force_enabled: bool = False,
-                    force_obj=None,  # New parameter for force object
+                        self,
+                        grid_shape: tuple,
+                        lattice_type: str = "D2Q9",
+                        tau: float = 1.0,
+                        nt: int = 1000,
+                        multiphase: bool = False,
+                        kappa: float = 0.1,
+                        rho_l: float = 1.0,
+                        rho_v: float = 0.1,
+                        interface_width: int = 4,
+                        save_interval: int = 100,
+                        results_dir: str = "results",
+                        bc_config: dict = None,
+                        force_enabled: bool = False,
+                        force_obj=None,
+                        wetting_enabled: bool = False,
+                        hysteresis_params: dict = None,
                 ):
                     self.grid_shape = grid_shape
                     self.nt = nt
@@ -995,6 +1624,8 @@ wblbm/
                     self.interface_width = interface_width if multiphase else None
                     self.force_enabled = force_enabled
                     self.force_obj = force_obj
+                    self.wetting_enabled = wetting_enabled
+                    self.hysteresis_params = hysteresis_params
             
                     # Initialize core components
                     self.grid = Grid(grid_shape)
@@ -1009,11 +1640,7 @@ wblbm/
                         )
             
                     # Select the appropriate update and macroscopic operators
-                    if multiphase:
-                        from wblbm.operators.macroscopic.macroscopic_multiphase import (
-                            MacroscopicMultiphase,
-                        )
-            
+                    if multiphase and not wetting_enabled:
                         self.update = UpdateMultiphase(
                             self.grid,
                             self.lattice,
@@ -1032,11 +1659,33 @@ wblbm/
                             interface_width,
                             rho_l,
                             rho_v,
-                            force_enabled=force_enabled,  # Add this
+                            force_enabled=force_enabled,
+                        )
+                    elif wetting_enabled and multiphase:
+                        self.update = UpdateMultiphaseWetting(
+                            self.grid,
+                            self.lattice,
+                            tau,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            bc_config=bc_config,
+                            force_enabled=force_enabled,
+                            wetting_enabled=wetting_enabled,
+                        )
+                        self.macroscopic_multiphase = MacroscopicWetting(
+                            self.grid,
+                            self.lattice,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            force_enabled=force_enabled,
+                            wetting_enabled=wetting_enabled,
                         )
                     else:
                         from wblbm.operators.macroscopic.macroscopic import Macroscopic
-            
                         self.update = Update(
                             self.grid,
                             self.lattice,
@@ -1047,6 +1696,24 @@ wblbm/
                         self.macroscopic = Macroscopic(
                             self.grid, self.lattice, force_enabled=force_enabled
                         )
+            
+                    # Initialize Wetting and Hysteresis if enabled
+                    self.wetting = None
+                    self.hysteresis = None
+                    self.contact_angle = None
+                    self.contact_line_location = None
+                    if wetting_enabled and multiphase:
+                        from wblbm import GradientWetting
+                        from wblbm.operators.wetting.contact_angle import ContactAngle
+                        from wblbm.operators.wetting.contact_line_location import ContactLineLocation
+                        self.wetting = GradientWetting(self.lattice, rho_l, rho_v)
+                        rho_mean = (rho_l + rho_v) / 2
+                        self.contact_angle = ContactAngle(rho_mean)
+                        self.contact_line_location = ContactLineLocation(rho_mean)
+            
+                    if hysteresis_params is not None and wetting_enabled:
+                        from wblbm.operators.wetting.hysteresis import Hysteresis
+                        self.hysteresis = Hysteresis(**hysteresis_params)
             
                     # Prepare config dictionary for the IO handler
                     self.config = {
@@ -1064,6 +1731,8 @@ wblbm/
                         "bc_config": bc_config,
                         "force_enabled": force_enabled,
                         "force_obj": str(type(force_obj)) if force_obj is not None else None,
+                        "wetting_enabled": wetting_enabled,
+                        "hysteresis_params": hysteresis_params,
                     }
                     self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
             
@@ -1084,35 +1753,111 @@ wblbm/
                         f_prev = self.initialiser.initialise_multiphase_bubble(
                             self.rho_l, self.rho_v, self.interface_width
                         )
+                    elif self.multiphase and init_type == "wetting":
+                        f_prev = self.initialiser.initialise_wetting(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
                     else:
                         f_prev = self.initialiser.initialise_standard()
             
+                    # Initialize wetting parameters if wetting is enabled
+                    phi_left = None
+                    phi_right = None
+                    d_rho_left = None
+                    d_rho_right = None
+                    if self.wetting_enabled:
+                        nx = self.grid.nx
+                        phi_left = jnp.ones(nx)
+                        d_rho_left = jnp.zeros(nx)
+                        phi_right = jnp.ones(nx)
+                        d_rho_right = jnp.zeros(nx)
+            
+                    # Initialize hysteresis state variables if hysteresis is enabled
+                    left_step_passed = False
+                    right_step_passed = False
+                    cah_window_left_philic = False
+                    cah_window_right_philic = False
+                    cah_window_left_phobic = False
+                    cah_window_right_phobic = False
+                    pinned_count_left = 0
+                    pinned_count_right = 0
+            
+                    # Detect multiple devices and prepare pmap if needed
+                    import jax
+                    n_devices = jax.local_device_count()
+                    use_pmap = n_devices > 1 and self.multiphase
+                    if use_pmap:
+                        def update_func(f, phi_left, phi_right, d_rho_left, d_rho_right):
+                            return self.update(f, phi_left=phi_left, phi_right=phi_right, d_rho_left=d_rho_left,
+                                               d_rho_right=d_rho_right)
+            
+                        p_update_func = jax.pmap(update_func, axis_name='devices')
+                        if verbose:
+                            print(f"Using jax.pmap across {n_devices} devices for parallel execution.")
+            
                     if verbose:
                         print(f"Starting LBM simulation with {self.nt} time steps...")
-                        print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}")
+                        print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}, Wetting: {self.wetting_enabled}")
             
                     # Main simulation loop
                     for it in range(self.nt):
                         force = None
                         if self.force_enabled and self.force_obj is not None:
-                            # Compute force using the force object (optionally pass rho if needed)
                             if self.multiphase:
                                 rho, _, _ = self.macroscopic_multiphase(f_prev)
                             else:
                                 rho, _ = self.macroscopic(f_prev)
                             force = self.force_obj.compute_force(rho)
                         elif self.force_enabled:
-                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
-                                [0.01, 0.0]
+                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+            
+                        # Apply hysteresis adjustments if enabled (compute wetting parameters dynamically)
+                        if self.hysteresis is not None and self.wetting_enabled:
+                            contact_angle_func = self.contact_angle.compute
+                            cll_func = self.contact_line_location.compute
+                            get_rho_func = lambda f: self.macroscopic_multiphase(f)[0]
+                            (phi_left, phi_right, d_rho_left, d_rho_right,
+                             left_step_passed, right_step_passed,
+                             cah_window_left_philic, cah_window_right_philic,
+                             cah_window_left_phobic, cah_window_right_phobic,
+                             pinned_count_left, pinned_count_right,
+                             p_m_left, p_m_right) = self.hysteresis.apply(
+                                f_prev, it, left_step_passed, right_step_passed,
+                                cah_window_left_philic, cah_window_right_philic,
+                                cah_window_left_phobic, cah_window_right_phobic,
+                                pinned_count_left, pinned_count_right,
+                                self.update, contact_angle_func, cll_func, get_rho_func
                             )
-                        f_next = (
-                            self.update(f_prev, force=force)
-                            if self.force_enabled
-                            else self.update(f_prev)
-                        )
+            
+                        # Run update step (with pmap sharding if multi-device)
+                        if use_pmap:
+                            f_prev_sharded = jnp.reshape(f_prev, (n_devices, -1) + f_prev.shape[1:])
+                            phi_left_sharded = jnp.reshape(phi_left, (n_devices, -1)) if phi_left is not None else None
+                            phi_right_sharded = jnp.reshape(phi_right, (n_devices, -1)) if phi_right is not None else None
+                            d_rho_left_sharded = jnp.reshape(d_rho_left, (n_devices, -1)) if d_rho_left is not None else None
+                            d_rho_right_sharded = jnp.reshape(d_rho_right, (n_devices, -1)) if d_rho_right is not None else None
+            
+                            f_next_sharded = p_update_func(
+                                f_prev_sharded, phi_left_sharded, phi_right_sharded,
+                                d_rho_left_sharded, d_rho_right_sharded
+                            )
+                            f_next = jnp.reshape(f_next_sharded, f_prev.shape)
+                        elif self.wetting_enabled:
+                            f_next = self.update(
+                                f_prev, force=force, phi_left=phi_left, phi_right=phi_right,
+                                d_rho_left=d_rho_left, d_rho_right=d_rho_right
+                            )
+                        else:
+                            f_next = (
+                                self.update(f_prev, force=force)
+                                if self.force_enabled
+                                else self.update(f_prev)
+                            )
+            
                         # Apply boundary conditions if present
                         if self.boundary_condition is not None:
                             f_next = self.boundary_condition(f_next, f_next)
+            
                         f_prev = f_next
             
                         # Save data at the specified interval
@@ -1133,19 +1878,17 @@ wblbm/
                             if verbose:
                                 avg_rho = np.mean(rho)
                                 max_u = np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2))
-                                print(
-                                    f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}"
-                                )
+                                print(f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}")
             
                     if verbose:
                         print("Simulation completed!")
                         print(f"Results saved in: {self.io_handler.run_dir}")
             
                 def run_with_profiling(
-                    self,
-                    init_type: str = "standard",
-                    verbose: bool = True,
-                    profile_steps: int = 100,
+                        self,
+                        init_type: str = "standard",
+                        verbose: bool = True,
+                        profile_steps: int = 100,
                 ):
                     """
                     Run simulation with JAX profiling enabled for a subset of steps.
@@ -1228,6 +1971,513 @@ wblbm/
             __pycache__/
                 run.cpython-312.pyc
                 __init__.cpython-312.pyc
+        wetting/
+            __init__.py
+            --- Code in __init__.py ---
+            --- End of __init__.py ---
+
+            hysteresis.py
+            --- Code in hysteresis.py ---
+            import jax.numpy as jnp
+            import logging
+            
+            
+            class Hysteresis:
+                """
+                Class to model contact angle hysteresis in wetting simulations.
+                """
+            
+                def __init__(self, advancing_ca_hydrophobic, receding_ca_hydrophobic,
+                             advancing_ca_hydrophilic, receding_ca_hydrophilic,
+                             cll_threshold, ca_threshold, change_d_rho, change_phi,
+                             while_limiter, nx, phi_val, d_rho_val, w):
+                    self.advancing_ca_hydrophobic = advancing_ca_hydrophobic
+                    self.receding_ca_hydrophobic = receding_ca_hydrophobic
+                    self.advancing_ca_hydrophilic = advancing_ca_hydrophilic
+                    self.receding_ca_hydrophilic = receding_ca_hydrophilic
+                    self.cll_threshold = cll_threshold
+                    self.ca_threshold = ca_threshold
+                    self.change_d_rho = change_d_rho
+                    self.change_phi = change_phi
+                    self.while_limiter = while_limiter
+                    self.nx = nx
+                    self.phi_val = phi_val
+                    self.d_rho_val = d_rho_val
+                    self.w = w
+            
+                def apply(self, f_prev, it, left_step_passed, right_step_passed, cah_window_left_philic,
+                          cah_window_right_philic, cah_window_left_phobic, cah_window_right_phobic,
+                          pinned_count_left, pinned_count_right, update_func, contact_angle_func, cll_func, get_rho_func):
+                    # Initialize parameters
+                    phi_left = jnp.ones(self.nx)
+                    d_rho_left = jnp.zeros(self.nx)
+                    phi_left = phi_left.at[(self.nx // 2):].set(self.phi_val)
+                    d_rho_left = d_rho_left.at[:(self.nx // 2)].set(self.d_rho_val)
+            
+                    phi_right = jnp.ones(self.nx)
+                    d_rho_right = jnp.zeros(self.nx)
+                    phi_right = phi_right.at[(self.nx // 2):].set(self.phi_val)
+                    d_rho_right = d_rho_right.at[:(self.nx // 2)].set(self.d_rho_val)
+            
+                    f_t = f_prev
+                    f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                    rho_tplus1 = get_rho_func(f_tplus1)
+                    ca_left_t, ca_right_t = contact_angle_func(rho_t)
+                    cll_left_t, cll_right_t = cll_func(rho_t, ca_left_t, ca_right_t)
+                    ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                    cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Hysteresis logic ---
+                    # Left side
+                    if ca_left_tplus1 < self.advancing_ca_hydrophilic:
+                        cah_window_left_philic = True
+                    if cll_left_tplus1 > self.nx // 2 - self.w // 2:
+                        left_step_passed = True
+                    if cll_left_tplus1 < self.nx // 2 - self.w // 2 and not left_step_passed:
+                        receding_ca_left = self.receding_ca_hydrophobic
+                        advancing_ca_left = self.advancing_ca_hydrophobic
+                        cll_threshold_left = self.cll_threshold
+                    elif ca_left_tplus1 > self.advancing_ca_hydrophilic and left_step_passed and not cah_window_left_philic:
+                        receding_ca_left = ca_left_tplus1 * (1 + 1e-7)
+                        advancing_ca_left = ca_left_tplus1
+                        cll_threshold_left = self.cll_threshold
+                    else:
+                        receding_ca_left = self.receding_ca_hydrophilic
+                        advancing_ca_left = self.advancing_ca_hydrophilic
+                        cll_threshold_left = self.cll_threshold
+            
+                    # Right side
+                    if ca_right_tplus1 < self.advancing_ca_hydrophilic:
+                        cah_window_right_philic = True
+                    if cll_right_tplus1 > self.nx // 2 - self.w // 2:
+                        right_step_passed = True
+                    if cll_right_tplus1 < self.nx // 2 - self.w // 2 and not right_step_passed:
+                        receding_ca_right = self.receding_ca_hydrophobic
+                        advancing_ca_right = self.advancing_ca_hydrophobic
+                        cll_threshold_right = self.cll_threshold
+                    elif ca_right_tplus1 > self.advancing_ca_hydrophilic and right_step_passed and not cah_window_right_philic:
+                        receding_ca_right = ca_right_tplus1
+                        advancing_ca_right = ca_right_tplus1 * (1 - 1e-7)
+                        cll_threshold_right = self.cll_threshold
+                    else:
+                        receding_ca_right = self.receding_ca_hydrophilic
+                        advancing_ca_right = self.advancing_ca_hydrophilic
+                        cll_threshold_right = self.cll_threshold
+            
+                    # --- Left logic ---
+                    p_m_left = None
+                    if cll_left_tplus1 > cll_left_t:
+                        # receding left
+                        if ca_left_tplus1 >= receding_ca_left:
+                            count = 0
+                            p_m_left = 'receding pinned'
+                            pinned_count_left += 1
+                            while True:
+                                if (1 + cll_threshold_left) * cll_left_t > cll_left_tplus1 > (1 - cll_threshold_left) * cll_left_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left receding pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left receding pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_left_tplus1 > cll_left_t:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.min(phi_left) > 1:
+                                phi_left = phi_left - self.change_phi
+                            else:
+                                d_rho_left = d_rho_left + self.change_d_rho
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_left = 'receding moving'
+                            while True:
+                                if (1 + self.ca_threshold) * receding_ca_left > ca_left_tplus1 > (1 - self.ca_threshold) * receding_ca_left:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left receding moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif jnp.min(d_rho_left) > 1:
+                                    print(f'At it= {it} min(d_rho_left) > 1, in the left receding moving while loop\n'
+                                          'This means that there is a problem, possibly the threshold values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} min(d_rho_left) > 1, in the left receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the threshold values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_left_tplus1 < receding_ca_left:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                    else:
+                        # advancing left
+                        if ca_left_tplus1 <= advancing_ca_left:
+                            count = 0
+                            p_m_left = 'advancing pinned'
+                            pinned_count_left += 1
+                            while True:
+                                if (1 + cll_threshold_left) * cll_left_t > cll_left_tplus1 > (1 - cll_threshold_left) * cll_left_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left advancing pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left advancing pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_left_tplus1 < cll_left_t:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.max(d_rho_left) > 0:
+                                d_rho_left = d_rho_left - self.change_d_rho
+                            else:
+                                phi_left = phi_left + self.change_phi
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_left = 'advancing moving'
+                            while True:
+                                if (1 + self.ca_threshold) * advancing_ca_left > ca_left_tplus1 > (1 - self.ca_threshold) * advancing_ca_left:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left advancing moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left advancing moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_left_tplus1 > advancing_ca_left:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Right logic ---
+                    p_m_right = None
+                    if cll_right_tplus1 > cll_right_t:
+                        # advancing right
+                        if ca_right_tplus1 <= advancing_ca_right:
+                            count = 0
+                            p_m_right = 'advancing pinned'
+                            pinned_count_right += 1
+                            while True:
+                                if (1 + cll_threshold_right) * cll_right_t > cll_right_tplus1 > (1 - cll_threshold_right) * cll_right_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right advancing pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right advancing pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_right_tplus1 > cll_right_t:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.max(d_rho_right) > 0:
+                                d_rho_right = d_rho_right - self.change_d_rho
+                                count += 1
+                            else:
+                                phi_right = phi_right + self.change_phi
+                                count += 1
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_right = 'advancing moving'
+                            while True:
+                                if (1 + self.ca_threshold) * advancing_ca_right > ca_right_tplus1 > (1 - self.ca_threshold) * advancing_ca_right:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right advancing moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right advancing moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_right_tplus1 > advancing_ca_right:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                    else:
+                        # receding right
+                        if ca_right_tplus1 >= receding_ca_right:
+                            count = 0
+                            p_m_right = 'receding pinned'
+                            pinned_count_right += 1
+                            while True:
+                                if (1 + cll_threshold_right) * cll_right_t > cll_right_tplus1 > (1 - cll_threshold_right) * cll_right_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right receding pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large.')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right receding pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large.')
+                                    break
+                                elif cll_right_tplus1 > cll_right_t:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.min(phi_right) > 1:
+                                phi_right = phi_right - self.change_phi
+                                count += 1
+                            else:
+                                d_rho_right = d_rho_right + self.change_d_rho
+                                count += 1
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_right = 'receding moving'
+                            while True:
+                                if (1 + self.ca_threshold) * receding_ca_right > ca_right_tplus1 > (1 - self.ca_threshold) * receding_ca_right:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right receding moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_right_tplus1 < receding_ca_right:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Pinning count logic ---
+                    if ca_left_t < receding_ca_left + 1 or ca_left_t > advancing_ca_left - 1:
+                        pinned_count_left += -1
+                    if ca_right_t < receding_ca_right + 1 or ca_right_t > advancing_ca_right - 1:
+                        pinned_count_right += -1
+            
+                    return (phi_left, phi_right, d_rho_left, d_rho_right, left_step_passed, right_step_passed,
+                            cah_window_left_philic, cah_window_right_philic, cah_window_left_phobic,
+                            cah_window_right_phobic, pinned_count_left, pinned_count_right, p_m_left, p_m_right)
+            --- End of hysteresis.py ---
+
+            contact_line_location.py
+            --- Code in contact_line_location.py ---
+            import jax.numpy as jnp
+            
+            class ContactLineLocation:
+                """
+                Class to calculate contact line locations (left and right) from density and angles.
+                """
+            
+                def __init__(self, rho_mean):
+                    self.rho_mean = rho_mean
+            
+                def compute(self, rho, ca_left, ca_right):
+                    array_i_j0 = rho[:, 0]
+            
+                    mask_i_j0 = array_i_j0 < self.rho_mean
+            
+                    mask_int_i_j0 = jnp.array(mask_i_j0, dtype=int)
+            
+                    diff_mask_i_j0 = jnp.diff(mask_int_i_j0)
+            
+                    transition_index_left_i_j0 = jnp.where(diff_mask_i_j0 == -1, size=1, fill_value=0)[0]
+                    transition_index_right_i_j0 = (jnp.where(diff_mask_i_j0 == 1, size=1, fill_value=0)[0]) + 1
+            
+                    index_left_i_j0 = transition_index_left_i_j0[0].astype(int)
+                    index_right_i_j0 = transition_index_right_i_j0[0].astype(int)
+            
+                    x_val_left_j0 = (index_left_i_j0 +
+                                     (self.rho_mean - array_i_j0[index_left_i_j0]) /
+                                     (array_i_j0[index_left_i_j0 + 1] - array_i_j0[index_left_i_j0]))
+                    x_val_right_j0 = ((index_right_i_j0) -
+                                      (self.rho_mean - array_i_j0[index_right_i_j0]) /
+                                      (array_i_j0[index_right_i_j0 - 1] - array_i_j0[index_right_i_j0]))
+            
+                    x_val_left_jsolid = x_val_left_j0 - (1 / (2 * jnp.tan(jnp.deg2rad(ca_left))))
+                    x_val_right_jsolid = x_val_right_j0 + (1 / (2 * jnp.tan(jnp.deg2rad(ca_right))))
+            
+                    return x_val_left_jsolid, x_val_right_jsolid
+            
+            --- End of contact_line_location.py ---
+
+            contact_angle.py
+            --- Code in contact_angle.py ---
+            import jax.numpy as jnp
+            import math
+            
+            class ContactAngle:
+                """
+                Class to calculate contact angles (left and right) from a density field.
+                """
+            
+                def __init__(self, rho_mean):
+                    self.rho_mean = rho_mean
+            
+                def compute(self, rho):
+                    array_i_j0 = rho[:, 1]
+                    array_i_jpos1 = rho[:, 2]
+            
+                    mask_i_j0 = array_i_j0 < self.rho_mean
+                    mask_i_jpos1 = array_i_jpos1 < self.rho_mean
+            
+                    mask_int_i_j0 = jnp.array(mask_i_j0, dtype=int)
+                    mask_int_i_jpos1 = jnp.array(mask_i_jpos1, dtype=int)
+            
+                    diff_mask_i_j0 = jnp.diff(mask_int_i_j0)
+                    diff_mask_i_jpos1 = jnp.diff(mask_int_i_jpos1)
+            
+                    transition_index_left_i_j0 = jnp.where(diff_mask_i_j0 == -1, size=1, fill_value=0)[0]
+                    transition_index_left_i_jpos1 = jnp.where(diff_mask_i_jpos1 == -1, size=1, fill_value=0)[0]
+                    transition_index_right_i_j0 = (jnp.where(diff_mask_i_j0 == 1, size=1, fill_value=0)[0]) + 1
+                    transition_index_right_i_jpos1 = jnp.where(diff_mask_i_jpos1 == 1, size=1, fill_value=0)[0] + 1
+            
+                    index_left_i_j0 = transition_index_left_i_j0[0].astype(int)
+                    index_left_i_jpos1 = transition_index_left_i_jpos1[0].astype(int)
+                    index_right_i_j0 = transition_index_right_i_j0[0].astype(int)
+                    index_right_i_jpos1 = transition_index_right_i_jpos1[0].astype(int)
+            
+                    x_val_left_j0 = (index_left_i_j0 +
+                                     (self.rho_mean - array_i_j0[index_left_i_j0]) /
+                                     (array_i_j0[index_left_i_j0 + 1] - array_i_j0[index_left_i_j0]))
+                    x_val_left_jpos1 = (index_left_i_jpos1 +
+                                        (self.rho_mean - array_i_jpos1[index_left_i_jpos1]) /
+                                        (array_i_jpos1[index_left_i_jpos1 + 1] - array_i_jpos1[index_left_i_jpos1]))
+                    x_val_right_j0 = (index_right_i_j0 -
+                                      (self.rho_mean - array_i_j0[index_right_i_j0]) /
+                                      (array_i_j0[index_right_i_j0 - 1] - array_i_j0[index_right_i_j0]))
+                    x_val_right_jpos1 = (index_right_i_jpos1 -
+                                         (self.rho_mean - array_i_jpos1[index_right_i_jpos1]) /
+                                         (array_i_jpos1[index_right_i_jpos1 - 1] - array_i_jpos1[index_right_i_jpos1]))
+            
+                    contact_angle_left = jnp.rad2deg(math.pi / 2 + jnp.arctan(x_val_left_j0 - x_val_left_jpos1))
+                    contact_angle_right = jnp.rad2deg(math.pi / 2 + jnp.arctan(x_val_right_jpos1 - x_val_right_j0))
+            
+                    return contact_angle_left, contact_angle_right
+            
+            --- End of contact_angle.py ---
+
+            __pycache__/
+                contact_angle.cpython-312.pyc
+                contact_line_location.cpython-312.pyc
+                __init__.cpython-312.pyc
         collision/
             collision_multiphase.py
             --- Code in collision_multiphase.py ---
@@ -1256,6 +2506,7 @@ wblbm/
             --- Code in __init__.py ---
             from .collision import Collision
             from .source import SourceTerm
+            from .collision_multiphase import CollisionMultiphase
             --- End of __init__.py ---
 
             collision.py
@@ -1587,6 +2838,18 @@ wblbm/
 
         __init__.py
         --- Code in __init__.py ---
+        from .io import SimulationIO
+        from .plotting import visualise
+        from .profiler import JAXProfiler
+        from .timing import time_function, TIMING_ENABLED
+        
+        __all__ = [
+            "SimulationIO",
+            "visualise",
+            "JAXProfiler",
+            "time_function",
+            "TIMING_ENABLED",
+        ]
         --- End of __init__.py ---
 
         timing.py
@@ -1822,6 +3085,8 @@ wblbm/
 
         __init__.py
         --- Code in __init__.py ---
+        from .force import Force
+        from .gravitational_force import GravityForce
         --- End of __init__.py ---
 
         gravitational_force.py
@@ -1918,9 +3183,9 @@ example/
         single_phase_gravity_test.py
         --- Code in single_phase_gravity_test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.force.gravitational_force import GravityForce
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import GravityForce
+        from wblbm import visualise
         
         
         def test_single_phase_gravity_simulation():
@@ -1971,8 +3236,8 @@ example/
         test_bc.py
         --- Code in test_bc.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import visualise
         
         
         def test_boundary_conditions():
@@ -2024,9 +3289,9 @@ example/
         multiphase_gravity_bubble_test.py
         --- Code in multiphase_gravity_bubble_test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.force.gravitational_force import GravityForce
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import GravityForce
+        from wblbm import visualise
         
         
         def test_multiphase_gravity_simulation():
@@ -2082,8 +3347,8 @@ example/
         --- Code in timing_analysis.py ---
         import time
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.timing import time_function, TIMING_ENABLED
+        from wblbm import Run
+        from wblbm import time_function, TIMING_ENABLED
         
         
         def detailed_timing_analysis():
@@ -2234,7 +3499,7 @@ example/
         import time
         import numpy as np
         import matplotlib.pyplot as plt
-        from wblbm.operators.run.run import Run
+        from wblbm import Run
         
         
         def complexity_analysis():
@@ -2323,9 +3588,76 @@ example/
             complexity_analysis()
         --- End of complexity_analysis.py ---
 
+        wetting_test.py
+        --- Code in wetting_test.py ---
+        import numpy as np
+        from wblbm import Run, GravityForce, visualise
+        
+        
+        def test_wetting_simulation():
+            """Test wetting implementation with a droplet on a surface under gravity."""
+            print("\n=== Testing LBM Wetting Implementation ===")
+        
+            # Simulation parameters
+            grid_shape = (400, 200)  # nx, ny
+            tau = 0.9  # Relaxation time
+            nt = 50  # Number of time steps
+            save_interval = 1  # Save every 500 steps
+            kappa = 0.01  # Surface tension parameter
+            rho_l = 1.0  # Liquid density
+            rho_v = 0.001  # Vapor density
+            interface_width = 5  # Interface width for smooth transition
+        
+            # Gravity setup (downward force for droplet settling)
+            force_g = 0  # Small gravity to observe wetting without rapid fall
+            inclination_angle = 0  # Vertical gravity
+            gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+        
+            # Boundary conditions: bounce-back at bottom for solid surface
+            bc_config = {
+                "bottom": "bounce-back",  # Solid wall for wetting
+                "top": "symmetry",  # Open top
+                "left": "periodic",  # Periodic sides
+                "right": "periodic"
+            }
+        
+            # Initialize and run simulation with wetting enabled
+            sim = Run(
+                grid_shape=grid_shape,
+                lattice_type="D2Q9",
+                tau=tau,
+                nt=nt,
+                multiphase=True,
+                kappa=kappa,
+                rho_l=rho_l,
+                rho_v=rho_v,
+                interface_width=interface_width,
+                save_interval=save_interval,
+                bc_config=bc_config,
+                force_enabled=True,
+                force_obj=gravity,
+                wetting_enabled=True,
+                hysteresis_params=None
+            )
+        
+            # Run with wetting initialization
+            sim.run(init_type="wetting", verbose=True)
+            return sim
+        
+        
+        if __name__ == "__main__":
+            sim_wetting = test_wetting_simulation()
+        
+            # Visualize results
+            print("\n=== Visualizing Wetting Test Results ===")
+            visualise(sim_wetting, "Wetting Implementation Test")
+        
+            print("\nTest completed! Check the 'results' directory for data and plots.")
+        --- End of wetting_test.py ---
+
         test_bubble_profiler.py
         --- Code in test_bubble_profiler.py ---
-        from wblbm.operators.run.run import Run
+        from wblbm import Run
         
         
         def profile_lbm():
@@ -2356,8 +3688,8 @@ example/
         test.py
         --- Code in test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise  # Import the new function
+        from wblbm import Run
+        from wblbm import visualise  # Import the new function
         
         
         def test_basic_simulation():
@@ -2413,9 +3745,9 @@ example/
         multiphase_gravity_droplet_test.py
         --- Code in multiphase_gravity_droplet_test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.force.gravitational_force import GravityForce
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import GravityForce
+        from wblbm import visualise
         
         
         def test_multiphase_gravity_simulation():
@@ -2424,8 +3756,8 @@ example/
         
             grid_shape = (200, 200)
             tau = 0.9
-            nt = 5000
-            save_interval = 100
+            nt = 10000
+            save_interval = 1000
             kappa = 0.01
             rho_l = 1.0
             rho_v = 0.001
@@ -2469,8 +3801,8 @@ example/
 
         bubble_high_density.py
         --- Code in bubble_high_density.py ---
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import visualise
         
         
         def test_multiphase_simulation():
@@ -2522,6 +3854,2593 @@ example/
         --- End of bubble_high_density.py ---
 
         results/
+            2025-07-14/
+                15-42-28/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                16-15-13/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                15-51-30/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_3700.npz
+                        timestep_3300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_4900.npz
+                        timestep_3100.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_4500.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_4700.npz
+                        timestep_4300.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                        timestep_2000.npz
+                        timestep_3900.npz
+                        timestep_4100.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_3700.png
+                        timestep_3300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_4900.png
+                        timestep_3100.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_4700.png
+                        timestep_4300.png
+                        timestep_300.png
+                        timestep_2200.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_3900.png
+                        timestep_4100.png
+                18-22-49/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                15-34-00/
+                    config.json
+                    data/
+                16-05-15/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                18-24-05/
+                    config.json
+                    data/
+                15-32-10/
+                    config.json
+                    data/
+                        timestep_0.npz
+                        timestep_400.npz
+                        timestep_200.npz
+                        timestep_499.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                    plots/
+                        timestep_0.png
+                        timestep_400.png
+                        timestep_200.png
+                        timestep_300.png
+                        timestep_499.png
+                        timestep_100.png
+                15-22-43/
+                    config.json
+                    data/
+                15-29-02/
+                    config.json
+                    data/
+                15-54-23/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                18-24-29/
+                    config.json
+                    data/
+                16-17-17/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                15-43-33/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                18-25-20/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_3700.npz
+                        timestep_3300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_4900.npz
+                        timestep_3100.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_4500.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_4700.npz
+                        timestep_4300.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                        timestep_2000.npz
+                        timestep_3900.npz
+                        timestep_4100.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_3700.png
+                        timestep_3300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_4900.png
+                        timestep_3100.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_4700.png
+                        timestep_4300.png
+                        timestep_300.png
+                        timestep_2200.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_3900.png
+                        timestep_4100.png
+                16-09-50/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                15-18-38/
+                    config.json
+                    data/
+                15-34-51/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_3700.npz
+                        timestep_3300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_4900.npz
+                        timestep_3100.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_4500.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_4700.npz
+                        timestep_4300.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                        timestep_2000.npz
+                        timestep_3900.npz
+                        timestep_4100.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_3700.png
+                        timestep_3300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_4900.png
+                        timestep_3100.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_4700.png
+                        timestep_4300.png
+                        timestep_300.png
+                        timestep_2200.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_3900.png
+                        timestep_4100.png
+                15-52-24/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_3700.npz
+                        timestep_3300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_4900.npz
+                        timestep_3100.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_4500.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_4700.npz
+                        timestep_4300.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                        timestep_2000.npz
+                        timestep_3900.npz
+                        timestep_4100.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_3700.png
+                        timestep_3300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_4900.png
+                        timestep_3100.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_4700.png
+                        timestep_4300.png
+                        timestep_300.png
+                        timestep_2200.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_3900.png
+                        timestep_4100.png
+                11-11-59/
+                    config.json
+                    data/
+                15-27-24/
+                    config.json
+                    data/
+                15-23-14/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1500.npz
+                        timestep_4999.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_2500.npz
+                        timestep_4000.npz
+                        timestep_4500.npz
+                        timestep_500.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1500.png
+                        timestep_4999.png
+                        timestep_1000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_2500.png
+                        timestep_4000.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2000.png
+                15-45-34/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                16-14-45/
+                    config.json
+                    data/
+                18-20-31/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                15-06-24/
+                    config.json
+                    data/
+                15-31-35/
+                    config.json
+                    data/
+                        timestep_1000.npz
+                        timestep_0.npz
+                        timestep_500.npz
+                15-32-41/
+                    config.json
+                    data/
+                        timestep_0.npz
+                15-32-46/
+                    config.json
+                    data/
+                15-16-37/
+                    config.json
+                    data/
+                16-03-25/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                18-20-13/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                15-15-20/
+                    config.json
+                    data/
+                18-20-49/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_26.png
+                        timestep_27.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_23.png
+                        timestep_22.png
+                15-14-42/
+                    config.json
+                    data/
+                15-17-08/
+                    config.json
+                    data/
+            2025-07-15/
+                11-14-37/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                11-17-32/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                11-49-27/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_8.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_5.png
+                        timestep_4.png
+                11-26-59/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                11-15-04/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_9999.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_1000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_6000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_9999.png
+                        timestep_2000.png
+                11-26-15/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                11-23-48/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                11-41-10/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                11-12-55/
+                    config.json
+                    data/
+                        timestep_3500.npz
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_3700.npz
+                        timestep_3300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_4900.npz
+                        timestep_3100.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_4500.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_4700.npz
+                        timestep_4300.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                        timestep_2000.npz
+                        timestep_3900.npz
+                        timestep_4100.npz
+                    plots/
+                        timestep_3500.png
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_3700.png
+                        timestep_3300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_4900.png
+                        timestep_3100.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_4500.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_4700.png
+                        timestep_4300.png
+                        timestep_300.png
+                        timestep_2200.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_3900.png
+                        timestep_4100.png
+                11-57-01/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
             2025-07-10/
                 14-28-58/
                     config.json
