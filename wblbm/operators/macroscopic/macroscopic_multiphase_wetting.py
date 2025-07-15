@@ -4,11 +4,11 @@ from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
-from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.differential.gradient_wetting import GradientWetting
 from wblbm.operators.differential.laplacian_wetting import LaplacianWetting
 
-class MacroscopicWetting(MacroscopicMultiphase):
+class MacroscopicWetting(Macroscopic):
     """
     Calculates macroscopic variables for wetting-aware multiphase simulations.
     Uses wetting-specific differential operators for gradient and Laplacian.
@@ -26,11 +26,14 @@ class MacroscopicWetting(MacroscopicMultiphase):
         wetting_enabled: bool = False,  # Flag to enable wetting-specific operators
     ):
         super().__init__(
-            grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+            grid, lattice, force_enabled
         )
-        if wetting_enabled:
-            self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
-            self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+        self.kappa = kappa
+        self.rho_l = rho_l
+        self.rho_v = rho_v
+        self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
+        self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+        self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
         self.wetting_enabled = wetting_enabled
 
     @partial(jit, static_argnums=(0,))
@@ -43,13 +46,14 @@ class MacroscopicWetting(MacroscopicMultiphase):
         d_rho_left: jnp.ndarray = None,
         d_rho_right: jnp.ndarray = None,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        rho, u, force = super().__call__(f, force=force)
-        if self.wetting_enabled:
-            force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
-        else:
-            force_int = self.force_int(rho)
+        rho, u = super().__call__(f, force=force)
+        force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
         u_updated = self.u_new(u, force_int)
-        return rho, u, force
+        if force is None:
+            force_total = force_int
+        else:
+            force_total = force_int + force
+        return rho, u_updated, force_total
 
     @partial(jit, static_argnums=(0,))
     def chem_pot(
@@ -89,3 +93,28 @@ class MacroscopicWetting(MacroscopicMultiphase):
         else:
             raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
         return -rho * grad_chem_pot
+
+    @partial(jit, static_argnums=(0,))
+    def u_new(self, u, force):
+        """
+        Update velocity with interaction force.
+        """
+        # Both u and force have shape (nx, ny, 1, 2)
+        return u + force / 2
+
+    @partial(jit, static_argnums=(0,))
+    def eos(self, rho):
+        """Equation of state - extract 2D data for computation"""
+        rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+        eos_2d = (
+                2
+                * self.beta
+                * (rho_2d - self.rho_l)
+                * (rho_2d - self.rho_v)
+                * (2 * rho_2d - self.rho_l - self.rho_v)
+        )
+
+        # Convert back to 4D format
+        eos_4d = jnp.zeros_like(rho)
+        eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+        return eos_4d

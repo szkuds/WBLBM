@@ -48,13 +48,13 @@ class UpdateMultiphase(Update):
             force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
                 [0.01, 0.0]
             )
-        rho, u, force_int = (
+        rho, u, force_tot = (
             self.macroscopic(f, force=force)
             if self.force_enabled
             else self.macroscopic(f)
         )
         feq = self.equilibrium(rho, u)
-        source = self.source_term(rho, u, force_int)
+        source = self.source_term(rho, u, force_tot)
         fcol = self.collision(f, feq, source)
         fstream = self.streaming(fcol)
         if self.boundary_condition is not None:

@@ -475,11 +475,11 @@ wblbm/
             
                     # --- Fix: use self.interface_width instead of self.w ---
                     transition_index_left_mask1 = (
-                        jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + self.interface_width
+                        jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + 2 * self.interface_width
                     )
                     transition_index_right_mask1 = jnp.where(diff_mask1 == 1, size=1, fill_value=0)[
                         0
-                    ] - (self.interface_width + 1)
+                    ] - (2 * self.interface_width + 1)
             
                     indices = jnp.arange(mask_final.shape[0])
                     mask_cover_left = jnp.where(
@@ -809,11 +809,11 @@ wblbm/
             
             from wblbm.grid import Grid
             from wblbm.lattice import Lattice
-            from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.macroscopic.macroscopic import Macroscopic
             from wblbm.operators.differential.gradient_wetting import GradientWetting
             from wblbm.operators.differential.laplacian_wetting import LaplacianWetting
             
-            class MacroscopicWetting(MacroscopicMultiphase):
+            class MacroscopicWetting(Macroscopic):
                 """
                 Calculates macroscopic variables for wetting-aware multiphase simulations.
                 Uses wetting-specific differential operators for gradient and Laplacian.
@@ -831,11 +831,14 @@ wblbm/
                     wetting_enabled: bool = False,  # Flag to enable wetting-specific operators
                 ):
                     super().__init__(
-                        grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+                        grid, lattice, force_enabled
                     )
-                    if wetting_enabled:
-                        self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
-                        self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.kappa = kappa
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+                    self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
+                    self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
                     self.wetting_enabled = wetting_enabled
             
                 @partial(jit, static_argnums=(0,))
@@ -848,13 +851,10 @@ wblbm/
                     d_rho_left: jnp.ndarray = None,
                     d_rho_right: jnp.ndarray = None,
                 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-                    rho, u, force = super().__call__(f, force=force)
-                    if self.wetting_enabled:
-                        force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
-                    else:
-                        force_int = self.force_int(rho)
+                    rho, u = super().__call__(f, force=force)
+                    force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
                     u_updated = self.u_new(u, force_int)
-                    return rho, u, force
+                    return rho, u_updated, force_int
             
                 @partial(jit, static_argnums=(0,))
                 def chem_pot(
@@ -894,6 +894,31 @@ wblbm/
                     else:
                         raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
                     return -rho * grad_chem_pot
+            
+                @partial(jit, static_argnums=(0,))
+                def u_new(self, u, force):
+                    """
+                    Update velocity with interaction force.
+                    """
+                    # Both u and force have shape (nx, ny, 1, 2)
+                    return u + force / 2
+            
+                @partial(jit, static_argnums=(0,))
+                def eos(self, rho):
+                    """Equation of state - extract 2D data for computation"""
+                    rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    eos_2d = (
+                            2
+                            * self.beta
+                            * (rho_2d - self.rho_l)
+                            * (rho_2d - self.rho_v)
+                            * (2 * rho_2d - self.rho_l - self.rho_v)
+                    )
+            
+                    # Convert back to 4D format
+                    eos_4d = jnp.zeros_like(rho)
+                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+                    return eos_4d
             --- End of macroscopic_multiphase_wetting.py ---
 
             __pycache__/
@@ -995,7 +1020,7 @@ wblbm/
                     rho_v: float,
                     bc_config: dict = None,
                     force_enabled: bool = False,
-                    wetting_enabled: bool = True,  # Always True for this class
+                    wetting_enabled: bool = True,
                 ):
                     super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
                     self.macroscopic = MacroscopicWetting(
@@ -1279,6 +1304,47 @@ wblbm/
                     # Return the equilibrium distribution
                     return self.equilibrium(rho, u)
             
+                def initialise_wetting_chemical_step(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialize the simulation with a droplet wetting a solid surface.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase density.
+                        interface_width (int): Width of the interface for tanh profile.
+            
+                    Returns:
+                        jnp.ndarray: Initial distribution function.
+                    """
+                    # Radius of the droplet (adapted from user query)
+                    r = (self.ny) / 3.3
+            
+                    # Initialize velocity (zero) and density fields with correct shapes
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+                    rho = jnp.zeros((self.nx, self.ny, 1, 1))
+            
+                    # Create grid (shifted by 0.5 for cell centers)
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+            
+                    # Calculate center coordinates (droplet centered horizontally, near bottom)
+                    xc, yc = self.nx / 2, self.ny / 2
+            
+                    # Calculate distance from center (shifted to simulate wetting at bottom)
+                    distance = jnp.sqrt((x - xc / 2) ** 2 + (y) ** 2)
+            
+                    # Calculate density distribution using tanh for smooth interface
+                    rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        2 * (r - distance) / interface_width
+                    )
+            
+                    # Assign to rho (reshape to 4D)
+                    rho = rho.at[:, :, 0, 0].set(rho_2d)
+            
+                    # Return equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
                 def initialise_wetting(
                     self, rho_l: float, rho_v: float, interface_width: int
                 ):
@@ -1294,7 +1360,7 @@ wblbm/
                         jnp.ndarray: Initial distribution function.
                     """
                     # Radius of the droplet (adapted from user query)
-                    r = (jnp.sqrt(0.33) * self.ny) / 3.3
+                    r = (self.ny) / 3.3
             
                     # Initialize velocity (zero) and density fields with correct shapes
                     u = jnp.zeros((self.nx, self.ny, 1, 2))
@@ -1307,7 +1373,7 @@ wblbm/
                     xc, yc = self.nx / 2, self.ny / 2
             
                     # Calculate distance from center (shifted to simulate wetting at bottom)
-                    distance = jnp.sqrt((x - xc) ** 2 + (y - yc) ** 2)
+                    distance = jnp.sqrt((x - xc) ** 2 + (y) ** 2)
             
                     # Calculate density distribution using tanh for smooth interface
                     rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
@@ -1372,7 +1438,7 @@ wblbm/
                         elif bc_type == "symmetry":
                             f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
                         elif bc_type == "periodic":
-                            f_streamed = self._apply_periodic(f_streamed, edge)
+                            f_streamed = self._apply_periodic(f_streamed)
                     return f_streamed
             
                 @partial(jit, static_argnums=(0, 3))
@@ -1477,14 +1543,12 @@ wblbm/
                         )
                     return f_streamed
             
-                @partial(jit, static_argnums=(0, 2))
-                def _apply_periodic(self, f_streamed: jnp.ndarray, edge: str) -> jnp.ndarray:
-                    if edge in ["left", "right"]:
-                        axis = 0
-                    elif edge in ["bottom", "top"]:
-                        axis = 1
-                    f_streamed = jnp.roll(f_streamed, shift=1, axis=axis)
+                @partial(jit, static_argnums=(0, ))
+                def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
+                    # For periodic boundaries, no additional transformation is needed
+                    # The streaming step already handles periodicity correctly
                     return f_streamed
+            
             --- End of boundary_condition.py ---
 
             __init__.py
@@ -1585,7 +1649,6 @@ wblbm/
             from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
             from wblbm.operators.update.update_mutliphase_wetting import UpdateMultiphaseWetting
             from wblbm.utils.io import SimulationIO
-            from wblbm.utils.profiler import JAXProfiler
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             
             
@@ -1612,6 +1675,8 @@ wblbm/
                         force_obj=None,
                         wetting_enabled: bool = False,
                         hysteresis_params: dict = None,
+                        phi_value: float = 1.0,      # <-- Added
+                        d_rho_value: float = 0.0     # <-- Added
                 ):
                     self.grid_shape = grid_shape
                     self.nt = nt
@@ -1626,6 +1691,8 @@ wblbm/
                     self.force_obj = force_obj
                     self.wetting_enabled = wetting_enabled
                     self.hysteresis_params = hysteresis_params
+                    self.phi_value = phi_value
+                    self.d_rho_value = d_rho_value
             
                     # Initialize core components
                     self.grid = Grid(grid_shape)
@@ -1674,7 +1741,7 @@ wblbm/
                             force_enabled=force_enabled,
                             wetting_enabled=wetting_enabled,
                         )
-                        self.macroscopic_multiphase = MacroscopicWetting(
+                        self.macroscopic_multiphase_wetting = MacroscopicWetting(
                             self.grid,
                             self.lattice,
                             kappa,
@@ -1733,6 +1800,8 @@ wblbm/
                         "force_obj": str(type(force_obj)) if force_obj is not None else None,
                         "wetting_enabled": wetting_enabled,
                         "hysteresis_params": hysteresis_params,
+                        "phi_value": phi_value,      # <-- Added
+                        "d_rho_value": d_rho_value   # <-- Added
                     }
                     self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
             
@@ -1753,6 +1822,10 @@ wblbm/
                         f_prev = self.initialiser.initialise_multiphase_bubble(
                             self.rho_l, self.rho_v, self.interface_width
                         )
+                    elif self.multiphase and init_type == "wetting_chemical_step":
+                        f_prev = self.initialiser.initialise_wetting_chemical_step(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
                     elif self.multiphase and init_type == "wetting":
                         f_prev = self.initialiser.initialise_wetting(
                             self.rho_l, self.rho_v, self.interface_width
@@ -1768,9 +1841,13 @@ wblbm/
                     if self.wetting_enabled:
                         nx = self.grid.nx
                         phi_left = jnp.ones(nx)
+                        phi_left = phi_left.at[:].set(self.phi_value)
                         d_rho_left = jnp.zeros(nx)
+                        d_rho_left = d_rho_left.at[:].set(self.d_rho_value)
                         phi_right = jnp.ones(nx)
+                        phi_right = phi_right.at[:].set(self.phi_value)
                         d_rho_right = jnp.zeros(nx)
+                        d_rho_right = d_rho_right.at[:].set(self.d_rho_value)
             
                     # Initialize hysteresis state variables if hysteresis is enabled
                     left_step_passed = False
@@ -1782,19 +1859,6 @@ wblbm/
                     pinned_count_left = 0
                     pinned_count_right = 0
             
-                    # Detect multiple devices and prepare pmap if needed
-                    import jax
-                    n_devices = jax.local_device_count()
-                    use_pmap = n_devices > 1 and self.multiphase
-                    if use_pmap:
-                        def update_func(f, phi_left, phi_right, d_rho_left, d_rho_right):
-                            return self.update(f, phi_left=phi_left, phi_right=phi_right, d_rho_left=d_rho_left,
-                                               d_rho_right=d_rho_right)
-            
-                        p_update_func = jax.pmap(update_func, axis_name='devices')
-                        if verbose:
-                            print(f"Using jax.pmap across {n_devices} devices for parallel execution.")
-            
                     if verbose:
                         print(f"Starting LBM simulation with {self.nt} time steps...")
                         print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}, Wetting: {self.wetting_enabled}")
@@ -1803,7 +1867,9 @@ wblbm/
                     for it in range(self.nt):
                         force = None
                         if self.force_enabled and self.force_obj is not None:
-                            if self.multiphase:
+                            if self.wetting_enabled and self.multiphase:
+                                rho, _, _ = self.macroscopic_multiphase_wetting(f_prev)
+                            elif self.multiphase:
                                 rho, _, _ = self.macroscopic_multiphase(f_prev)
                             else:
                                 rho, _ = self.macroscopic(f_prev)
@@ -1815,7 +1881,7 @@ wblbm/
                         if self.hysteresis is not None and self.wetting_enabled:
                             contact_angle_func = self.contact_angle.compute
                             cll_func = self.contact_line_location.compute
-                            get_rho_func = lambda f: self.macroscopic_multiphase(f)[0]
+                            get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
                             (phi_left, phi_right, d_rho_left, d_rho_right,
                              left_step_passed, right_step_passed,
                              cah_window_left_philic, cah_window_right_philic,
@@ -1828,21 +1894,7 @@ wblbm/
                                 pinned_count_left, pinned_count_right,
                                 self.update, contact_angle_func, cll_func, get_rho_func
                             )
-            
-                        # Run update step (with pmap sharding if multi-device)
-                        if use_pmap:
-                            f_prev_sharded = jnp.reshape(f_prev, (n_devices, -1) + f_prev.shape[1:])
-                            phi_left_sharded = jnp.reshape(phi_left, (n_devices, -1)) if phi_left is not None else None
-                            phi_right_sharded = jnp.reshape(phi_right, (n_devices, -1)) if phi_right is not None else None
-                            d_rho_left_sharded = jnp.reshape(d_rho_left, (n_devices, -1)) if d_rho_left is not None else None
-                            d_rho_right_sharded = jnp.reshape(d_rho_right, (n_devices, -1)) if d_rho_right is not None else None
-            
-                            f_next_sharded = p_update_func(
-                                f_prev_sharded, phi_left_sharded, phi_right_sharded,
-                                d_rho_left_sharded, d_rho_right_sharded
-                            )
-                            f_next = jnp.reshape(f_next_sharded, f_prev.shape)
-                        elif self.wetting_enabled:
+                        if self.wetting_enabled:
                             f_next = self.update(
                                 f_prev, force=force, phi_left=phi_left, phi_right=phi_right,
                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right
@@ -1863,7 +1915,7 @@ wblbm/
                         # Save data at the specified interval
                         if it % self.save_interval == 0 or it == self.nt - 1:
                             if self.multiphase:
-                                rho, u, force = self.macroscopic_multiphase(f_prev)
+                                rho, u, force = self.macroscopic_multiphase_wetting(f_prev)
                                 data_to_save = {
                                     "rho": np.array(rho),
                                     "u": np.array(u),
@@ -1882,86 +1934,7 @@ wblbm/
             
                     if verbose:
                         print("Simulation completed!")
-                        print(f"Results saved in: {self.io_handler.run_dir}")
-            
-                def run_with_profiling(
-                        self,
-                        init_type: str = "standard",
-                        verbose: bool = True,
-                        profile_steps: int = 100,
-                ):
-                    """
-                    Run simulation with JAX profiling enabled for a subset of steps.
-            
-                    Args:
-                        profile_steps (int): Number of steps to profile (should be small, e.g., 100-1000)
-                    """
-                    # Initialize as normal
-                    if self.multiphase and init_type == "multiphase_bubble":
-                        f_prev = self.initialiser.initialise_multiphase_bubble(
-                            self.rho_l, self.rho_v, self.interface_width
-                        )
-                    else:
-                        f_prev = self.initialiser.initialise_standard()
-            
-                    if verbose:
-                        print(
-                            f"Starting LBM simulation with profiling for {profile_steps} steps..."
-                        )
-            
-                    # Warm up JAX compilation first (shorter warmup)
-                    for it in range(5):
-                        force = None
-                        if self.force_enabled and self.force_obj is not None:
-                            if self.multiphase:
-                                rho, _, _ = self.macroscopic_multiphase(f_prev)
-                            else:
-                                rho, _ = self.macroscopic(f_prev)
-                            force = self.force_obj.compute_force(rho)
-                        elif self.force_enabled:
-                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
-                                [0.01, 0.0]
-                            )
-                        f_next = (
-                            self.update(f_prev, force=force)
-                            if self.force_enabled
-                            else self.update(f_prev)
-                        )
-                        if self.boundary_condition is not None:
-                            f_next = self.boundary_condition(f_next, f_next)
-                        f_prev = f_next
-            
-                    # Profile the actual operations
-                    with JAXProfiler("./profiler_output"):
-                        for it in range(profile_steps):
-                            force = None
-                            if self.force_enabled and self.force_obj is not None:
-                                if self.multiphase:
-                                    rho, _, _ = self.macroscopic_multiphase(f_prev)
-                                else:
-                                    rho, _ = self.macroscopic(f_prev)
-                                force = self.force_obj.compute_force(rho)
-                            elif self.force_enabled:
-                                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
-                                    [0.01, 0.0]
-                                )
-                            f_next = (
-                                self.update(f_prev, force=force)
-                                if self.force_enabled
-                                else self.update(f_prev)
-                            )
-                            if self.boundary_condition is not None:
-                                f_next = self.boundary_condition(f_next, f_next)
-                            f_prev = f_next
-                            # Ensure computation completes before continuing
-                            if hasattr(f_next, "block_until_ready"):
-                                f_next.block_until_ready()
-            
-                            if verbose and it % 10 == 0:
-                                print(f"Profiling step {it}/{profile_steps}")
-            
-                    print("Profiling completed! Check ./profiler_output directory")
-            --- End of run.py ---
+                        print(f"Results saved in: {self.io_handler.run_dir}")            --- End of run.py ---
 
             __init__.py
             --- Code in __init__.py ---
@@ -2892,6 +2865,7 @@ wblbm/
         from jax import profiler
         import os
         
+        # Have not managed to get this to work, removed the profiling from the run class.
         
         class JAXProfiler:
             def __init__(self, output_dir="./profiler_output", create_perfetto_link=True):
@@ -3401,7 +3375,7 @@ example/
         
                 # Time macroscopic calculation
                 start = time.perf_counter()
-                rho, u, force = sim.macroscopic_multiphase(f_prev)
+                rho, u, force = sim.macroscopic_multiphase_wetting(f_prev)
                 if hasattr(rho, "block_until_ready"):
                     rho.block_until_ready()
                 macro_time = time.perf_counter() - start
@@ -3608,6 +3582,10 @@ example/
             rho_v = 0.001  # Vapor density
             interface_width = 5  # Interface width for smooth transition
         
+            # Wetting parameters
+            phi_value = 1.0  # Wetting strength parameter
+            d_rho_value = 0.0  # Density adjustment parameter
+        
             # Gravity setup (downward force for droplet settling)
             force_g = 0  # Small gravity to observe wetting without rapid fall
             inclination_angle = 0  # Vertical gravity
@@ -3637,7 +3615,9 @@ example/
                 force_enabled=True,
                 force_obj=gravity,
                 wetting_enabled=True,
-                hysteresis_params=None
+                hysteresis_params=None,
+                phi_value=phi_value,
+                d_rho_value=d_rho_value
             )
         
             # Run with wetting initialization
@@ -3654,36 +3634,6 @@ example/
         
             print("\nTest completed! Check the 'results' directory for data and plots.")
         --- End of wetting_test.py ---
-
-        test_bubble_profiler.py
-        --- Code in test_bubble_profiler.py ---
-        from wblbm import Run
-        
-        
-        def profile_lbm():
-            """Profile a small LBM simulation to identify bottlenecks."""
-        
-            # Use a smaller grid for profiling to focus on computational patterns
-            sim = Run(
-                grid_shape=(50, 50),  # Smaller grid for profiling
-                lattice_type="D2Q9",
-                tau=1.0,
-                nt=100,  # Only profile 100 steps
-                multiphase=True,  # Profile the more complex multiphase case
-                kappa=0.01,
-                rho_l=1.0,
-                rho_v=0.1,
-                interface_width=4,
-                save_interval=50,
-            )
-        
-            # Run with profiling
-            sim.run_with_profiling(init_type="multiphase_bubble", profile_steps=100)
-        
-        
-        if __name__ == "__main__":
-            profile_lbm()
-        --- End of test_bubble_profiler.py ---
 
         test.py
         --- Code in test.py ---
@@ -3767,6 +3717,13 @@ example/
             inclination_angle = 0
             gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
         
+            bc_config = {
+                "bottom": "bounce-back",  # Solid wall for wetting
+                "top": "bounce-back",  # Open top
+                "left": "periodic",  # Periodic sides
+                "right": "periodic"
+            }
+        
             sim = Run(
                 grid_shape=grid_shape,
                 lattice_type="D2Q9",
@@ -3778,6 +3735,7 @@ example/
                 rho_v=rho_v,
                 interface_width=interface_width,
                 save_interval=save_interval,
+                bc_config=bc_config,
                 force_enabled=True,
                 force_obj=gravity,
             )
@@ -5608,21 +5566,10 @@ example/
                     config.json
                     data/
             2025-07-15/
-                11-14-37/
+                15-00-39/
                     config.json
                     data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                11-17-32/
+                14-02-51/
                     config.json
                     data/
                         timestep_13.npz
@@ -5726,70 +5673,7 @@ example/
                         timestep_37.png
                         timestep_36.png
                         timestep_22.png
-                11-49-27/
-                    config.json
-                    data/
-                        timestep_13.npz
-                        timestep_12.npz
-                        timestep_10.npz
-                        timestep_38.npz
-                        timestep_39.npz
-                        timestep_11.npz
-                        timestep_29.npz
-                        timestep_15.npz
-                        timestep_14.npz
-                        timestep_28.npz
-                        timestep_16.npz
-                        timestep_17.npz
-                        timestep_9.npz
-                        timestep_8.npz
-                        timestep_49.npz
-                        timestep_48.npz
-                        timestep_45.npz
-                        timestep_0.npz
-                        timestep_1.npz
-                        timestep_44.npz
-                        timestep_46.npz
-                        timestep_3.npz
-                        timestep_2.npz
-                        timestep_47.npz
-                        timestep_43.npz
-                        timestep_6.npz
-                        timestep_7.npz
-                        timestep_42.npz
-                        timestep_40.npz
-                        timestep_5.npz
-                        timestep_4.npz
-                        timestep_41.npz
-                        timestep_26.npz
-                        timestep_32.npz
-                        timestep_33.npz
-                        timestep_27.npz
-                        timestep_31.npz
-                        timestep_25.npz
-                        timestep_19.npz
-                        timestep_18.npz
-                        timestep_24.npz
-                        timestep_30.npz
-                        timestep_34.npz
-                        timestep_20.npz
-                        timestep_21.npz
-                        timestep_35.npz
-                        timestep_23.npz
-                        timestep_37.npz
-                        timestep_36.npz
-                        timestep_22.npz
-                    plots/
-                        timestep_8.png
-                        timestep_0.png
-                        timestep_1.png
-                        timestep_3.png
-                        timestep_2.png
-                        timestep_6.png
-                        timestep_7.png
-                        timestep_5.png
-                        timestep_4.png
-                11-26-59/
+                13-57-28/
                     config.json
                     data/
                         timestep_13.npz
@@ -5893,7 +5777,7 @@ example/
                         timestep_37.png
                         timestep_36.png
                         timestep_22.png
-                11-15-04/
+                14-01-49/
                     config.json
                     data/
                         timestep_7000.npz
@@ -5919,7 +5803,7 @@ example/
                         timestep_8000.png
                         timestep_9999.png
                         timestep_2000.png
-                11-26-15/
+                14-05-22/
                     config.json
                     data/
                         timestep_13.npz
@@ -6023,7 +5907,7 @@ example/
                         timestep_37.png
                         timestep_36.png
                         timestep_22.png
-                11-23-48/
+                14-03-57/
                     config.json
                     data/
                         timestep_13.npz
@@ -6127,7 +6011,39 @@ example/
                         timestep_37.png
                         timestep_36.png
                         timestep_22.png
-                11-41-10/
+                14-52-02/
+                    config.json
+                    data/
+                14-46-04/
+                    config.json
+                    data/
+                14-17-44/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_9999.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_1000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_6000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_9999.png
+                        timestep_2000.png
+                14-28-03/
                     config.json
                     data/
                         timestep_13.npz
@@ -6181,57 +6097,7 @@ example/
                         timestep_36.npz
                         timestep_22.npz
                     plots/
-                        timestep_13.png
-                        timestep_12.png
-                        timestep_10.png
-                        timestep_38.png
-                        timestep_39.png
-                        timestep_11.png
-                        timestep_29.png
-                        timestep_15.png
-                        timestep_14.png
-                        timestep_28.png
-                        timestep_16.png
-                        timestep_17.png
-                        timestep_9.png
-                        timestep_8.png
-                        timestep_49.png
-                        timestep_48.png
-                        timestep_45.png
-                        timestep_0.png
-                        timestep_1.png
-                        timestep_44.png
-                        timestep_46.png
-                        timestep_3.png
-                        timestep_2.png
-                        timestep_47.png
-                        timestep_43.png
-                        timestep_6.png
-                        timestep_7.png
-                        timestep_42.png
-                        timestep_40.png
-                        timestep_5.png
-                        timestep_4.png
-                        timestep_41.png
-                        timestep_26.png
-                        timestep_32.png
-                        timestep_33.png
-                        timestep_27.png
-                        timestep_31.png
-                        timestep_25.png
-                        timestep_19.png
-                        timestep_18.png
-                        timestep_24.png
-                        timestep_30.png
-                        timestep_34.png
-                        timestep_20.png
-                        timestep_21.png
-                        timestep_35.png
-                        timestep_23.png
-                        timestep_37.png
-                        timestep_36.png
-                        timestep_22.png
-                11-12-55/
+                14-10-39/
                     config.json
                     data/
                         timestep_3500.npz
@@ -6337,7 +6203,2682 @@ example/
                         timestep_100.png
                         timestep_3900.png
                         timestep_4100.png
-                11-57-01/
+                15-14-41/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                15-04-25/
+                    config.json
+                    data/
+                14-09-41/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_9999.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_1000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_6000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_9999.png
+                        timestep_2000.png
+                14-01-28/
+                    config.json
+                    data/
+                        timestep_10.npz
+                        timestep_70.npz
+                        timestep_99.npz
+                        timestep_60.npz
+                        timestep_0.npz
+                        timestep_50.npz
+                        timestep_90.npz
+                        timestep_80.npz
+                        timestep_40.npz
+                        timestep_30.npz
+                        timestep_20.npz
+                    plots/
+                        timestep_10.png
+                        timestep_70.png
+                        timestep_99.png
+                        timestep_60.png
+                        timestep_0.png
+                        timestep_50.png
+                        timestep_90.png
+                        timestep_80.png
+                        timestep_40.png
+                        timestep_30.png
+                        timestep_20.png
+                14-54-44/
+                    config.json
+                    data/
+                14-11-42/
+                    config.json
+                    data/
+                        timestep_1920.npz
+                        timestep_4680.npz
+                        timestep_440.npz
+                        timestep_4870.npz
+                        timestep_2540.npz
+                        timestep_3110.npz
+                        timestep_130.npz
+                        timestep_2030.npz
+                        timestep_3460.npz
+                        timestep_4290.npz
+                        timestep_2150.npz
+                        timestep_3500.npz
+                        timestep_1840.npz
+                        timestep_4910.npz
+                        timestep_520.npz
+                        timestep_2420.npz
+                        timestep_3070.npz
+                        timestep_1100.npz
+                        timestep_290.npz
+                        timestep_4050.npz
+                        timestep_3930.npz
+                        timestep_2390.npz
+                        timestep_1470.npz
+                        timestep_4520.npz
+                        timestep_910.npz
+                        timestep_2810.npz
+                        timestep_1510.npz
+                        timestep_680.npz
+                        timestep_870.npz
+                        timestep_4440.npz
+                        timestep_2970.npz
+                        timestep_2780.npz
+                        timestep_1060.npz
+                        timestep_4130.npz
+                        timestep_3850.npz
+                        timestep_2580.npz
+                        timestep_4640.npz
+                        timestep_1710.npz
+                        timestep_480.npz
+                        timestep_10.npz
+                        timestep_4330.npz
+                        timestep_1260.npz
+                        timestep_2190.npz
+                        timestep_4250.npz
+                        timestep_1300.npz
+                        timestep_1880.npz
+                        timestep_4720.npz
+                        timestep_1670.npz
+                        timestep_3700.npz
+                        timestep_2350.npz
+                        timestep_250.npz
+                        timestep_4090.npz
+                        timestep_3270.npz
+                        timestep_2620.npz
+                        timestep_720.npz
+                        timestep_3310.npz
+                        timestep_2740.npz
+                        timestep_640.npz
+                        timestep_4480.npz
+                        timestep_3660.npz
+                        timestep_3890.npz
+                        timestep_2230.npz
+                        timestep_330.npz
+                        timestep_320.npz
+                        timestep_3670.npz
+                        timestep_3880.npz
+                        timestep_2220.npz
+                        timestep_650.npz
+                        timestep_4490.npz
+                        timestep_3300.npz
+                        timestep_2750.npz
+                        timestep_730.npz
+                        timestep_3260.npz
+                        timestep_2630.npz
+                        timestep_240.npz
+                        timestep_4080.npz
+                        timestep_3710.npz
+                        timestep_2340.npz
+                        timestep_1890.npz
+                        timestep_4730.npz
+                        timestep_1660.npz
+                        timestep_4240.npz
+                        timestep_1310.npz
+                        timestep_2180.npz
+                        timestep_4320.npz
+                        timestep_1270.npz
+                        timestep_4650.npz
+                        timestep_1700.npz
+                        timestep_490.npz
+                        timestep_2590.npz
+                        timestep_3840.npz
+                        timestep_1070.npz
+                        timestep_4120.npz
+                        timestep_2960.npz
+                        timestep_2790.npz
+                        timestep_1500.npz
+                        timestep_690.npz
+                        timestep_860.npz
+                        timestep_4450.npz
+                        timestep_2800.npz
+                        timestep_1460.npz
+                        timestep_4530.npz
+                        timestep_900.npz
+                        timestep_3920.npz
+                        timestep_2380.npz
+                        timestep_1110.npz
+                        timestep_280.npz
+                        timestep_4040.npz
+                        timestep_2430.npz
+                        timestep_3060.npz
+                        timestep_1850.npz
+                        timestep_4900.npz
+                        timestep_530.npz
+                        timestep_2140.npz
+                        timestep_3510.npz
+                        timestep_4280.npz
+                        timestep_2020.npz
+                        timestep_3470.npz
+                        timestep_120.npz
+                        timestep_2550.npz
+                        timestep_3100.npz
+                        timestep_1930.npz
+                        timestep_4690.npz
+                        timestep_450.npz
+                        timestep_4860.npz
+                        timestep_1980.npz
+                        timestep_4620.npz
+                        timestep_1770.npz
+                        timestep_2090.npz
+                        timestep_70.npz
+                        timestep_4350.npz
+                        timestep_190.npz
+                        timestep_1200.npz
+                        timestep_4230.npz
+                        timestep_1360.npz
+                        timestep_2480.npz
+                        timestep_4740.npz
+                        timestep_580.npz
+                        timestep_1610.npz
+                        timestep_3760.npz
+                        timestep_2330.npz
+                        timestep_4999.npz
+                        timestep_3990.npz
+                        timestep_230.npz
+                        timestep_3210.npz
+                        timestep_2640.npz
+                        timestep_740.npz
+                        timestep_4580.npz
+                        timestep_3370.npz
+                        timestep_2720.npz
+                        timestep_620.npz
+                        timestep_3600.npz
+                        timestep_2250.npz
+                        timestep_350.npz
+                        timestep_4190.npz
+                        timestep_1940.npz
+                        timestep_420.npz
+                        timestep_4810.npz
+                        timestep_2520.npz
+                        timestep_3170.npz
+                        timestep_4390.npz
+                        timestep_150.npz
+                        timestep_2050.npz
+                        timestep_3400.npz
+                        timestep_2130.npz
+                        timestep_3560.npz
+                        timestep_1820.npz
+                        timestep_4780.npz
+                        timestep_4970.npz
+                        timestep_540.npz
+                        timestep_2440.npz
+                        timestep_3010.npz
+                        timestep_1160.npz
+                        timestep_4030.npz
+                        timestep_3950.npz
+                        timestep_780.npz
+                        timestep_1410.npz
+                        timestep_4540.npz
+                        timestep_970.npz
+                        timestep_2870.npz
+                        timestep_2680.npz
+                        timestep_1570.npz
+                        timestep_810.npz
+                        timestep_4420.npz
+                        timestep_2910.npz
+                        timestep_390.npz
+                        timestep_1000.npz
+                        timestep_4150.npz
+                        timestep_2290.npz
+                        timestep_3830.npz
+                        timestep_2280.npz
+                        timestep_3820.npz
+                        timestep_380.npz
+                        timestep_1010.npz
+                        timestep_4140.npz
+                        timestep_2900.npz
+                        timestep_1560.npz
+                        timestep_800.npz
+                        timestep_4430.npz
+                        timestep_2860.npz
+                        timestep_2690.npz
+                        timestep_790.npz
+                        timestep_1400.npz
+                        timestep_4550.npz
+                        timestep_960.npz
+                        timestep_3940.npz
+                        timestep_1170.npz
+                        timestep_4020.npz
+                        timestep_2450.npz
+                        timestep_3000.npz
+                        timestep_1830.npz
+                        timestep_4790.npz
+                        timestep_4960.npz
+                        timestep_550.npz
+                        timestep_2120.npz
+                        timestep_3570.npz
+                        timestep_2040.npz
+                        timestep_3410.npz
+                        timestep_4380.npz
+                        timestep_140.npz
+                        timestep_2530.npz
+                        timestep_3160.npz
+                        timestep_1950.npz
+                        timestep_430.npz
+                        timestep_4800.npz
+                        timestep_340.npz
+                        timestep_4180.npz
+                        timestep_3610.npz
+                        timestep_2240.npz
+                        timestep_630.npz
+                        timestep_3360.npz
+                        timestep_2730.npz
+                        timestep_750.npz
+                        timestep_4590.npz
+                        timestep_3200.npz
+                        timestep_2650.npz
+                        timestep_220.npz
+                        timestep_3770.npz
+                        timestep_2320.npz
+                        timestep_3980.npz
+                        timestep_4750.npz
+                        timestep_590.npz
+                        timestep_1600.npz
+                        timestep_2490.npz
+                        timestep_4220.npz
+                        timestep_1370.npz
+                        timestep_4340.npz
+                        timestep_180.npz
+                        timestep_1210.npz
+                        timestep_2080.npz
+                        timestep_60.npz
+                        timestep_1990.npz
+                        timestep_4630.npz
+                        timestep_1760.npz
+                        timestep_370.npz
+                        timestep_2270.npz
+                        timestep_3620.npz
+                        timestep_600.npz
+                        timestep_1590.npz
+                        timestep_2700.npz
+                        timestep_3350.npz
+                        timestep_990.npz
+                        timestep_760.npz
+                        timestep_2660.npz
+                        timestep_2890.npz
+                        timestep_3230.npz
+                        timestep_0.npz
+                        timestep_210.npz
+                        timestep_1180.npz
+                        timestep_2310.npz
+                        timestep_3740.npz
+                        timestep_4990.npz
+                        timestep_1630.npz
+                        timestep_4760.npz
+                        timestep_1340.npz
+                        timestep_4210.npz
+                        timestep_3580.npz
+                        timestep_1220.npz
+                        timestep_4370.npz
+                        timestep_50.npz
+                        timestep_1750.npz
+                        timestep_4600.npz
+                        timestep_3190.npz
+                        timestep_3810.npz
+                        timestep_4170.npz
+                        timestep_1020.npz
+                        timestep_2930.npz
+                        timestep_3390.npz
+                        timestep_830.npz
+                        timestep_4400.npz
+                        timestep_1550.npz
+                        timestep_2850.npz
+                        timestep_4560.npz
+                        timestep_950.npz
+                        timestep_1430.npz
+                        timestep_3970.npz
+                        timestep_3780.npz
+                        timestep_4010.npz
+                        timestep_1140.npz
+                        timestep_3030.npz
+                        timestep_2460.npz
+                        timestep_4950.npz
+                        timestep_560.npz
+                        timestep_1800.npz
+                        timestep_3540.npz
+                        timestep_2110.npz
+                        timestep_1380.npz
+                        timestep_3420.npz
+                        timestep_2070.npz
+                        timestep_90.npz
+                        timestep_170.npz
+                        timestep_3150.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_4830.npz
+                        timestep_1790.npz
+                        timestep_1960.npz
+                        timestep_410.npz
+                        timestep_4820.npz
+                        timestep_1780.npz
+                        timestep_1970.npz
+                        timestep_3140.npz
+                        timestep_2510.npz
+                        timestep_160.npz
+                        timestep_3430.npz
+                        timestep_2060.npz
+                        timestep_80.npz
+                        timestep_1390.npz
+                        timestep_3550.npz
+                        timestep_2100.npz
+                        timestep_4940.npz
+                        timestep_570.npz
+                        timestep_1810.npz
+                        timestep_3020.npz
+                        timestep_2470.npz
+                        timestep_4000.npz
+                        timestep_1150.npz
+                        timestep_3960.npz
+                        timestep_3790.npz
+                        timestep_4570.npz
+                        timestep_940.npz
+                        timestep_1420.npz
+                        timestep_2840.npz
+                        timestep_820.npz
+                        timestep_4410.npz
+                        timestep_1540.npz
+                        timestep_2920.npz
+                        timestep_3380.npz
+                        timestep_4160.npz
+                        timestep_1030.npz
+                        timestep_3800.npz
+                        timestep_3180.npz
+                        timestep_1740.npz
+                        timestep_4610.npz
+                        timestep_40.npz
+                        timestep_1230.npz
+                        timestep_4360.npz
+                        timestep_3590.npz
+                        timestep_1350.npz
+                        timestep_4200.npz
+                        timestep_4980.npz
+                        timestep_1620.npz
+                        timestep_4770.npz
+                        timestep_2300.npz
+                        timestep_3750.npz
+                        timestep_200.npz
+                        timestep_1190.npz
+                        timestep_2670.npz
+                        timestep_2880.npz
+                        timestep_3220.npz
+                        timestep_980.npz
+                        timestep_770.npz
+                        timestep_2710.npz
+                        timestep_3340.npz
+                        timestep_610.npz
+                        timestep_1580.npz
+                        timestep_2260.npz
+                        timestep_3630.npz
+                        timestep_360.npz
+                        timestep_3870.npz
+                        timestep_3680.npz
+                        timestep_4110.npz
+                        timestep_1040.npz
+                        timestep_2950.npz
+                        timestep_850.npz
+                        timestep_4460.npz
+                        timestep_1530.npz
+                        timestep_3290.npz
+                        timestep_2830.npz
+                        timestep_4500.npz
+                        timestep_930.npz
+                        timestep_1450.npz
+                        timestep_3910.npz
+                        timestep_4070.npz
+                        timestep_1120.npz
+                        timestep_3050.npz
+                        timestep_2400.npz
+                        timestep_4930.npz
+                        timestep_1690.npz
+                        timestep_500.npz
+                        timestep_1860.npz
+                        timestep_3520.npz
+                        timestep_2170.npz
+                        timestep_3440.npz
+                        timestep_2010.npz
+                        timestep_1280.npz
+                        timestep_110.npz
+                        timestep_3130.npz
+                        timestep_2560.npz
+                        timestep_460.npz
+                        timestep_4850.npz
+                        timestep_1900.npz
+                        timestep_1080.npz
+                        timestep_310.npz
+                        timestep_2210.npz
+                        timestep_3640.npz
+                        timestep_890.npz
+                        timestep_660.npz
+                        timestep_2760.npz
+                        timestep_3330.npz
+                        timestep_2990.npz
+                        timestep_1490.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_3250.npz
+                        timestep_270.npz
+                        timestep_2370.npz
+                        timestep_3720.npz
+                        timestep_1650.npz
+                        timestep_4700.npz
+                        timestep_3090.npz
+                        timestep_1320.npz
+                        timestep_4270.npz
+                        timestep_1240.npz
+                        timestep_4310.npz
+                        timestep_3480.npz
+                        timestep_30.npz
+                        timestep_4890.npz
+                        timestep_1730.npz
+                        timestep_4660.npz
+                        timestep_4880.npz
+                        timestep_1720.npz
+                        timestep_4670.npz
+                        timestep_3490.npz
+                        timestep_20.npz
+                        timestep_1250.npz
+                        timestep_4300.npz
+                        timestep_1330.npz
+                        timestep_4260.npz
+                        timestep_3080.npz
+                        timestep_1640.npz
+                        timestep_4710.npz
+                        timestep_2360.npz
+                        timestep_3730.npz
+                        timestep_260.npz
+                        timestep_2610.npz
+                        timestep_3240.npz
+                        timestep_1480.npz
+                        timestep_710.npz
+                        timestep_2770.npz
+                        timestep_3320.npz
+                        timestep_2980.npz
+                        timestep_880.npz
+                        timestep_670.npz
+                        timestep_2200.npz
+                        timestep_3650.npz
+                        timestep_1090.npz
+                        timestep_300.npz
+                        timestep_470.npz
+                        timestep_4840.npz
+                        timestep_1910.npz
+                        timestep_3120.npz
+                        timestep_2570.npz
+                        timestep_1290.npz
+                        timestep_100.npz
+                        timestep_3450.npz
+                        timestep_2000.npz
+                        timestep_3530.npz
+                        timestep_2160.npz
+                        timestep_4920.npz
+                        timestep_1680.npz
+                        timestep_510.npz
+                        timestep_1870.npz
+                        timestep_3040.npz
+                        timestep_2410.npz
+                        timestep_4060.npz
+                        timestep_1130.npz
+                        timestep_3900.npz
+                        timestep_4510.npz
+                        timestep_920.npz
+                        timestep_1440.npz
+                        timestep_3280.npz
+                        timestep_2820.npz
+                        timestep_840.npz
+                        timestep_4470.npz
+                        timestep_1520.npz
+                        timestep_2940.npz
+                        timestep_4100.npz
+                        timestep_1050.npz
+                        timestep_3860.npz
+                        timestep_3690.npz
+                    plots/
+                        timestep_2030.png
+                        timestep_3460.png
+                        timestep_130.png
+                        timestep_2540.png
+                        timestep_3110.png
+                        timestep_1920.png
+                        timestep_4680.png
+                        timestep_4870.png
+                        timestep_440.png
+                        timestep_2420.png
+                        timestep_3070.png
+                        timestep_1840.png
+                        timestep_520.png
+                        timestep_4910.png
+                        timestep_2150.png
+                        timestep_3500.png
+                        timestep_4290.png
+                        timestep_2810.png
+                        timestep_1470.png
+                        timestep_910.png
+                        timestep_4520.png
+                        timestep_2390.png
+                        timestep_3930.png
+                        timestep_290.png
+                        timestep_1100.png
+                        timestep_4050.png
+                        timestep_3850.png
+                        timestep_1060.png
+                        timestep_4130.png
+                        timestep_2970.png
+                        timestep_2780.png
+                        timestep_680.png
+                        timestep_1510.png
+                        timestep_4440.png
+                        timestep_870.png
+                        timestep_4330.png
+                        timestep_1260.png
+                        timestep_10.png
+                        timestep_4640.png
+                        timestep_480.png
+                        timestep_1710.png
+                        timestep_2580.png
+                        timestep_1880.png
+                        timestep_4720.png
+                        timestep_1670.png
+                        timestep_4250.png
+                        timestep_1300.png
+                        timestep_2190.png
+                        timestep_720.png
+                        timestep_3270.png
+                        timestep_2620.png
+                        timestep_250.png
+                        timestep_4090.png
+                        timestep_3700.png
+                        timestep_2350.png
+                        timestep_330.png
+                        timestep_3660.png
+                        timestep_2230.png
+                        timestep_3890.png
+                        timestep_640.png
+                        timestep_4480.png
+                        timestep_3310.png
+                        timestep_2740.png
+                        timestep_3300.png
+                        timestep_2750.png
+                        timestep_650.png
+                        timestep_4490.png
+                        timestep_3670.png
+                        timestep_2220.png
+                        timestep_3880.png
+                        timestep_320.png
+                        timestep_3710.png
+                        timestep_2340.png
+                        timestep_240.png
+                        timestep_4080.png
+                        timestep_3260.png
+                        timestep_2630.png
+                        timestep_730.png
+                        timestep_2180.png
+                        timestep_4240.png
+                        timestep_1310.png
+                        timestep_1890.png
+                        timestep_4730.png
+                        timestep_1660.png
+                        timestep_2590.png
+                        timestep_4650.png
+                        timestep_490.png
+                        timestep_1700.png
+                        timestep_4320.png
+                        timestep_1270.png
+                        timestep_690.png
+                        timestep_1500.png
+                        timestep_4450.png
+                        timestep_860.png
+                        timestep_2960.png
+                        timestep_2790.png
+                        timestep_1070.png
+                        timestep_4120.png
+                        timestep_3840.png
+                        timestep_280.png
+                        timestep_1110.png
+                        timestep_4040.png
+                        timestep_2380.png
+                        timestep_3920.png
+                        timestep_1460.png
+                        timestep_900.png
+                        timestep_4530.png
+                        timestep_2800.png
+                        timestep_4280.png
+                        timestep_2140.png
+                        timestep_3510.png
+                        timestep_1850.png
+                        timestep_530.png
+                        timestep_4900.png
+                        timestep_2430.png
+                        timestep_3060.png
+                        timestep_1930.png
+                        timestep_4690.png
+                        timestep_4860.png
+                        timestep_450.png
+                        timestep_2550.png
+                        timestep_3100.png
+                        timestep_120.png
+                        timestep_2020.png
+                        timestep_3470.png
+                        timestep_4350.png
+                        timestep_1200.png
+                        timestep_190.png
+                        timestep_2090.png
+                        timestep_70.png
+                        timestep_1980.png
+                        timestep_4620.png
+                        timestep_1770.png
+                        timestep_4740.png
+                        timestep_1610.png
+                        timestep_580.png
+                        timestep_2480.png
+                        timestep_4230.png
+                        timestep_1360.png
+                        timestep_740.png
+                        timestep_4580.png
+                        timestep_3210.png
+                        timestep_2640.png
+                        timestep_230.png
+                        timestep_3760.png
+                        timestep_3990.png
+                        timestep_2330.png
+                        timestep_4999.png
+                        timestep_350.png
+                        timestep_4190.png
+                        timestep_3600.png
+                        timestep_2250.png
+                        timestep_620.png
+                        timestep_3370.png
+                        timestep_2720.png
+                        timestep_2050.png
+                        timestep_3400.png
+                        timestep_4390.png
+                        timestep_150.png
+                        timestep_2520.png
+                        timestep_3170.png
+                        timestep_1940.png
+                        timestep_4810.png
+                        timestep_420.png
+                        timestep_2440.png
+                        timestep_3010.png
+                        timestep_1820.png
+                        timestep_4780.png
+                        timestep_540.png
+                        timestep_4970.png
+                        timestep_2130.png
+                        timestep_3560.png
+                        timestep_2870.png
+                        timestep_2680.png
+                        timestep_1410.png
+                        timestep_780.png
+                        timestep_970.png
+                        timestep_4540.png
+                        timestep_3950.png
+                        timestep_1160.png
+                        timestep_4030.png
+                        timestep_3830.png
+                        timestep_2290.png
+                        timestep_1000.png
+                        timestep_390.png
+                        timestep_4150.png
+                        timestep_2910.png
+                        timestep_1570.png
+                        timestep_4420.png
+                        timestep_810.png
+                        timestep_1560.png
+                        timestep_4430.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1010.png
+                        timestep_380.png
+                        timestep_4140.png
+                        timestep_3820.png
+                        timestep_2280.png
+                        timestep_1170.png
+                        timestep_4020.png
+                        timestep_3940.png
+                        timestep_1400.png
+                        timestep_790.png
+                        timestep_960.png
+                        timestep_4550.png
+                        timestep_2860.png
+                        timestep_2690.png
+                        timestep_2120.png
+                        timestep_3570.png
+                        timestep_1830.png
+                        timestep_4790.png
+                        timestep_550.png
+                        timestep_4960.png
+                        timestep_2450.png
+                        timestep_3000.png
+                        timestep_1950.png
+                        timestep_4800.png
+                        timestep_430.png
+                        timestep_2530.png
+                        timestep_3160.png
+                        timestep_4380.png
+                        timestep_140.png
+                        timestep_2040.png
+                        timestep_3410.png
+                        timestep_3360.png
+                        timestep_2730.png
+                        timestep_630.png
+                        timestep_3610.png
+                        timestep_2240.png
+                        timestep_340.png
+                        timestep_4180.png
+                        timestep_3770.png
+                        timestep_3980.png
+                        timestep_2320.png
+                        timestep_220.png
+                        timestep_3200.png
+                        timestep_2650.png
+                        timestep_750.png
+                        timestep_4590.png
+                        timestep_4220.png
+                        timestep_1370.png
+                        timestep_2490.png
+                        timestep_4750.png
+                        timestep_1600.png
+                        timestep_590.png
+                        timestep_1990.png
+                        timestep_4630.png
+                        timestep_1760.png
+                        timestep_2080.png
+                        timestep_60.png
+                        timestep_4340.png
+                        timestep_1210.png
+                        timestep_180.png
+                        timestep_2700.png
+                        timestep_3350.png
+                        timestep_1590.png
+                        timestep_600.png
+                        timestep_2270.png
+                        timestep_3620.png
+                        timestep_370.png
+                        timestep_2310.png
+                        timestep_3740.png
+                        timestep_0.png
+                        timestep_1180.png
+                        timestep_210.png
+                        timestep_2660.png
+                        timestep_3230.png
+                        timestep_2890.png
+                        timestep_990.png
+                        timestep_760.png
+                        timestep_3580.png
+                        timestep_1340.png
+                        timestep_4210.png
+                        timestep_4990.png
+                        timestep_1630.png
+                        timestep_4760.png
+                        timestep_3190.png
+                        timestep_1750.png
+                        timestep_4600.png
+                        timestep_50.png
+                        timestep_1220.png
+                        timestep_4370.png
+                        timestep_4400.png
+                        timestep_830.png
+                        timestep_1550.png
+                        timestep_3390.png
+                        timestep_2930.png
+                        timestep_4170.png
+                        timestep_1020.png
+                        timestep_3810.png
+                        timestep_4010.png
+                        timestep_1140.png
+                        timestep_3970.png
+                        timestep_3780.png
+                        timestep_950.png
+                        timestep_4560.png
+                        timestep_1430.png
+                        timestep_2850.png
+                        timestep_1380.png
+                        timestep_3540.png
+                        timestep_2110.png
+                        timestep_560.png
+                        timestep_4950.png
+                        timestep_1800.png
+                        timestep_3030.png
+                        timestep_2460.png
+                        timestep_4830.png
+                        timestep_1790.png
+                        timestep_400.png
+                        timestep_1960.png
+                        timestep_3150.png
+                        timestep_2500.png
+                        timestep_170.png
+                        timestep_3420.png
+                        timestep_2070.png
+                        timestep_90.png
+                        timestep_3430.png
+                        timestep_2060.png
+                        timestep_80.png
+                        timestep_160.png
+                        timestep_3140.png
+                        timestep_2510.png
+                        timestep_4820.png
+                        timestep_1780.png
+                        timestep_410.png
+                        timestep_1970.png
+                        timestep_3020.png
+                        timestep_2470.png
+                        timestep_570.png
+                        timestep_4940.png
+                        timestep_1810.png
+                        timestep_3550.png
+                        timestep_2100.png
+                        timestep_1390.png
+                        timestep_2840.png
+                        timestep_940.png
+                        timestep_4570.png
+                        timestep_1420.png
+                        timestep_3960.png
+                        timestep_3790.png
+                        timestep_4000.png
+                        timestep_1150.png
+                        timestep_3800.png
+                        timestep_4160.png
+                        timestep_1030.png
+                        timestep_3380.png
+                        timestep_2920.png
+                        timestep_4410.png
+                        timestep_820.png
+                        timestep_1540.png
+                        timestep_1230.png
+                        timestep_4360.png
+                        timestep_40.png
+                        timestep_1740.png
+                        timestep_4610.png
+                        timestep_3180.png
+                        timestep_4980.png
+                        timestep_1620.png
+                        timestep_4770.png
+                        timestep_1350.png
+                        timestep_4200.png
+                        timestep_3590.png
+                        timestep_980.png
+                        timestep_770.png
+                        timestep_2670.png
+                        timestep_3220.png
+                        timestep_2880.png
+                        timestep_1190.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_3750.png
+                        timestep_360.png
+                        timestep_2260.png
+                        timestep_3630.png
+                        timestep_1580.png
+                        timestep_610.png
+                        timestep_2710.png
+                        timestep_3340.png
+                        timestep_4460.png
+                        timestep_850.png
+                        timestep_1530.png
+                        timestep_2950.png
+                        timestep_4110.png
+                        timestep_1040.png
+                        timestep_3870.png
+                        timestep_3680.png
+                        timestep_4070.png
+                        timestep_1120.png
+                        timestep_3910.png
+                        timestep_930.png
+                        timestep_4500.png
+                        timestep_1450.png
+                        timestep_2830.png
+                        timestep_3290.png
+                        timestep_3520.png
+                        timestep_2170.png
+                        timestep_500.png
+                        timestep_4930.png
+                        timestep_1690.png
+                        timestep_1860.png
+                        timestep_3050.png
+                        timestep_2400.png
+                        timestep_4850.png
+                        timestep_460.png
+                        timestep_1900.png
+                        timestep_3130.png
+                        timestep_2560.png
+                        timestep_110.png
+                        timestep_1280.png
+                        timestep_3440.png
+                        timestep_2010.png
+                        timestep_2760.png
+                        timestep_2990.png
+                        timestep_3330.png
+                        timestep_890.png
+                        timestep_660.png
+                        timestep_2210.png
+                        timestep_3640.png
+                        timestep_310.png
+                        timestep_1080.png
+                        timestep_2370.png
+                        timestep_3720.png
+                        timestep_270.png
+                        timestep_2600.png
+                        timestep_3250.png
+                        timestep_700.png
+                        timestep_1490.png
+                        timestep_1320.png
+                        timestep_4270.png
+                        timestep_3090.png
+                        timestep_1650.png
+                        timestep_4700.png
+                        timestep_4890.png
+                        timestep_1730.png
+                        timestep_4660.png
+                        timestep_3480.png
+                        timestep_30.png
+                        timestep_1240.png
+                        timestep_4310.png
+                        timestep_1250.png
+                        timestep_4300.png
+                        timestep_3490.png
+                        timestep_20.png
+                        timestep_4880.png
+                        timestep_1720.png
+                        timestep_4670.png
+                        timestep_1640.png
+                        timestep_4710.png
+                        timestep_3080.png
+                        timestep_1330.png
+                        timestep_4260.png
+                        timestep_710.png
+                        timestep_1480.png
+                        timestep_2610.png
+                        timestep_3240.png
+                        timestep_260.png
+                        timestep_2360.png
+                        timestep_3730.png
+                        timestep_300.png
+                        timestep_1090.png
+                        timestep_2200.png
+                        timestep_3650.png
+                        timestep_880.png
+                        timestep_670.png
+                        timestep_2770.png
+                        timestep_2980.png
+                        timestep_3320.png
+                        timestep_3450.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_1290.png
+                        timestep_3120.png
+                        timestep_2570.png
+                        timestep_4840.png
+                        timestep_470.png
+                        timestep_1910.png
+                        timestep_3040.png
+                        timestep_2410.png
+                        timestep_510.png
+                        timestep_4920.png
+                        timestep_1680.png
+                        timestep_1870.png
+                        timestep_3530.png
+                        timestep_2160.png
+                        timestep_2820.png
+                        timestep_3280.png
+                        timestep_920.png
+                        timestep_4510.png
+                        timestep_1440.png
+                        timestep_3900.png
+                        timestep_4060.png
+                        timestep_1130.png
+                        timestep_3860.png
+                        timestep_3690.png
+                        timestep_4100.png
+                        timestep_1050.png
+                        timestep_2940.png
+                        timestep_4470.png
+                        timestep_840.png
+                        timestep_1520.png
+                15-01-32/
+                    config.json
+                    data/
+                14-51-11/
+                    config.json
+                    data/
+                13-59-09/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                14-14-42/
+                    config.json
+                    data/
+                        timestep_1920.npz
+                        timestep_4680.npz
+                        timestep_440.npz
+                        timestep_4870.npz
+                        timestep_2540.npz
+                        timestep_3110.npz
+                        timestep_130.npz
+                        timestep_2030.npz
+                        timestep_3460.npz
+                        timestep_4290.npz
+                        timestep_2150.npz
+                        timestep_3500.npz
+                        timestep_1840.npz
+                        timestep_4910.npz
+                        timestep_520.npz
+                        timestep_2420.npz
+                        timestep_3070.npz
+                        timestep_1100.npz
+                        timestep_290.npz
+                        timestep_4050.npz
+                        timestep_3930.npz
+                        timestep_2390.npz
+                        timestep_1470.npz
+                        timestep_4520.npz
+                        timestep_910.npz
+                        timestep_2810.npz
+                        timestep_1510.npz
+                        timestep_680.npz
+                        timestep_870.npz
+                        timestep_4440.npz
+                        timestep_2970.npz
+                        timestep_2780.npz
+                        timestep_1060.npz
+                        timestep_4130.npz
+                        timestep_3850.npz
+                        timestep_2580.npz
+                        timestep_4640.npz
+                        timestep_1710.npz
+                        timestep_480.npz
+                        timestep_10.npz
+                        timestep_4330.npz
+                        timestep_1260.npz
+                        timestep_2190.npz
+                        timestep_4250.npz
+                        timestep_1300.npz
+                        timestep_1880.npz
+                        timestep_4720.npz
+                        timestep_1670.npz
+                        timestep_3700.npz
+                        timestep_2350.npz
+                        timestep_250.npz
+                        timestep_4090.npz
+                        timestep_3270.npz
+                        timestep_2620.npz
+                        timestep_720.npz
+                        timestep_3310.npz
+                        timestep_2740.npz
+                        timestep_640.npz
+                        timestep_4480.npz
+                        timestep_3660.npz
+                        timestep_3890.npz
+                        timestep_2230.npz
+                        timestep_330.npz
+                        timestep_320.npz
+                        timestep_3670.npz
+                        timestep_3880.npz
+                        timestep_2220.npz
+                        timestep_650.npz
+                        timestep_4490.npz
+                        timestep_3300.npz
+                        timestep_2750.npz
+                        timestep_730.npz
+                        timestep_3260.npz
+                        timestep_2630.npz
+                        timestep_240.npz
+                        timestep_4080.npz
+                        timestep_3710.npz
+                        timestep_2340.npz
+                        timestep_1890.npz
+                        timestep_4730.npz
+                        timestep_1660.npz
+                        timestep_4240.npz
+                        timestep_1310.npz
+                        timestep_2180.npz
+                        timestep_4320.npz
+                        timestep_1270.npz
+                        timestep_4650.npz
+                        timestep_1700.npz
+                        timestep_490.npz
+                        timestep_2590.npz
+                        timestep_3840.npz
+                        timestep_1070.npz
+                        timestep_4120.npz
+                        timestep_2960.npz
+                        timestep_2790.npz
+                        timestep_1500.npz
+                        timestep_690.npz
+                        timestep_860.npz
+                        timestep_4450.npz
+                        timestep_2800.npz
+                        timestep_1460.npz
+                        timestep_4530.npz
+                        timestep_900.npz
+                        timestep_3920.npz
+                        timestep_2380.npz
+                        timestep_1110.npz
+                        timestep_280.npz
+                        timestep_4040.npz
+                        timestep_2430.npz
+                        timestep_3060.npz
+                        timestep_1850.npz
+                        timestep_4900.npz
+                        timestep_530.npz
+                        timestep_2140.npz
+                        timestep_3510.npz
+                        timestep_4280.npz
+                        timestep_2020.npz
+                        timestep_3470.npz
+                        timestep_120.npz
+                        timestep_2550.npz
+                        timestep_3100.npz
+                        timestep_1930.npz
+                        timestep_4690.npz
+                        timestep_450.npz
+                        timestep_4860.npz
+                        timestep_1980.npz
+                        timestep_4620.npz
+                        timestep_1770.npz
+                        timestep_2090.npz
+                        timestep_70.npz
+                        timestep_4350.npz
+                        timestep_190.npz
+                        timestep_1200.npz
+                        timestep_4230.npz
+                        timestep_1360.npz
+                        timestep_2480.npz
+                        timestep_4740.npz
+                        timestep_580.npz
+                        timestep_1610.npz
+                        timestep_3760.npz
+                        timestep_2330.npz
+                        timestep_4999.npz
+                        timestep_3990.npz
+                        timestep_230.npz
+                        timestep_3210.npz
+                        timestep_2640.npz
+                        timestep_740.npz
+                        timestep_4580.npz
+                        timestep_3370.npz
+                        timestep_2720.npz
+                        timestep_620.npz
+                        timestep_3600.npz
+                        timestep_2250.npz
+                        timestep_350.npz
+                        timestep_4190.npz
+                        timestep_1940.npz
+                        timestep_420.npz
+                        timestep_4810.npz
+                        timestep_2520.npz
+                        timestep_3170.npz
+                        timestep_4390.npz
+                        timestep_150.npz
+                        timestep_2050.npz
+                        timestep_3400.npz
+                        timestep_2130.npz
+                        timestep_3560.npz
+                        timestep_1820.npz
+                        timestep_4780.npz
+                        timestep_4970.npz
+                        timestep_540.npz
+                        timestep_2440.npz
+                        timestep_3010.npz
+                        timestep_1160.npz
+                        timestep_4030.npz
+                        timestep_3950.npz
+                        timestep_780.npz
+                        timestep_1410.npz
+                        timestep_4540.npz
+                        timestep_970.npz
+                        timestep_2870.npz
+                        timestep_2680.npz
+                        timestep_1570.npz
+                        timestep_810.npz
+                        timestep_4420.npz
+                        timestep_2910.npz
+                        timestep_390.npz
+                        timestep_1000.npz
+                        timestep_4150.npz
+                        timestep_2290.npz
+                        timestep_3830.npz
+                        timestep_2280.npz
+                        timestep_3820.npz
+                        timestep_380.npz
+                        timestep_1010.npz
+                        timestep_4140.npz
+                        timestep_2900.npz
+                        timestep_1560.npz
+                        timestep_800.npz
+                        timestep_4430.npz
+                        timestep_2860.npz
+                        timestep_2690.npz
+                        timestep_790.npz
+                        timestep_1400.npz
+                        timestep_4550.npz
+                        timestep_960.npz
+                        timestep_3940.npz
+                        timestep_1170.npz
+                        timestep_4020.npz
+                        timestep_2450.npz
+                        timestep_3000.npz
+                        timestep_1830.npz
+                        timestep_4790.npz
+                        timestep_4960.npz
+                        timestep_550.npz
+                        timestep_2120.npz
+                        timestep_3570.npz
+                        timestep_2040.npz
+                        timestep_3410.npz
+                        timestep_4380.npz
+                        timestep_140.npz
+                        timestep_2530.npz
+                        timestep_3160.npz
+                        timestep_1950.npz
+                        timestep_430.npz
+                        timestep_4800.npz
+                        timestep_340.npz
+                        timestep_4180.npz
+                        timestep_3610.npz
+                        timestep_2240.npz
+                        timestep_630.npz
+                        timestep_3360.npz
+                        timestep_2730.npz
+                        timestep_750.npz
+                        timestep_4590.npz
+                        timestep_3200.npz
+                        timestep_2650.npz
+                        timestep_220.npz
+                        timestep_3770.npz
+                        timestep_2320.npz
+                        timestep_3980.npz
+                        timestep_4750.npz
+                        timestep_590.npz
+                        timestep_1600.npz
+                        timestep_2490.npz
+                        timestep_4220.npz
+                        timestep_1370.npz
+                        timestep_4340.npz
+                        timestep_180.npz
+                        timestep_1210.npz
+                        timestep_2080.npz
+                        timestep_60.npz
+                        timestep_1990.npz
+                        timestep_4630.npz
+                        timestep_1760.npz
+                        timestep_370.npz
+                        timestep_2270.npz
+                        timestep_3620.npz
+                        timestep_600.npz
+                        timestep_1590.npz
+                        timestep_2700.npz
+                        timestep_3350.npz
+                        timestep_990.npz
+                        timestep_760.npz
+                        timestep_2660.npz
+                        timestep_2890.npz
+                        timestep_3230.npz
+                        timestep_0.npz
+                        timestep_210.npz
+                        timestep_1180.npz
+                        timestep_2310.npz
+                        timestep_3740.npz
+                        timestep_4990.npz
+                        timestep_1630.npz
+                        timestep_4760.npz
+                        timestep_1340.npz
+                        timestep_4210.npz
+                        timestep_3580.npz
+                        timestep_1220.npz
+                        timestep_4370.npz
+                        timestep_50.npz
+                        timestep_1750.npz
+                        timestep_4600.npz
+                        timestep_3190.npz
+                        timestep_3810.npz
+                        timestep_4170.npz
+                        timestep_1020.npz
+                        timestep_2930.npz
+                        timestep_3390.npz
+                        timestep_830.npz
+                        timestep_4400.npz
+                        timestep_1550.npz
+                        timestep_2850.npz
+                        timestep_4560.npz
+                        timestep_950.npz
+                        timestep_1430.npz
+                        timestep_3970.npz
+                        timestep_3780.npz
+                        timestep_4010.npz
+                        timestep_1140.npz
+                        timestep_3030.npz
+                        timestep_2460.npz
+                        timestep_4950.npz
+                        timestep_560.npz
+                        timestep_1800.npz
+                        timestep_3540.npz
+                        timestep_2110.npz
+                        timestep_1380.npz
+                        timestep_3420.npz
+                        timestep_2070.npz
+                        timestep_90.npz
+                        timestep_170.npz
+                        timestep_3150.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_4830.npz
+                        timestep_1790.npz
+                        timestep_1960.npz
+                        timestep_410.npz
+                        timestep_4820.npz
+                        timestep_1780.npz
+                        timestep_1970.npz
+                        timestep_3140.npz
+                        timestep_2510.npz
+                        timestep_160.npz
+                        timestep_3430.npz
+                        timestep_2060.npz
+                        timestep_80.npz
+                        timestep_1390.npz
+                        timestep_3550.npz
+                        timestep_2100.npz
+                        timestep_4940.npz
+                        timestep_570.npz
+                        timestep_1810.npz
+                        timestep_3020.npz
+                        timestep_2470.npz
+                        timestep_4000.npz
+                        timestep_1150.npz
+                        timestep_3960.npz
+                        timestep_3790.npz
+                        timestep_4570.npz
+                        timestep_940.npz
+                        timestep_1420.npz
+                        timestep_2840.npz
+                        timestep_820.npz
+                        timestep_4410.npz
+                        timestep_1540.npz
+                        timestep_2920.npz
+                        timestep_3380.npz
+                        timestep_4160.npz
+                        timestep_1030.npz
+                        timestep_3800.npz
+                        timestep_3180.npz
+                        timestep_1740.npz
+                        timestep_4610.npz
+                        timestep_40.npz
+                        timestep_1230.npz
+                        timestep_4360.npz
+                        timestep_3590.npz
+                        timestep_1350.npz
+                        timestep_4200.npz
+                        timestep_4980.npz
+                        timestep_1620.npz
+                        timestep_4770.npz
+                        timestep_2300.npz
+                        timestep_3750.npz
+                        timestep_200.npz
+                        timestep_1190.npz
+                        timestep_2670.npz
+                        timestep_2880.npz
+                        timestep_3220.npz
+                        timestep_980.npz
+                        timestep_770.npz
+                        timestep_2710.npz
+                        timestep_3340.npz
+                        timestep_610.npz
+                        timestep_1580.npz
+                        timestep_2260.npz
+                        timestep_3630.npz
+                        timestep_360.npz
+                        timestep_3870.npz
+                        timestep_3680.npz
+                        timestep_4110.npz
+                        timestep_1040.npz
+                        timestep_2950.npz
+                        timestep_850.npz
+                        timestep_4460.npz
+                        timestep_1530.npz
+                        timestep_3290.npz
+                        timestep_2830.npz
+                        timestep_4500.npz
+                        timestep_930.npz
+                        timestep_1450.npz
+                        timestep_3910.npz
+                        timestep_4070.npz
+                        timestep_1120.npz
+                        timestep_3050.npz
+                        timestep_2400.npz
+                        timestep_4930.npz
+                        timestep_1690.npz
+                        timestep_500.npz
+                        timestep_1860.npz
+                        timestep_3520.npz
+                        timestep_2170.npz
+                        timestep_3440.npz
+                        timestep_2010.npz
+                        timestep_1280.npz
+                        timestep_110.npz
+                        timestep_3130.npz
+                        timestep_2560.npz
+                        timestep_460.npz
+                        timestep_4850.npz
+                        timestep_1900.npz
+                        timestep_1080.npz
+                        timestep_310.npz
+                        timestep_2210.npz
+                        timestep_3640.npz
+                        timestep_890.npz
+                        timestep_660.npz
+                        timestep_2760.npz
+                        timestep_3330.npz
+                        timestep_2990.npz
+                        timestep_1490.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_3250.npz
+                        timestep_270.npz
+                        timestep_2370.npz
+                        timestep_3720.npz
+                        timestep_1650.npz
+                        timestep_4700.npz
+                        timestep_3090.npz
+                        timestep_1320.npz
+                        timestep_4270.npz
+                        timestep_1240.npz
+                        timestep_4310.npz
+                        timestep_3480.npz
+                        timestep_30.npz
+                        timestep_4890.npz
+                        timestep_1730.npz
+                        timestep_4660.npz
+                        timestep_4880.npz
+                        timestep_1720.npz
+                        timestep_4670.npz
+                        timestep_3490.npz
+                        timestep_20.npz
+                        timestep_1250.npz
+                        timestep_4300.npz
+                        timestep_1330.npz
+                        timestep_4260.npz
+                        timestep_3080.npz
+                        timestep_1640.npz
+                        timestep_4710.npz
+                        timestep_2360.npz
+                        timestep_3730.npz
+                        timestep_260.npz
+                        timestep_2610.npz
+                        timestep_3240.npz
+                        timestep_1480.npz
+                        timestep_710.npz
+                        timestep_2770.npz
+                        timestep_3320.npz
+                        timestep_2980.npz
+                        timestep_880.npz
+                        timestep_670.npz
+                        timestep_2200.npz
+                        timestep_3650.npz
+                        timestep_1090.npz
+                        timestep_300.npz
+                        timestep_470.npz
+                        timestep_4840.npz
+                        timestep_1910.npz
+                        timestep_3120.npz
+                        timestep_2570.npz
+                        timestep_1290.npz
+                        timestep_100.npz
+                        timestep_3450.npz
+                        timestep_2000.npz
+                        timestep_3530.npz
+                        timestep_2160.npz
+                        timestep_4920.npz
+                        timestep_1680.npz
+                        timestep_510.npz
+                        timestep_1870.npz
+                        timestep_3040.npz
+                        timestep_2410.npz
+                        timestep_4060.npz
+                        timestep_1130.npz
+                        timestep_3900.npz
+                        timestep_4510.npz
+                        timestep_920.npz
+                        timestep_1440.npz
+                        timestep_3280.npz
+                        timestep_2820.npz
+                        timestep_840.npz
+                        timestep_4470.npz
+                        timestep_1520.npz
+                        timestep_2940.npz
+                        timestep_4100.npz
+                        timestep_1050.npz
+                        timestep_3860.npz
+                        timestep_3690.npz
+                    plots/
+                        timestep_2030.png
+                        timestep_3460.png
+                        timestep_130.png
+                        timestep_2540.png
+                        timestep_3110.png
+                        timestep_1920.png
+                        timestep_4680.png
+                        timestep_4870.png
+                        timestep_440.png
+                        timestep_2420.png
+                        timestep_3070.png
+                        timestep_1840.png
+                        timestep_520.png
+                        timestep_4910.png
+                        timestep_2150.png
+                        timestep_3500.png
+                        timestep_4290.png
+                        timestep_2810.png
+                        timestep_1470.png
+                        timestep_910.png
+                        timestep_4520.png
+                        timestep_2390.png
+                        timestep_3930.png
+                        timestep_290.png
+                        timestep_1100.png
+                        timestep_4050.png
+                        timestep_3850.png
+                        timestep_1060.png
+                        timestep_4130.png
+                        timestep_2970.png
+                        timestep_2780.png
+                        timestep_680.png
+                        timestep_1510.png
+                        timestep_4440.png
+                        timestep_870.png
+                        timestep_4330.png
+                        timestep_1260.png
+                        timestep_10.png
+                        timestep_4640.png
+                        timestep_480.png
+                        timestep_1710.png
+                        timestep_2580.png
+                        timestep_1880.png
+                        timestep_4720.png
+                        timestep_1670.png
+                        timestep_4250.png
+                        timestep_1300.png
+                        timestep_2190.png
+                        timestep_720.png
+                        timestep_3270.png
+                        timestep_2620.png
+                        timestep_250.png
+                        timestep_4090.png
+                        timestep_3700.png
+                        timestep_2350.png
+                        timestep_330.png
+                        timestep_3660.png
+                        timestep_2230.png
+                        timestep_3890.png
+                        timestep_640.png
+                        timestep_4480.png
+                        timestep_3310.png
+                        timestep_2740.png
+                        timestep_3300.png
+                        timestep_2750.png
+                        timestep_650.png
+                        timestep_4490.png
+                        timestep_3670.png
+                        timestep_2220.png
+                        timestep_3880.png
+                        timestep_320.png
+                        timestep_3710.png
+                        timestep_2340.png
+                        timestep_240.png
+                        timestep_4080.png
+                        timestep_3260.png
+                        timestep_2630.png
+                        timestep_730.png
+                        timestep_2180.png
+                        timestep_4240.png
+                        timestep_1310.png
+                        timestep_1890.png
+                        timestep_4730.png
+                        timestep_1660.png
+                        timestep_2590.png
+                        timestep_4650.png
+                        timestep_490.png
+                        timestep_1700.png
+                        timestep_4320.png
+                        timestep_1270.png
+                        timestep_690.png
+                        timestep_1500.png
+                        timestep_4450.png
+                        timestep_860.png
+                        timestep_2960.png
+                        timestep_2790.png
+                        timestep_1070.png
+                        timestep_4120.png
+                        timestep_3840.png
+                        timestep_280.png
+                        timestep_1110.png
+                        timestep_4040.png
+                        timestep_2380.png
+                        timestep_3920.png
+                        timestep_1460.png
+                        timestep_900.png
+                        timestep_4530.png
+                        timestep_2800.png
+                        timestep_4280.png
+                        timestep_2140.png
+                        timestep_3510.png
+                        timestep_1850.png
+                        timestep_530.png
+                        timestep_4900.png
+                        timestep_2430.png
+                        timestep_3060.png
+                        timestep_1930.png
+                        timestep_4690.png
+                        timestep_4860.png
+                        timestep_450.png
+                        timestep_2550.png
+                        timestep_3100.png
+                        timestep_120.png
+                        timestep_2020.png
+                        timestep_3470.png
+                        timestep_4350.png
+                        timestep_1200.png
+                        timestep_190.png
+                        timestep_2090.png
+                        timestep_70.png
+                        timestep_1980.png
+                        timestep_4620.png
+                        timestep_1770.png
+                        timestep_4740.png
+                        timestep_1610.png
+                        timestep_580.png
+                        timestep_2480.png
+                        timestep_4230.png
+                        timestep_1360.png
+                        timestep_740.png
+                        timestep_4580.png
+                        timestep_3210.png
+                        timestep_2640.png
+                        timestep_230.png
+                        timestep_3760.png
+                        timestep_3990.png
+                        timestep_2330.png
+                        timestep_4999.png
+                        timestep_350.png
+                        timestep_4190.png
+                        timestep_3600.png
+                        timestep_2250.png
+                        timestep_620.png
+                        timestep_3370.png
+                        timestep_2720.png
+                        timestep_2050.png
+                        timestep_3400.png
+                        timestep_4390.png
+                        timestep_150.png
+                        timestep_2520.png
+                        timestep_3170.png
+                        timestep_1940.png
+                        timestep_4810.png
+                        timestep_420.png
+                        timestep_2440.png
+                        timestep_3010.png
+                        timestep_1820.png
+                        timestep_4780.png
+                        timestep_540.png
+                        timestep_4970.png
+                        timestep_2130.png
+                        timestep_3560.png
+                        timestep_2870.png
+                        timestep_2680.png
+                        timestep_1410.png
+                        timestep_780.png
+                        timestep_970.png
+                        timestep_4540.png
+                        timestep_3950.png
+                        timestep_1160.png
+                        timestep_4030.png
+                        timestep_3830.png
+                        timestep_2290.png
+                        timestep_1000.png
+                        timestep_390.png
+                        timestep_4150.png
+                        timestep_2910.png
+                        timestep_1570.png
+                        timestep_4420.png
+                        timestep_810.png
+                        timestep_1560.png
+                        timestep_4430.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1010.png
+                        timestep_380.png
+                        timestep_4140.png
+                        timestep_3820.png
+                        timestep_2280.png
+                        timestep_1170.png
+                        timestep_4020.png
+                        timestep_3940.png
+                        timestep_1400.png
+                        timestep_790.png
+                        timestep_960.png
+                        timestep_4550.png
+                        timestep_2860.png
+                        timestep_2690.png
+                        timestep_2120.png
+                        timestep_3570.png
+                        timestep_1830.png
+                        timestep_4790.png
+                        timestep_550.png
+                        timestep_4960.png
+                        timestep_2450.png
+                        timestep_3000.png
+                        timestep_1950.png
+                        timestep_4800.png
+                        timestep_430.png
+                        timestep_2530.png
+                        timestep_3160.png
+                        timestep_4380.png
+                        timestep_140.png
+                        timestep_2040.png
+                        timestep_3410.png
+                        timestep_3360.png
+                        timestep_2730.png
+                        timestep_630.png
+                        timestep_3610.png
+                        timestep_2240.png
+                        timestep_340.png
+                        timestep_4180.png
+                        timestep_3770.png
+                        timestep_3980.png
+                        timestep_2320.png
+                        timestep_220.png
+                        timestep_3200.png
+                        timestep_2650.png
+                        timestep_750.png
+                        timestep_4590.png
+                        timestep_4220.png
+                        timestep_1370.png
+                        timestep_2490.png
+                        timestep_4750.png
+                        timestep_1600.png
+                        timestep_590.png
+                        timestep_1990.png
+                        timestep_4630.png
+                        timestep_1760.png
+                        timestep_2080.png
+                        timestep_60.png
+                        timestep_4340.png
+                        timestep_1210.png
+                        timestep_180.png
+                        timestep_2700.png
+                        timestep_3350.png
+                        timestep_1590.png
+                        timestep_600.png
+                        timestep_2270.png
+                        timestep_3620.png
+                        timestep_370.png
+                        timestep_2310.png
+                        timestep_3740.png
+                        timestep_0.png
+                        timestep_1180.png
+                        timestep_210.png
+                        timestep_2660.png
+                        timestep_3230.png
+                        timestep_2890.png
+                        timestep_990.png
+                        timestep_760.png
+                        timestep_3580.png
+                        timestep_1340.png
+                        timestep_4210.png
+                        timestep_4990.png
+                        timestep_1630.png
+                        timestep_4760.png
+                        timestep_3190.png
+                        timestep_1750.png
+                        timestep_4600.png
+                        timestep_50.png
+                        timestep_1220.png
+                        timestep_4370.png
+                        timestep_4400.png
+                        timestep_830.png
+                        timestep_1550.png
+                        timestep_3390.png
+                        timestep_2930.png
+                        timestep_4170.png
+                        timestep_1020.png
+                        timestep_3810.png
+                        timestep_4010.png
+                        timestep_1140.png
+                        timestep_3970.png
+                        timestep_3780.png
+                        timestep_950.png
+                        timestep_4560.png
+                        timestep_1430.png
+                        timestep_2850.png
+                        timestep_1380.png
+                        timestep_3540.png
+                        timestep_2110.png
+                        timestep_560.png
+                        timestep_4950.png
+                        timestep_1800.png
+                        timestep_3030.png
+                        timestep_2460.png
+                        timestep_4830.png
+                        timestep_1790.png
+                        timestep_400.png
+                        timestep_1960.png
+                        timestep_3150.png
+                        timestep_2500.png
+                        timestep_170.png
+                        timestep_3420.png
+                        timestep_2070.png
+                        timestep_90.png
+                        timestep_3430.png
+                        timestep_2060.png
+                        timestep_80.png
+                        timestep_160.png
+                        timestep_3140.png
+                        timestep_2510.png
+                        timestep_4820.png
+                        timestep_1780.png
+                        timestep_410.png
+                        timestep_1970.png
+                        timestep_3020.png
+                        timestep_2470.png
+                        timestep_570.png
+                        timestep_4940.png
+                        timestep_1810.png
+                        timestep_3550.png
+                        timestep_2100.png
+                        timestep_1390.png
+                        timestep_2840.png
+                        timestep_940.png
+                        timestep_4570.png
+                        timestep_1420.png
+                        timestep_3960.png
+                        timestep_3790.png
+                        timestep_4000.png
+                        timestep_1150.png
+                        timestep_3800.png
+                        timestep_4160.png
+                        timestep_1030.png
+                        timestep_3380.png
+                        timestep_2920.png
+                        timestep_4410.png
+                        timestep_820.png
+                        timestep_1540.png
+                        timestep_1230.png
+                        timestep_4360.png
+                        timestep_40.png
+                        timestep_1740.png
+                        timestep_4610.png
+                        timestep_3180.png
+                        timestep_4980.png
+                        timestep_1620.png
+                        timestep_4770.png
+                        timestep_1350.png
+                        timestep_4200.png
+                        timestep_3590.png
+                        timestep_980.png
+                        timestep_770.png
+                        timestep_2670.png
+                        timestep_3220.png
+                        timestep_2880.png
+                        timestep_1190.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_3750.png
+                        timestep_360.png
+                        timestep_2260.png
+                        timestep_3630.png
+                        timestep_1580.png
+                        timestep_610.png
+                        timestep_2710.png
+                        timestep_3340.png
+                        timestep_4460.png
+                        timestep_850.png
+                        timestep_1530.png
+                        timestep_2950.png
+                        timestep_4110.png
+                        timestep_1040.png
+                        timestep_3870.png
+                        timestep_3680.png
+                        timestep_4070.png
+                        timestep_1120.png
+                        timestep_3910.png
+                        timestep_930.png
+                        timestep_4500.png
+                        timestep_1450.png
+                        timestep_2830.png
+                        timestep_3290.png
+                        timestep_3520.png
+                        timestep_2170.png
+                        timestep_500.png
+                        timestep_4930.png
+                        timestep_1690.png
+                        timestep_1860.png
+                        timestep_3050.png
+                        timestep_2400.png
+                        timestep_4850.png
+                        timestep_460.png
+                        timestep_1900.png
+                        timestep_3130.png
+                        timestep_2560.png
+                        timestep_110.png
+                        timestep_1280.png
+                        timestep_3440.png
+                        timestep_2010.png
+                        timestep_2760.png
+                        timestep_2990.png
+                        timestep_3330.png
+                        timestep_890.png
+                        timestep_660.png
+                        timestep_2210.png
+                        timestep_3640.png
+                        timestep_310.png
+                        timestep_1080.png
+                        timestep_2370.png
+                        timestep_3720.png
+                        timestep_270.png
+                        timestep_2600.png
+                        timestep_3250.png
+                        timestep_700.png
+                        timestep_1490.png
+                        timestep_1320.png
+                        timestep_4270.png
+                        timestep_3090.png
+                        timestep_1650.png
+                        timestep_4700.png
+                        timestep_4890.png
+                        timestep_1730.png
+                        timestep_4660.png
+                        timestep_3480.png
+                        timestep_30.png
+                        timestep_1240.png
+                        timestep_4310.png
+                        timestep_1250.png
+                        timestep_4300.png
+                        timestep_3490.png
+                        timestep_20.png
+                        timestep_4880.png
+                        timestep_1720.png
+                        timestep_4670.png
+                        timestep_1640.png
+                        timestep_4710.png
+                        timestep_3080.png
+                        timestep_1330.png
+                        timestep_4260.png
+                        timestep_710.png
+                        timestep_1480.png
+                        timestep_2610.png
+                        timestep_3240.png
+                        timestep_260.png
+                        timestep_2360.png
+                        timestep_3730.png
+                        timestep_300.png
+                        timestep_1090.png
+                        timestep_2200.png
+                        timestep_3650.png
+                        timestep_880.png
+                        timestep_670.png
+                        timestep_2770.png
+                        timestep_2980.png
+                        timestep_3320.png
+                        timestep_3450.png
+                        timestep_2000.png
+                        timestep_100.png
+                        timestep_1290.png
+                        timestep_3120.png
+                        timestep_2570.png
+                        timestep_4840.png
+                        timestep_470.png
+                        timestep_1910.png
+                        timestep_3040.png
+                        timestep_2410.png
+                        timestep_510.png
+                        timestep_4920.png
+                        timestep_1680.png
+                        timestep_1870.png
+                        timestep_3530.png
+                        timestep_2160.png
+                        timestep_2820.png
+                        timestep_3280.png
+                        timestep_920.png
+                        timestep_4510.png
+                        timestep_1440.png
+                        timestep_3900.png
+                        timestep_4060.png
+                        timestep_1130.png
+                        timestep_3860.png
+                        timestep_3690.png
+                        timestep_4100.png
+                        timestep_1050.png
+                        timestep_2940.png
+                        timestep_4470.png
+                        timestep_840.png
+                        timestep_1520.png
+                14-51-26/
+                    config.json
+                    data/
+                14-46-54/
+                    config.json
+                    data/
+                14-51-35/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                13-56-54/
+                    config.json
+                    data/
+                        timestep_1000.npz
+                        timestep_0.npz
+                15-05-10/
+                    config.json
+                    data/
+                15-05-19/
+                    config.json
+                    data/
+                        timestep_0.npz
+                        timestep_1.npz
+                14-04-35/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                14-00-02/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                14-47-24/
+                    config.json
+                    data/
+                13-57-08/
+                    config.json
+                    data/
+                        timestep_440.npz
+                        timestep_130.npz
+                        timestep_290.npz
+                        timestep_480.npz
+                        timestep_10.npz
+                        timestep_250.npz
+                        timestep_330.npz
+                        timestep_320.npz
+                        timestep_240.npz
+                        timestep_490.npz
+                        timestep_280.npz
+                        timestep_120.npz
+                        timestep_450.npz
+                        timestep_70.npz
+                        timestep_190.npz
+                        timestep_230.npz
+                        timestep_350.npz
+                        timestep_420.npz
+                        timestep_150.npz
+                        timestep_390.npz
+                        timestep_380.npz
+                        timestep_140.npz
+                        timestep_430.npz
+                        timestep_340.npz
+                        timestep_220.npz
+                        timestep_180.npz
+                        timestep_60.npz
+                        timestep_370.npz
+                        timestep_0.npz
+                        timestep_210.npz
+                        timestep_50.npz
+                        timestep_90.npz
+                        timestep_170.npz
+                        timestep_400.npz
+                        timestep_410.npz
+                        timestep_160.npz
+                        timestep_80.npz
+                        timestep_40.npz
+                        timestep_200.npz
+                        timestep_360.npz
+                        timestep_110.npz
+                        timestep_460.npz
+                        timestep_310.npz
+                        timestep_270.npz
+                        timestep_30.npz
+                        timestep_20.npz
+                        timestep_260.npz
+                        timestep_499.npz
+                        timestep_300.npz
+                        timestep_470.npz
+                        timestep_100.npz
+                    plots/
+                        timestep_10.png
+                        timestep_0.png
+                14-05-05/
                     config.json
                     data/
                         timestep_13.npz

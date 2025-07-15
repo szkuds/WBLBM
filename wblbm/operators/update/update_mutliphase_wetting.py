@@ -21,7 +21,7 @@ class UpdateMultiphaseWetting(Update):
         rho_v: float,
         bc_config: dict = None,
         force_enabled: bool = False,
-        wetting_enabled: bool = True,  # Always True for this class
+        wetting_enabled: bool = True,
     ):
         super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
         self.macroscopic = MacroscopicWetting(
@@ -55,7 +55,7 @@ class UpdateMultiphaseWetting(Update):
         if self.force_enabled and force is None:
             force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
 
-        rho, u, force_int = self.macroscopic(
+        rho, u, force_tot = self.macroscopic(
             f,
             force=force,
             phi_left=phi_left,
@@ -65,7 +65,7 @@ class UpdateMultiphaseWetting(Update):
         )
 
         feq = self.equilibrium(rho, u)
-        source = self.source_term(rho, u, force_int)
+        source = self.source_term(rho, u, force_tot)
         fcol = self.collision(f, feq, source)
         fstream = self.streaming(fcol)
         if self.boundary_condition is not None:
