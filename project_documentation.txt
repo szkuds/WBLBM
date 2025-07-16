@@ -1654,8 +1654,8 @@ wblbm/
                         force_obj=None,
                         wetting_enabled: bool = False,
                         hysteresis_params: dict = None,
-                        phi_value: float = 1.0,      # <-- Added
-                        d_rho_value: float = 0.0     # <-- Added
+                        phi_value: float = 1.0,
+                        d_rho_value: float = 0.0
                 ):
                     self.grid_shape = grid_shape
                     self.nt = nt
@@ -1844,23 +1844,17 @@ wblbm/
             
                     # Main simulation loop
                     for it in range(self.nt):
-                        force = None
+                        force_ext = None
+                        get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
                         if self.force_enabled and self.force_obj is not None:
-                            if self.wetting_enabled and self.multiphase:
-                                rho, _, _ = self.macroscopic_multiphase_wetting(f_prev)
-                            elif self.multiphase:
-                                rho, _, _ = self.macroscopic_multiphase(f_prev)
-                            else:
-                                rho, _ = self.macroscopic(f_prev)
-                            force = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
-                        elif self.force_enabled:
-                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+                            rho_ = get_rho_func(f_prev)
+                            force_ext = self.force_obj.compute_force(rho_, self.rho_l, self.rho_v)
             
                         # Apply hysteresis adjustments if enabled (compute wetting parameters dynamically)
                         if self.hysteresis is not None and self.wetting_enabled:
                             contact_angle_func = self.contact_angle.compute
                             cll_func = self.contact_line_location.compute
-                            get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
+            
                             (phi_left, phi_right, d_rho_left, d_rho_right,
                              left_step_passed, right_step_passed,
                              cah_window_left_philic, cah_window_right_philic,
@@ -1875,12 +1869,12 @@ wblbm/
                             )
                         if self.wetting_enabled:
                             f_next = self.update(
-                                f_prev, force=force, phi_left=phi_left, phi_right=phi_right,
+                                f_prev, force=force_ext, phi_left=phi_left, phi_right=phi_right,
                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right
                             )
                         else:
                             f_next = (
-                                self.update(f_prev, force=force)
+                                self.update(f_prev, force=force_ext)
                                 if self.force_enabled
                                 else self.update(f_prev)
                             )
@@ -1893,12 +1887,19 @@ wblbm/
             
                         # Save data at the specified interval
                         if it % self.save_interval == 0 or it == self.nt - 1:
-                            if self.multiphase:
+                            if self.multiphase and self.wetting_enabled:
+                                rho, u, force_tot = self.macroscopic_multiphase_wetting(f_prev)
+                                data_to_save = {
+                                    "rho": np.array(rho),
+                                    "u": np.array(u),
+                                    "force": np.array(force_tot),
+                                }
+                            elif self.multiphase:
                                 rho, u, force_tot = self.macroscopic_multiphase(f_prev)
                                 data_to_save = {
                                     "rho": np.array(rho),
                                     "u": np.array(u),
-                                    "force": np.array(force),
+                                    "force": np.array(force_tot),
                                 }
                             else:
                                 rho, u = self.macroscopic(f_prev)
@@ -3554,20 +3555,20 @@ example/
         
             # Simulation parameters
             grid_shape = (400, 200)  # nx, ny
-            tau = 0.9  # Relaxation time
+            tau = 1.2  # Relaxation time
             nt = 50  # Number of time steps
             save_interval = 1  # Save every 500 steps
-            kappa = 0.01  # Surface tension parameter
+            kappa = 0.04  # Surface tension parameter
             rho_l = 1.0  # Liquid density
             rho_v = 0.001  # Vapor density
-            interface_width = 5  # Interface width for smooth transition
+            interface_width = 10  # Interface width for smooth transition
         
             # Wetting parameters
             phi_value = 1.0  # Wetting strength parameter
             d_rho_value = 0.0  # Density adjustment parameter
         
             # Gravity setup (downward force for droplet settling)
-            force_g = 0  # Small gravity to observe wetting without rapid fall
+            force_g = 0.0000002  # Small gravity to observe wetting without rapid fall
             inclination_angle = 0  # Vertical gravity
             gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
         
@@ -16411,6 +16412,214 @@ example/
                         timestep_9999.png
                         timestep_2000.png
             2025-07-16/
+                12-20-13/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
+                12-22-59/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
                 11-23-21/
                     config.json
                     data/
@@ -16419,6 +16628,113 @@ example/
                     config.json
                     data/
                         timestep_0.npz
+                12-09-05/
+                    config.json
+                    data/
+                12-21-30/
+                    config.json
+                    data/
+                        timestep_13.npz
+                        timestep_12.npz
+                        timestep_10.npz
+                        timestep_38.npz
+                        timestep_39.npz
+                        timestep_11.npz
+                        timestep_29.npz
+                        timestep_15.npz
+                        timestep_14.npz
+                        timestep_28.npz
+                        timestep_16.npz
+                        timestep_17.npz
+                        timestep_9.npz
+                        timestep_8.npz
+                        timestep_49.npz
+                        timestep_48.npz
+                        timestep_45.npz
+                        timestep_0.npz
+                        timestep_1.npz
+                        timestep_44.npz
+                        timestep_46.npz
+                        timestep_3.npz
+                        timestep_2.npz
+                        timestep_47.npz
+                        timestep_43.npz
+                        timestep_6.npz
+                        timestep_7.npz
+                        timestep_42.npz
+                        timestep_40.npz
+                        timestep_5.npz
+                        timestep_4.npz
+                        timestep_41.npz
+                        timestep_26.npz
+                        timestep_32.npz
+                        timestep_33.npz
+                        timestep_27.npz
+                        timestep_31.npz
+                        timestep_25.npz
+                        timestep_19.npz
+                        timestep_18.npz
+                        timestep_24.npz
+                        timestep_30.npz
+                        timestep_34.npz
+                        timestep_20.npz
+                        timestep_21.npz
+                        timestep_35.npz
+                        timestep_23.npz
+                        timestep_37.npz
+                        timestep_36.npz
+                        timestep_22.npz
+                    plots/
+                        timestep_13.png
+                        timestep_12.png
+                        timestep_10.png
+                        timestep_38.png
+                        timestep_39.png
+                        timestep_11.png
+                        timestep_29.png
+                        timestep_15.png
+                        timestep_14.png
+                        timestep_28.png
+                        timestep_16.png
+                        timestep_17.png
+                        timestep_9.png
+                        timestep_8.png
+                        timestep_49.png
+                        timestep_48.png
+                        timestep_45.png
+                        timestep_0.png
+                        timestep_1.png
+                        timestep_44.png
+                        timestep_46.png
+                        timestep_3.png
+                        timestep_2.png
+                        timestep_47.png
+                        timestep_43.png
+                        timestep_6.png
+                        timestep_7.png
+                        timestep_42.png
+                        timestep_40.png
+                        timestep_5.png
+                        timestep_4.png
+                        timestep_41.png
+                        timestep_26.png
+                        timestep_32.png
+                        timestep_33.png
+                        timestep_27.png
+                        timestep_31.png
+                        timestep_25.png
+                        timestep_19.png
+                        timestep_18.png
+                        timestep_24.png
+                        timestep_30.png
+                        timestep_34.png
+                        timestep_20.png
+                        timestep_21.png
+                        timestep_35.png
+                        timestep_23.png
+                        timestep_37.png
+                        timestep_36.png
+                        timestep_22.png
                 10-36-10/
                     config.json
                     data/
@@ -16847,10 +17163,28 @@ example/
                         timestep_0.png
                         timestep_4000.png
                         timestep_2000.png
+                12-20-00/
+                    config.json
+                    data/
                 11-54-22/
                     config.json
                     data/
+                        timestep_40000.npz
+                        timestep_49999.npz
                         timestep_0.npz
+                        timestep_30000.npz
+                        timestep_20000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_40000.png
+                        timestep_49999.png
+                        timestep_0.png
+                        timestep_30000.png
+                        timestep_20000.png
+                        timestep_10000.png
+                12-19-22/
+                    config.json
+                    data/
                 10-01-50/
                     config.json
                     data/
@@ -16963,6 +17297,22 @@ example/
                         timestep_90000.npz
                         timestep_80000.npz
                         timestep_10000.npz
+                12-09-30/
+                    config.json
+                    data/
+                        timestep_40000.npz
+                        timestep_49999.npz
+                        timestep_0.npz
+                        timestep_30000.npz
+                        timestep_20000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_40000.png
+                        timestep_49999.png
+                        timestep_0.png
+                        timestep_30000.png
+                        timestep_20000.png
+                        timestep_10000.png
                 10-28-07/
                     config.json
                     data/

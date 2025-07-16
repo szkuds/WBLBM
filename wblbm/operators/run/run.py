@@ -226,7 +226,12 @@ class Run:
         # Main simulation loop
         for it in range(self.nt):
             force_ext = None
-            get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
+            if self.wetting_enabled:
+                get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
+            elif self.multiphase:
+                get_rho_func = lambda f: self.macroscopic_multiphase(f)[0]
+            else:
+                get_rho_func = lambda f: self.macroscopic(f)[0]
             if self.force_enabled and self.force_obj is not None:
                 rho_ = get_rho_func(f_prev)
                 force_ext = self.force_obj.compute_force(rho_, self.rho_l, self.rho_v)

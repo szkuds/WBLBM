@@ -14,7 +14,7 @@ class Force(ABC):
         self.force = force_array
 
     @abstractmethod
-    def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
+    def compute_force(self, rho: jnp.ndarray, rho_l: float, rho_v: float) -> jnp.ndarray:
         """
         Compute the force field based on the density field rho.
         Must return an array of shape (nx, ny, 1, d).
