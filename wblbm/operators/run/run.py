@@ -284,7 +284,7 @@ class Run:
                     }
                 else:
                     rho, u = self.macroscopic(f_prev)
-                    data_to_save = {"rho": np.array(rho), "u": np.array(u), "force_tot": np.array(force_tot)}
+                    data_to_save = {"rho": np.array(rho), "u": np.array(u)}
 
                 self.io_handler.save_data_step(it, data_to_save)
 
