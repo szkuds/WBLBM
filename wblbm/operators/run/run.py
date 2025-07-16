@@ -233,8 +233,7 @@ class Run:
                     rho, _, _ = self.macroscopic_multiphase(f_prev)
                 else:
                     rho, _ = self.macroscopic(f_prev)
-                mask: bool = rho > 0.95 * self.rho_v + 0.05 * self.rho_l
-                force = (self.force_obj.compute_force(rho)) * rho * mask
+                force = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
             elif self.force_enabled:
                 force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
 
