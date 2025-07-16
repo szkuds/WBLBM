@@ -16,19 +16,8 @@ class MacroscopicMultiphase(Macroscopic):
     Inherits from Macroscopic and adds multiphase-specific methods.
     """
 
-    def __init__(
-        self,
-        grid: Grid,
-        lattice: Lattice,
-        kappa: float,
-        interface_width: int,
-        rho_l: float,
-        rho_v: float,
-        force_enabled: bool = False,
-    ):
-        super().__init__(
-            grid, lattice, force_enabled=force_enabled
-        )  # Pass force_enabled to parent
+    def __init__(self, grid: Grid, lattice: Lattice, kappa: float, interface_width: int, rho_l: float, rho_v: float, force_enabled: bool = False):
+        super().__init__(grid, lattice, force_enabled=force_enabled)  # Pass force_enabled to parent
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
@@ -37,9 +26,7 @@ class MacroscopicMultiphase(Macroscopic):
         self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
 
     @partial(jit, static_argnums=(0,))
-    def __call__(
-        self, f: jnp.ndarray, force: jnp.ndarray = None
-    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         """
         Calculate the macroscopic density and velocity fields from the population distribution.
 
@@ -48,33 +35,33 @@ class MacroscopicMultiphase(Macroscopic):
             force (jnp.ndarray, optional): External force field, shape (nx, ny, 1, 2)
 
         Returns:
-            tuple: (rho, u, force_total)
+            tuple: (rho, u_eq, force_total)
                 rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
-                u (jnp.ndarray): Velocity field, shape (nx, ny, 1, 2)
+                u_eq (jnp.ndarray): Force-corrected velocity for equilibrium, shape (nx, ny, 1, 2)
                 force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
         """
-        rho, u = super().__call__(
-            f, force=force
-        )  # Pass force to parent for velocity adjustment
+        # Get raw macroscopic variables (no force correction)
+        rho, u = super().__call__(f, force=None)  # Pass None to avoid any correction
+
+        # Calculate interaction force
         force_int = self.force_int(rho)
-        u_updated = self.u_new(u, force_int)
-        if force is None:
-            force_total = force_int
+
+        # Total force for equilibrium calculation
+        if force is not None:
+            force_total = force + force_int
         else:
-            force_total = force_int + force
-        return rho, u_updated, force_total
+            force_total = force_int
+
+        # Correct velocity ONLY for equilibrium calculation
+        u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
+
+        return rho, u_eq, force_total
 
     @partial(jit, static_argnums=(0,))
     def eos(self, rho):
         """Equation of state - extract 2D data for computation"""
         rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
-        eos_2d = (
-            2
-            * self.beta
-            * (rho_2d - self.rho_l)
-            * (rho_2d - self.rho_v)
-            * (2 * rho_2d - self.rho_l - self.rho_v)
-        )
+        eos_2d = 2 * self.beta * (rho_2d - self.rho_l) * (rho_2d - self.rho_v) * (2 * rho_2d - self.rho_l - self.rho_v)
 
         # Convert back to 4D format
         eos_4d = jnp.zeros_like(rho)
