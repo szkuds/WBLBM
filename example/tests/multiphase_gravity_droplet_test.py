@@ -1,6 +1,6 @@
 import numpy as np
 from wblbm.operators.run.run import Run
-from wblbm.force.gravitational_force import GravityForce
+from wblbm.force.gravitational_force_subtract_rho_0 import GravityForce
 from wblbm.utils.plotting import visualise
 
 

@@ -1,5 +1,10 @@
 import numpy as np
 from wblbm import Run, GravityForce, visualise
+import jax
+
+# this line is added for debugging
+jax.config.update("jax_disable_jit", True)
+
 
 
 def test_wetting_simulation():
@@ -7,14 +12,14 @@ def test_wetting_simulation():
     print("\n=== Testing LBM Wetting Implementation ===")
 
     # Simulation parameters
-    grid_shape = (400, 200)  # nx, ny
-    tau = 1.2  # Relaxation time
-    nt = 50  # Number of time steps
-    save_interval = 1  # Save every 500 steps
+    grid_shape = (200, 100)  # nx, ny
+    tau = .99  # Relaxation time
+    nt = 100  # Number of time steps
+    save_interval = 10  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
-    interface_width = 10  # Interface width for smooth transition
+    interface_width = 5  # Interface width for smooth transition
 
     # Wetting parameters
     phi_value = 1.0  # Wetting strength parameter

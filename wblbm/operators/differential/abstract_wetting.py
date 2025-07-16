@@ -35,16 +35,8 @@ class AbstractWetting(ABC):
         return grid
 
     def _pad_grid(self, grid: jnp.ndarray, edge: str) -> jnp.ndarray:
-        # Pad according to edge orientation
-        if edge in ["bottom", "top"]:
-            grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="edge")
-            grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="wrap")
-        elif edge in ["left", "right"]:
-            grid = grid.T
-            grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="wrap")
-            grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="edge")
-            grid_padded = grid_padded.T
-        return grid_padded
+
+        return jnp.pad(grid, pad_width=1, mode="edge")
 
     def _apply_wetting_boundary(self, grid_padded: jnp.ndarray, edge: str) -> jnp.ndarray:
         # Generalize for each edge
