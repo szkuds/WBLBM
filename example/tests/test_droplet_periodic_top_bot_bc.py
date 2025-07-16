@@ -22,8 +22,8 @@ def test_multiphase_gravity_simulation():
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
     bc_config = {
-        'top': 'bounce-back',  # No-slip wall at top
-        'bottom': 'bounce-back',  # Symmetric boundary at bottom
+        'top': 'periodic',  # No-slip wall at top
+        'bottom': 'periodic',  # Symmetric boundary at bottom
         'left': 'bounce-back',  # Periodic left-right wrapping
         'right': 'bounce-back'
     }

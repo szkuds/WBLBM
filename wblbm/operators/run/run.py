@@ -117,7 +117,8 @@ class Run:
                     rho, _, _ = self.macroscopic_multiphase(f_prev)
                 else:
                     rho, _ = self.macroscopic(f_prev)
-                force = self.force_obj.compute_force(rho)
+                mask: bool = rho > 0.95 * self.rho_v + 0.05 * self.rho_l
+                force = (self.force_obj.compute_force(rho)) * rho * mask
             elif self.force_enabled:
                 force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
             f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
@@ -129,9 +130,9 @@ class Run:
             # Save data at the specified interval
             if it % self.save_interval == 0 or it == self.nt - 1:
                 if self.multiphase:
-                    rho, u, force = self.macroscopic_multiphase(f_prev)
+                    rho_, u_, force_tot_ = self.macroscopic_multiphase(f_prev)
                     data_to_save = {
-                        'rho': np.array(rho), 'u': np.array(u), 'force': np.array(force)
+                        'rho': np.array(rho_), 'u': np.array(u_), 'force': np.array(force_tot_)
                     }
                 else:
                     rho, u = self.macroscopic(f_prev)
@@ -140,67 +141,10 @@ class Run:
                 self.io_handler.save_data_step(it, data_to_save)
 
                 if verbose:
-                    avg_rho = np.mean(rho)
-                    max_u = np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2))
+                    avg_rho = np.mean(rho_)
+                    max_u = np.max(np.sqrt(u_[..., 0] ** 2 + u_[..., 1] ** 2))
                     print(f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}")
 
         if verbose:
             print("Simulation completed!")
             print(f"Results saved in: {self.io_handler.run_dir}")
-
-    def run_with_profiling(self, init_type: str = 'standard', verbose: bool = True, profile_steps: int = 100):
-        """
-        Run simulation with JAX profiling enabled for a subset of steps.
-
-        Args:
-            profile_steps (int): Number of steps to profile (should be small, e.g., 100-1000)
-        """
-        # Initialize as normal
-        if self.multiphase and init_type == 'multiphase_bubble':
-            f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
-        else:
-            f_prev = self.initialiser.initialise_standard()
-
-        if verbose:
-            print(f"Starting LBM simulation with profiling for {profile_steps} steps...")
-
-        # Warm up JAX compilation first (shorter warmup)
-        for it in range(5):
-            force = None
-            if self.force_enabled and self.force_obj is not None:
-                if self.multiphase:
-                    rho, _, _ = self.macroscopic_multiphase(f_prev)
-                else:
-                    rho, _ = self.macroscopic(f_prev)
-                force = self.force_obj.compute_force(rho)
-            elif self.force_enabled:
-                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
-            f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
-            if self.boundary_condition is not None:
-                f_next = self.boundary_condition(f_next, f_next)
-            f_prev = f_next
-
-        # Profile the actual operations
-        with JAXProfiler("./profiler_output"):
-            for it in range(profile_steps):
-                force = None
-                if self.force_enabled and self.force_obj is not None:
-                    if self.multiphase:
-                        rho, _, _ = self.macroscopic_multiphase(f_prev)
-                    else:
-                        rho, _ = self.macroscopic(f_prev)
-                    force = self.force_obj.compute_force(rho)
-                elif self.force_enabled:
-                    force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
-                f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
-                if self.boundary_condition is not None:
-                    f_next = self.boundary_condition(f_next, f_next)
-                f_prev = f_next
-                # Ensure computation completes before continuing
-                if hasattr(f_next, 'block_until_ready'):
-                    f_next.block_until_ready()
-
-                if verbose and it % 10 == 0:
-                    print(f"Profiling step {it}/{profile_steps}")
-
-        print("Profiling completed! Check ./profiler_output directory")

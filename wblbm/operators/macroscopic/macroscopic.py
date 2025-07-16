@@ -42,20 +42,14 @@ class Macroscopic:
             # Compute density
             rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
 
-            # Compute velocity
+            # Compute velocity WITHOUT force correction
             cx = self.cx.reshape((1, 1, self.q, 1))
             cy = self.cy.reshape((1, 1, self.q, 1))
             ux = jnp.sum(f * cx, axis=2, keepdims=True)
             uy = jnp.sum(f * cy, axis=2, keepdims=True)
             u = jnp.concatenate([ux, uy], axis=-1) / rho  # (nx, ny, 1, 2)
 
-            # New: Optional force update, similar to MacroscopicMultiphase
-            if self.force_enabled:
-                if force is None:
-                    # Default to zero force if not provided (or raise error if strict enforcement needed)
-                    force = jnp.zeros_like(u)
-                u = u + force / 2  # Update velocity as in multiphase class
-
+            # NO force correction here!
             return rho, u
         elif self.d == 3:
             raise NotImplementedError("Dimension larger than 2 not supported.")
