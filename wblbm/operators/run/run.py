@@ -35,8 +35,8 @@ class Run:
             force_obj=None,
             wetting_enabled: bool = False,
             hysteresis_params: dict = None,
-            phi_value: float = 1.0,      # <-- Added
-            d_rho_value: float = 0.0     # <-- Added
+            phi_value: float = 1.0,
+            d_rho_value: float = 0.0
     ):
         self.grid_shape = grid_shape
         self.nt = nt
@@ -225,23 +225,17 @@ class Run:
 
         # Main simulation loop
         for it in range(self.nt):
-            force = None
+            force_ext = None
+            get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
             if self.force_enabled and self.force_obj is not None:
-                if self.wetting_enabled and self.multiphase:
-                    rho, _, _ = self.macroscopic_multiphase_wetting(f_prev)
-                elif self.multiphase:
-                    rho, _, _ = self.macroscopic_multiphase(f_prev)
-                else:
-                    rho, _ = self.macroscopic(f_prev)
-                force = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
-            elif self.force_enabled:
-                force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+                rho_ = get_rho_func(f_prev)
+                force_ext = self.force_obj.compute_force(rho_, self.rho_l, self.rho_v)
 
             # Apply hysteresis adjustments if enabled (compute wetting parameters dynamically)
             if self.hysteresis is not None and self.wetting_enabled:
                 contact_angle_func = self.contact_angle.compute
                 cll_func = self.contact_line_location.compute
-                get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
+
                 (phi_left, phi_right, d_rho_left, d_rho_right,
                  left_step_passed, right_step_passed,
                  cah_window_left_philic, cah_window_right_philic,
@@ -256,12 +250,12 @@ class Run:
                 )
             if self.wetting_enabled:
                 f_next = self.update(
-                    f_prev, force=force, phi_left=phi_left, phi_right=phi_right,
+                    f_prev, force=force_ext, phi_left=phi_left, phi_right=phi_right,
                     d_rho_left=d_rho_left, d_rho_right=d_rho_right
                 )
             else:
                 f_next = (
-                    self.update(f_prev, force=force)
+                    self.update(f_prev, force=force_ext)
                     if self.force_enabled
                     else self.update(f_prev)
                 )
@@ -274,12 +268,19 @@ class Run:
 
             # Save data at the specified interval
             if it % self.save_interval == 0 or it == self.nt - 1:
-                if self.multiphase:
+                if self.multiphase and self.wetting_enabled:
+                    rho, u, force_tot = self.macroscopic_multiphase_wetting(f_prev)
+                    data_to_save = {
+                        "rho": np.array(rho),
+                        "u": np.array(u),
+                        "force": np.array(force_tot),
+                    }
+                elif self.multiphase:
                     rho, u, force_tot = self.macroscopic_multiphase(f_prev)
                     data_to_save = {
                         "rho": np.array(rho),
                         "u": np.array(u),
-                        "force": np.array(force),
+                        "force": np.array(force_tot),
                     }
                 else:
                     rho, u = self.macroscopic(f_prev)
