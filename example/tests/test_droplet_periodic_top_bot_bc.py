@@ -10,8 +10,8 @@ def test_multiphase_gravity_simulation():
 
     grid_shape = (200, 800)
     tau = 1.2
-    nt = 100000
-    save_interval = 1000
+    nt = 50000
+    save_interval = 10000
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -22,9 +22,9 @@ def test_multiphase_gravity_simulation():
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
     bc_config = {
-        'top': 'periodic',  # No-slip wall at top
-        'bottom': 'periodic',  # Symmetric boundary at bottom
-        'left': 'bounce-back',  # Periodic left-right wrapping
+        'top': 'periodic',
+        'bottom': 'periodic',
+        'left': 'bounce-back',
         'right': 'bounce-back'
     }
 

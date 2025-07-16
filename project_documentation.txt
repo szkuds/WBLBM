@@ -35,7 +35,27 @@ wblbm/
     __init__.py
     --- Code in __init__.py ---
     import wblbm.lattice
-    import wblbm.grid    --- End of __init__.py ---
+    import wblbm.grid
+    from wblbm.operators.update import Update, UpdateMultiphase
+    from wblbm.operators.initialise import Initialise
+    from wblbm.operators.equilibrium import Equilibrium
+    from wblbm.operators.stream import Streaming
+    from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphase
+    from wblbm.operators.differential import Gradient, Laplacian, GradientWetting, LaplacianWetting
+    from wblbm.operators.collision import Collision, SourceTerm, CollisionMultiphase
+    from wblbm.operators.boundary_condition import BoundaryCondition
+    from wblbm.operators.run import Run
+    from wblbm.force import Force, GravityForce
+    from wblbm.utils import (
+        SimulationIO,
+        visualise,
+        JAXProfiler,
+        time_function,
+        TIMING_ENABLED,
+    )
+    from wblbm.lattice.lattice import Lattice
+    from wblbm.grid.grid import Grid
+    --- End of __init__.py ---
 
     operators/
         __init__.py
@@ -43,6 +63,109 @@ wblbm/
         --- End of __init__.py ---
 
         differential/
+            gradient_wetting.py
+            --- Code in gradient_wetting.py ---
+            import jax.numpy as jnp
+            from wblbm.lattice.lattice import Lattice
+            from .abstract_wetting import AbstractWetting
+            
+            
+            class GradientWetting(AbstractWetting):
+                """
+                Calculates gradients for wetting boundary conditions.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+                    super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.c = lattice.c
+            
+                def _compute_gradient(self, neighbors: dict, nx: int, ny: int) -> jnp.ndarray:
+                    grad_ = jnp.zeros((2, nx, ny))
+                    w = self.w
+                    c = self.c
+            
+                    grad_ = grad_.at[0, :, :].set(
+                        3
+                        * (
+                            w[1] * c[0, 1] * neighbors["ipos1_j0"]
+                            + w[3] * c[0, 3] * neighbors["ineg1_j0"]
+                            + w[5] * c[0, 5] * neighbors["ipos1_jpos1"]
+                            + w[6] * c[0, 6] * neighbors["ineg1_jpos1"]
+                            + w[7] * c[0, 7] * neighbors["ineg1_jneg1"]
+                            + w[8] * c[0, 8] * neighbors["ipos1_jneg1"]
+                        )
+                    )
+            
+                    grad_ = grad_.at[1, :, :].set(
+                        3
+                        * (
+                            w[2] * c[1, 2] * neighbors["i0_jpos1"]
+                            + w[4] * c[1, 4] * neighbors["i0_jneg1"]
+                            + w[5] * c[1, 5] * neighbors["ipos1_jpos1"]
+                            + w[6] * c[1, 6] * neighbors["ineg1_jpos1"]
+                            + w[7] * c[1, 7] * neighbors["ineg1_jneg1"]
+                            + w[8] * c[1, 8] * neighbors["ipos1_jneg1"]
+                        )
+                    )
+            
+                    # Convert to 4D format: (nx, ny, 1, d)
+                    grad_4d = jnp.zeros((nx, ny, 1, 2))
+                    grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
+                    grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
+                    return grad_4d
+            
+                def gradient_chem_pot(self, grid: jnp.ndarray) -> jnp.ndarray:
+                    """
+                    Gradient for chemical potential with wetting boundary.
+                    Args:
+                        grid (jnp.ndarray): Input field, shape (nx, ny) or (nx, ny, 1, 1)
+                    Returns:
+                        jnp.ndarray: Gradient, shape (2, nx, ny)
+                    """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    neighbors = self._extract_neighbors(grid_padded)
+                    return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
+            
+                def __call__(
+                    self, grid: jnp.ndarray, phi_left, phi_right, d_rho_left, d_rho_right
+                ) -> jnp.ndarray:
+                    """
+                    Gradient for density with wetting boundary and CA masks.
+                    Args:
+                        grid (jnp.ndarray): Input field, shape (nx, ny) or (nx, ny, 1, 1)
+                        phi_left, phi_right, d_rho_left, d_rho_right: wetting parameters
+                    Returns:
+                        jnp.ndarray: Gradient, shape (2, nx, ny)
+                    """
+                    # Extract 2D data from 4D input
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(
+                        grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right
+                    )
+                    neighbors = self._extract_neighbors(grid_padded)
+                    return self._compute_gradient(neighbors, grid_2d.shape[0], grid_2d.shape[1])
+            
+                def compute(self, *args, **kwargs):
+                    return (
+                        self.__call__(*args, **kwargs)
+                        if len(args) > 1
+                        else self.gradient_chem_pot(*args, **kwargs)
+                    )
+            --- End of gradient_wetting.py ---
+
             gradient.py
             --- Code in gradient.py ---
             from functools import partial
@@ -83,7 +206,7 @@ wblbm/
                     c = self.c
             
                     grad_ = jnp.zeros((2, grid_2d.shape[0], grid_2d.shape[1]))
-                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode='wrap')
+                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode="wrap")
             
                     # Side nodes
                     grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -97,25 +220,29 @@ wblbm/
                     grid_ineg1_jneg1 = grid_padded[:-2, :-2]
                     grid_ipos1_jneg1 = grid_padded[2:, :-2]
             
-                    grad_ = grad_.at[0, :, :].set(3 *
-                                                  (w[1] * c[0, 1] * grid_ipos1_j0 +
-                                                   w[3] * c[0, 3] * grid_ineg1_j0 +
-                                                   w[5] * c[0, 5] * grid_ipos1_jpos1 +
-                                                   w[6] * c[0, 6] * grid_ineg1_jpos1 +
-                                                   w[7] * c[0, 7] * grid_ineg1_jneg1 +
-                                                   w[8] * c[0, 8] * grid_ipos1_jneg1
-                                                   )
-                                                  )
+                    grad_ = grad_.at[0, :, :].set(
+                        3
+                        * (
+                            w[1] * c[0, 1] * grid_ipos1_j0
+                            + w[3] * c[0, 3] * grid_ineg1_j0
+                            + w[5] * c[0, 5] * grid_ipos1_jpos1
+                            + w[6] * c[0, 6] * grid_ineg1_jpos1
+                            + w[7] * c[0, 7] * grid_ineg1_jneg1
+                            + w[8] * c[0, 8] * grid_ipos1_jneg1
+                        )
+                    )
             
-                    grad_ = grad_.at[1, :, :].set(3 *
-                                                  (w[2] * c[1, 2] * grid_i0_jpos1 +
-                                                   w[4] * c[1, 4] * grid_i0_jneg1 +
-                                                   w[5] * c[1, 5] * grid_ipos1_jpos1 +
-                                                   w[6] * c[1, 6] * grid_ineg1_jpos1 +
-                                                   w[7] * c[1, 7] * grid_ineg1_jneg1 +
-                                                   w[8] * c[1, 8] * grid_ipos1_jneg1
-                                                   )
-                                                  )
+                    grad_ = grad_.at[1, :, :].set(
+                        3
+                        * (
+                            w[2] * c[1, 2] * grid_i0_jpos1
+                            + w[4] * c[1, 4] * grid_i0_jneg1
+                            + w[5] * c[1, 5] * grid_ipos1_jpos1
+                            + w[6] * c[1, 6] * grid_ineg1_jpos1
+                            + w[7] * c[1, 7] * grid_ineg1_jneg1
+                            + w[8] * c[1, 8] * grid_ipos1_jneg1
+                        )
+                    )
             
                     # Convert to 4D format: (nx, ny, 1, 2)
                     grad_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 2))
@@ -127,6 +254,10 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .gradient import Gradient
+            from .laplacian import Laplacian
+            from .gradient_wetting import GradientWetting
+            from .laplacian_wetting import LaplacianWetting
             --- End of __init__.py ---
 
             laplacian.py
@@ -167,7 +298,7 @@ wblbm/
                     w = self.w
             
                     laplacian_2d = jnp.zeros_like(grid_2d)
-                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode='wrap')
+                    grid_padded = jnp.pad(grid_2d, pad_width=1, mode="wrap")
             
                     # Side nodes
                     grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -184,17 +315,19 @@ wblbm/
                     # Central node
                     grid_i0_j0 = grid_padded[1:-1, 1:-1]
             
-                    laplacian_2d = laplacian_2d.at[:, :].set(6 *
-                                                             (w[1] * (grid_ipos1_j0 - grid_i0_j0) +
-                                                              w[2] * (grid_i0_jpos1 - grid_i0_j0) +
-                                                              w[3] * (grid_ineg1_j0 - grid_i0_j0) +
-                                                              w[4] * (grid_i0_jneg1 - grid_i0_j0) +
-                                                              w[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
-                                                              w[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
-                                                              w[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
-                                                              w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
-                                                              )
-                                                             )
+                    laplacian_2d = laplacian_2d.at[:, :].set(
+                        6
+                        * (
+                            w[1] * (grid_ipos1_j0 - grid_i0_j0)
+                            + w[2] * (grid_i0_jpos1 - grid_i0_j0)
+                            + w[3] * (grid_ineg1_j0 - grid_i0_j0)
+                            + w[4] * (grid_i0_jneg1 - grid_i0_j0)
+                            + w[5] * (grid_ipos1_jpos1 - grid_i0_j0)
+                            + w[6] * (grid_ineg1_jpos1 - grid_i0_j0)
+                            + w[7] * (grid_ineg1_jneg1 - grid_i0_j0)
+                            + w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
+                        )
+                    )
             
                     # Convert to 4D format: (nx, ny, 1, 1)
                     laplacian_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 1))
@@ -203,7 +336,284 @@ wblbm/
                     return laplacian_4d
             --- End of laplacian.py ---
 
+            abstract_wetting.py
+            --- Code in abstract_wetting.py ---
+            import jax.numpy as jnp
+            from abc import ABC, abstractmethod
+            from typing import Dict
+            from wblbm.lattice.lattice import Lattice
+            
+            
+            class AbstractWetting(ABC):
+                """
+                Abstract base class for wetting boundary condition calculations.
+                Supports selectable edges via wetting_config.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, wetting_config: Dict[str, str] = None, interface_width: int = 4):
+                    self.w = lattice.w
+                    self.interface_width = interface_width
+                    self.c = getattr(lattice, "c", None)
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+                    self.wetting_config = wetting_config or {"bottom": "wetting"}
+                    valid_edges = ["top", "bottom", "left", "right"]
+                    valid_types = ["wetting"]
+                    for edge, wc_type in self.wetting_config.items():
+                        if edge not in valid_edges:
+                            raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
+                        if wc_type not in valid_types:
+                            raise ValueError(f"Invalid wetting type: {wc_type}. Must be one of {valid_types}.")
+            
+                def apply_wetting(self, grid: jnp.ndarray, phi_left, phi_right, d_rho_left, d_rho_right) -> jnp.ndarray:
+                    """
+                    Apply wetting boundary conditions to all configured edges.
+                    """
+                    for edge, wc_type in self.wetting_config.items():
+                        if wc_type == "wetting":
+                            grid = self._apply_wetting_to_edge(grid, edge, phi_left, phi_right, d_rho_left, d_rho_right)
+                    return grid
+            
+                def _pad_grid(self, grid: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    # Pad according to edge orientation
+                    if edge in ["bottom", "top"]:
+                        grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="edge")
+                        grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="wrap")
+                    elif edge in ["left", "right"]:
+                        grid = grid.T
+                        grid_padded = jnp.pad(grid, pad_width=((0, 0), (1, 1)), mode="wrap")
+                        grid_padded = jnp.pad(grid_padded, pad_width=((1, 1), (0, 0)), mode="edge")
+                        grid_padded = grid_padded.T
+                    return grid_padded
+            
+                def _apply_wetting_boundary(self, grid_padded: jnp.ndarray, edge: str) -> jnp.ndarray:
+                    # Generalize for each edge
+                    if edge == "bottom":
+                        grid_padded = grid_padded.at[1:-1, 0].set(
+                            (1/3 * grid_padded[1:-1, 1] + 1/12 * grid_padded[0:-2, 1] + 1/12 * grid_padded[2:, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, 0].set(
+                            (1/3 * grid_padded[0, 1] + 1/12 * grid_padded[-1, 1] + 1/12 * grid_padded[1, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, 0].set(
+                            (1/3 * grid_padded[-1, 1] + 1/12 * grid_padded[0, 1] + 1/12 * grid_padded[-2, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "top":
+                        grid_padded = grid_padded.at[1:-1, -1].set(
+                            (1/3 * grid_padded[1:-1, -2] + 1/12 * grid_padded[0:-2, -2] + 1/12 * grid_padded[2:, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, -1].set(
+                            (1/3 * grid_padded[0, -2] + 1/12 * grid_padded[-1, -2] + 1/12 * grid_padded[1, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, -1].set(
+                            (1/3 * grid_padded[-1, -2] + 1/12 * grid_padded[0, -2] + 1/12 * grid_padded[-2, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "left":
+                        grid_padded = grid_padded.at[0, 1:-1].set(
+                            (1/3 * grid_padded[1, 1:-1] + 1/12 * grid_padded[1, 0:-2] + 1/12 * grid_padded[1, 2:]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, 0].set(
+                            (1/3 * grid_padded[1, 0] + 1/12 * grid_padded[1, -1] + 1/12 * grid_padded[1, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[0, -1].set(
+                            (1/3 * grid_padded[1, -1] + 1/12 * grid_padded[1, 0] + 1/12 * grid_padded[1, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    elif edge == "right":
+                        grid_padded = grid_padded.at[-1, 1:-1].set(
+                            (1/3 * grid_padded[-2, 1:-1] + 1/12 * grid_padded[-2, 0:-2] + 1/12 * grid_padded[-2, 2:]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, 0].set(
+                            (1/3 * grid_padded[-2, 0] + 1/12 * grid_padded[-2, -1] + 1/12 * grid_padded[-2, 1]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                        grid_padded = grid_padded.at[-1, -1].set(
+                            (1/3 * grid_padded[-2, -1] + 1/12 * grid_padded[-2, 0] + 1/12 * grid_padded[-2, -2]) /
+                            (1/3 + 1/12 + 1/12)
+                        )
+                    return grid_padded
+            
+                def _apply_wetting_mask(
+                    self, grid_padded: jnp.ndarray, edge: str, phi_left, phi_right, d_rho_left, d_rho_right
+                ) -> jnp.ndarray:
+                    rho_l = self.rho_l
+                    rho_v = self.rho_v
+                    # Select boundary slice based on edge
+                    if edge == "bottom":
+                        boundary_slice = grid_padded[1:-1, 0]
+                    elif edge == "top":
+                        boundary_slice = grid_padded[1:-1, -1]
+                    elif edge == "left":
+                        boundary_slice = grid_padded[0, 1:-1]
+                    elif edge == "right":
+                        boundary_slice = grid_padded[-1, 1:-1]
+                    else:
+                        raise ValueError(f"Unknown edge: {edge}")
+            
+                    # --- Fix: If any wetting parameter is None, skip mask logic and return grid_padded unchanged ---
+                    if (
+                        phi_left is None or phi_right is None
+                        or d_rho_left is None or d_rho_right is None
+                    ):
+                        return grid_padded
+            
+                    mask1 = boundary_slice < (0.95 * rho_l + 0.05 * rho_v)
+                    mask2 = boundary_slice > (0.95 * rho_v + 0.05 * rho_l)
+                    mask_final = mask1 * mask2
+            
+                    mask1_int = jnp.array(mask1, dtype=int)
+                    diff_mask1 = jnp.diff(mask1_int)
+            
+                    # --- Fix: use self.interface_width instead of self.w ---
+                    transition_index_left_mask1 = (
+                        jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + 2 * self.interface_width
+                    )
+                    transition_index_right_mask1 = jnp.where(diff_mask1 == 1, size=1, fill_value=0)[
+                        0
+                    ] - (2 * self.interface_width + 1)
+            
+                    indices = jnp.arange(mask_final.shape[0])
+                    mask_cover_left = jnp.where(
+                        indices >= transition_index_right_mask1[0], False, mask_final
+                    )
+                    mask_cover_right = jnp.where(
+                        indices <= transition_index_left_mask1[0], False, mask_final
+                    )
+            
+                    new_values_left = jnp.minimum(
+                        jnp.maximum(
+                            (phi_left * boundary_slice) - d_rho_left,
+                            0.95 * rho_v + 0.05 * rho_l,
+                        ),
+                        0.95 * rho_l + 0.05 * rho_v,
+                    )
+            
+                    new_values_right = jnp.minimum(
+                        jnp.maximum(
+                            (phi_right * boundary_slice) - d_rho_right,
+                            0.95 * rho_v + 0.05 * rho_l,
+                        ),
+                        0.95 * rho_l + 0.05 * rho_v,
+                    )
+            
+                    updated_slice = jnp.where(
+                        mask_cover_left, new_values_left, boundary_slice
+                    )
+                    updated_slice = jnp.where(mask_cover_right, new_values_right, updated_slice)
+            
+                    # Set back to grid_padded
+                    if edge == "bottom":
+                        grid_padded = grid_padded.at[1:-1, 0].set(updated_slice)
+                    elif edge == "top":
+                        grid_padded = grid_padded.at[1:-1, -1].set(updated_slice)
+                    elif edge == "left":
+                        grid_padded = grid_padded.at[0, 1:-1].set(updated_slice)
+                    elif edge == "right":
+                        grid_padded = grid_padded.at[-1, 1:-1].set(updated_slice)
+                    return grid_padded
+            
+                def _apply_wetting_to_edge(self, grid: jnp.ndarray, edge: str, phi_left, phi_right, d_rho_left, d_rho_right) -> jnp.ndarray:
+                    grid_padded = self._pad_grid(grid, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right)
+                    # Unflip if needed
+                    if edge == "top":
+                        grid_padded = jnp.flip(grid_padded, axis=1)
+                    elif edge == "right":
+                        grid_padded = jnp.flip(grid_padded, axis=0)
+                    # Unpad
+                    grid = grid_padded[1:-1, 1:-1]
+                    return grid
+            
+                def _extract_neighbors(self, grid_padded: jnp.ndarray) -> dict:
+                    """
+                    Extract neighbor slices for finite difference stencils.
+                    """
+                    return {
+                        "ineg1_j0": grid_padded[:-2, 1:-1],
+                        "ipos1_j0": grid_padded[2:, 1:-1],
+                        "i0_jneg1": grid_padded[1:-1, :-2],
+                        "i0_jpos1": grid_padded[1:-1, 2:],
+                        "ipos1_jpos1": grid_padded[2:, 2:],
+                        "ineg1_jpos1": grid_padded[:-2, 2:],
+                        "ineg1_jneg1": grid_padded[:-2, :-2],
+                        "ipos1_jneg1": grid_padded[2:, :-2],
+                        "i0_j0": grid_padded[1:-1, 1:-1],
+                    }
+            
+                @abstractmethod
+                def compute(self, *args, **kwargs):
+                    pass
+            --- End of abstract_wetting.py ---
+
+            laplacian_wetting.py
+            --- Code in laplacian_wetting.py ---
+            import jax.numpy as jnp
+            from wblbm.lattice.lattice import Lattice
+            from .abstract_wetting import AbstractWetting
+            
+            
+            class LaplacianWetting(AbstractWetting):
+                """
+                Callable class to calculate the Laplacian of a 2D grid with wetting boundary conditions.
+                """
+            
+                def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+                    super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
+            
+                def __call__(self, grid, phi_left, phi_right, d_rho_left, d_rho_right):
+                    if grid.ndim == 4:
+                        grid_2d = grid[:, :, 0, 0]
+                    else:
+                        grid_2d = grid
+            
+                    edge = "bottom"
+                    grid_padded = self._pad_grid(grid_2d, edge)
+                    grid_padded = self._apply_wetting_boundary(grid_padded, edge)
+                    grid_padded = self._apply_wetting_mask(
+                        grid_padded, edge, phi_left, phi_right, d_rho_left, d_rho_right
+                    )
+            
+                    w = self.w
+                    neighbors = self._extract_neighbors(grid_padded)
+            
+                    laplacian_2d = jnp.zeros_like(grid_2d)
+                    laplacian_2d = laplacian_2d.at[:, :].set(
+                        6
+                        * (
+                            w[1] * (neighbors["ipos1_j0"] - neighbors["i0_j0"])
+                            + w[2] * (neighbors["i0_jpos1"] - neighbors["i0_j0"])
+                            + w[3] * (neighbors["ineg1_j0"] - neighbors["i0_j0"])
+                            + w[4] * (neighbors["i0_jneg1"] - neighbors["i0_j0"])
+                            + w[5] * (neighbors["ipos1_jpos1"] - neighbors["i0_j0"])
+                            + w[6] * (neighbors["ineg1_jpos1"] - neighbors["i0_j0"])
+                            + w[7] * (neighbors["ineg1_jneg1"] - neighbors["i0_j0"])
+                            + w[8] * (neighbors["ipos1_jneg1"] - neighbors["i0_j0"])
+                        )
+                    )
+            
+                    # Convert to 4D format: (nx, ny, 1, 1)
+                    laplacian_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 1))
+                    laplacian_4d = laplacian_4d.at[:, :, 0, 0].set(laplacian_2d)
+                    return laplacian_4d
+            
+                def compute(self, *args, **kwargs):
+                    return self.__call__(*args, **kwargs)
+            --- End of laplacian_wetting.py ---
+
             __pycache__/
+                abstract_wetting.cpython-312.pyc
+                gradient_wetting.cpython-312.pyc
+                laplacian_wetting.cpython-312.pyc
                 laplacian.cpython-312.pyc
                 gradient.cpython-312.pyc
                 __init__.cpython-312.pyc
@@ -227,7 +637,9 @@ wblbm/
                 Calculates the macroscopic density and velocity fields from the population distribution.
                 """
             
-                def __init__(self, grid: Grid, lattice: Lattice, force_enabled: bool = False) -> None:
+                def __init__(
+                    self, grid: Grid, lattice: Lattice, force_enabled: bool = False
+                ) -> None:
                     self.nx: int = grid.nx
                     self.ny: int = grid.ny
                     self.q: int = lattice.q
@@ -239,7 +651,9 @@ wblbm/
             
                 @time_function(enable_timing=TIMING_ENABLED)
                 @partial(jit, static_argnums=(0,))
-                def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None) -> Tuple[jnp.ndarray, jnp.ndarray]:
+                def __call__(
+                    self, f: jnp.ndarray, force: jnp.ndarray = None
+                ) -> Tuple[jnp.ndarray, jnp.ndarray]:
                     """
                     Args:
                         f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
@@ -264,10 +678,13 @@ wblbm/
                         # NO force correction here!
                         return rho, u
                     elif self.d == 3:
-                        raise NotImplementedError("Dimension larger than 2 not supported.")            --- End of macroscopic.py ---
+                        raise NotImplementedError("Dimension larger than 2 not supported.")
+            --- End of macroscopic.py ---
 
             __init__.py
             --- Code in __init__.py ---
+            from .macroscopic import Macroscopic
+            from .macroscopic_multiphase import MacroscopicMultiphase
             --- End of __init__.py ---
 
             macroscopic_multiphase.py
@@ -369,8 +786,133 @@ wblbm/
                     return u + force / 2
             --- End of macroscopic_multiphase.py ---
 
+            macroscopic_multiphase_wetting.py
+            --- Code in macroscopic_multiphase_wetting.py ---
+            from functools import partial
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.lattice import Lattice
+            from wblbm.operators.macroscopic.macroscopic import Macroscopic
+            from wblbm.operators.differential.gradient_wetting import GradientWetting
+            from wblbm.operators.differential.laplacian_wetting import LaplacianWetting
+            
+            class MacroscopicWetting(Macroscopic):
+                """
+                Calculates macroscopic variables for wetting-aware multiphase simulations.
+                Uses wetting-specific differential operators for gradient and Laplacian.
+                """
+            
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    force_enabled: bool = False,
+                    wetting_enabled: bool = False,  # Flag to enable wetting-specific operators
+                ):
+                    super().__init__(
+                        grid, lattice, force_enabled
+                    )
+                    self.kappa = kappa
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+                    self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
+                    self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+                    self.wetting_enabled = wetting_enabled
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self,
+                    f: jnp.ndarray,
+                    force: jnp.ndarray = None,
+                    phi_left: jnp.ndarray = None,
+                    phi_right: jnp.ndarray = None,
+                    d_rho_left: jnp.ndarray = None,
+                    d_rho_right: jnp.ndarray = None,
+                ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+                    rho, u = super().__call__(f, force=force)
+                    force_int = self.force_int(rho, phi_left, phi_right, d_rho_left, d_rho_right)
+                    u_updated = self.u_new(u, force_int)
+                    if force is None:
+                        force_total = force_int
+                    else:
+                        force_total = force_int + force
+                    return rho, u_updated, force_total
+            
+                @partial(jit, static_argnums=(0,))
+                def chem_pot(
+                    self,
+                    rho,
+                    phi_left=None,
+                    phi_right=None,
+                    d_rho_left=None,
+                    d_rho_right=None,
+                ):
+                    mu_0 = self.eos(rho)
+                    if self.wetting_enabled:
+                        chem_pot__ = mu_0 - self.kappa * self.laplacian(
+                            rho, phi_left, phi_right, d_rho_left, d_rho_right
+                        )
+                    else:
+                        raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+                    return chem_pot__
+            
+                @partial(jit, static_argnums=(0,))
+                def force_int(
+                    self,
+                    rho,
+                    phi_left=None,
+                    phi_right=None,
+                    d_rho_left=None,
+                    d_rho_right=None,
+                ):
+                    if self.wetting_enabled:
+                        grad_chem_pot = self.gradient(
+                            self.chem_pot(rho, phi_left, phi_right, d_rho_left, d_rho_right),
+                            phi_left,
+                            phi_right,
+                            d_rho_left,
+                            d_rho_right,
+                        )
+                    else:
+                        raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+                    return -rho * grad_chem_pot
+            
+                @partial(jit, static_argnums=(0,))
+                def u_new(self, u, force):
+                    """
+                    Update velocity with interaction force.
+                    """
+                    # Both u and force have shape (nx, ny, 1, 2)
+                    return u + force / 2
+            
+                @partial(jit, static_argnums=(0,))
+                def eos(self, rho):
+                    """Equation of state - extract 2D data for computation"""
+                    rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    eos_2d = (
+                            2
+                            * self.beta
+                            * (rho_2d - self.rho_l)
+                            * (rho_2d - self.rho_v)
+                            * (2 * rho_2d - self.rho_l - self.rho_v)
+                    )
+            
+                    # Convert back to 4D format
+                    eos_4d = jnp.zeros_like(rho)
+                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+                    return eos_4d
+            --- End of macroscopic_multiphase_wetting.py ---
+
             __pycache__/
                 macroscopic_multiphase.cpython-312.pyc
+                macroscopic_multiphase_wetting.cpython-312.pyc
                 __init__.cpython-312.pyc
                 macroscopic.cpython-312.pyc
         update/
@@ -385,7 +927,7 @@ wblbm/
             from wblbm.lattice import Lattice
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             from wblbm.operators.collision import Collision, SourceTerm
-            from wblbm.operators.equilibrium.equilibirum import Equilibrium
+            from wblbm.operators.equilibrium.equilibrium import Equilibrium
             from wblbm.operators.macroscopic.macroscopic import Macroscopic
             from wblbm.operators.stream import Streaming
             from wblbm.utils.timing import time_function, TIMING_ENABLED
@@ -393,12 +935,12 @@ wblbm/
             
             class Update(object):
                 def __init__(
-                        self,
-                        grid: Grid,
-                        lattice: Lattice,
-                        tau: float,
-                        bc_config: dict = None,
-                        force_enabled: bool = False
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    tau: float,
+                    bc_config: dict = None,
+                    force_enabled: bool = False,
                 ):
                     self.grid = grid
                     self.lattice = lattice
@@ -420,8 +962,14 @@ wblbm/
                     # If force_enabled and no force provided, use a simple constant force for testing
                     if self.force_enabled and force is None:
                         # Example: uniform force in x-direction
-                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
-                    rho, u = self.macroscopic(f, force=force) if self.force_enabled else self.macroscopic(f)
+                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
+                            [0.01, 0.0]
+                        )
+                    rho, u = (
+                        self.macroscopic(f, force=force)
+                        if self.force_enabled
+                        else self.macroscopic(f)
+                    )
                     feq = self.equilibrium(rho, u)
                     fcol = self.collision(f, feq)
                     fstream = self.streaming(fcol)
@@ -432,7 +980,86 @@ wblbm/
 
             __init__.py
             --- Code in __init__.py ---
+            from .update import Update
+            from .update_multiphase import UpdateMultiphase
             --- End of __init__.py ---
+
+            update_mutliphase_wetting.py
+            --- Code in update_mutliphase_wetting.py ---
+            from functools import partial
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.lattice import Lattice
+            from wblbm.operators.collision.collision_multiphase import CollisionMultiphase
+            from wblbm.operators.update.update import Update
+            from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
+            from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
+            
+            class UpdateMultiphaseWetting(Update):
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    tau: float,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    bc_config: dict = None,
+                    force_enabled: bool = False,
+                    wetting_enabled: bool = True,
+                ):
+                    super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
+                    self.macroscopic = MacroscopicWetting(
+                        grid,
+                        lattice,
+                        kappa,
+                        interface_width,
+                        rho_l,
+                        rho_v,
+                        force_enabled=force_enabled,
+                        wetting_enabled=wetting_enabled,
+                    )
+                    self.collision = CollisionMultiphase(grid, lattice, tau)
+                    if bc_config is not None:
+                        self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
+                    else:
+                        self.boundary_condition = None
+                    self.force_enabled = force_enabled
+                    self.wetting_enabled = wetting_enabled
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self,
+                    f: jnp.array,
+                    force: jnp.ndarray = None,
+                    phi_left: jnp.ndarray = None,
+                    phi_right: jnp.ndarray = None,
+                    d_rho_left: jnp.ndarray = None,
+                    d_rho_right: jnp.ndarray = None,
+                ):
+                    if self.force_enabled and force is None:
+                        force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+            
+                    rho, u, force_tot = self.macroscopic(
+                        f,
+                        force=force,
+                        phi_left=phi_left,
+                        phi_right=phi_right,
+                        d_rho_left=d_rho_left,
+                        d_rho_right=d_rho_right,
+                    )
+            
+                    feq = self.equilibrium(rho, u)
+                    source = self.source_term(rho, u, force_tot)
+                    fcol = self.collision(f, feq, source)
+                    fstream = self.streaming(fcol)
+                    if self.boundary_condition is not None:
+                        fstream = self.boundary_condition(fstream, fcol)
+                    return fstream
+            --- End of update_mutliphase_wetting.py ---
 
             update_multiphase.py
             --- Code in update_multiphase.py ---
@@ -493,6 +1120,7 @@ wblbm/
             __pycache__/
                 update_multiphase.cpython-312.pyc
                 update.cpython-312.pyc
+                update_mutliphase_wetting.cpython-312.pyc
                 __init__.cpython-312.pyc
         stream/
             __init__.py
@@ -530,8 +1158,9 @@ wblbm/
                     for i in range(self.q):
                         f = f.at[:, :, i, 0].set(
                             jnp.roll(
-                                jnp.roll(f[:, :, i, 0], self.c[0, i], axis=0),
-                                self.c[1, i], axis=1))
+                                jnp.roll(f[:, :, i, 0], self.c[0, i], axis=0), self.c[1, i], axis=1
+                            )
+                        )
                     return f
             --- End of stream.py ---
 
@@ -541,6 +1170,7 @@ wblbm/
         initialise/
             __init__.py
             --- Code in __init__.py ---
+            from .init import Initialise
             --- End of __init__.py ---
 
             init.py
@@ -549,7 +1179,7 @@ wblbm/
             import numpy as np
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
-            from wblbm.operators.equilibrium.equilibirum import Equilibrium
+            from wblbm.operators.equilibrium.equilibrium import Equilibrium
             
             
             class Initialise:
@@ -564,7 +1194,9 @@ wblbm/
                     self.q = self.lattice.q
                     self.equilibrium = Equilibrium(self.grid, self.lattice)
             
-                def initialise_standard(self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])):
+                def initialise_standard(
+                    self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])
+                ):
                     """
                     Initialises a standard simulation with uniform density and velocity.
             
@@ -579,14 +1211,15 @@ wblbm/
                     rho = jnp.full((self.nx, self.ny, 1, 1), density)
             
                     u = jnp.broadcast_to(
-                        jnp.array(velocity).reshape(1, 1, 1, 2),
-                        (self.nx, self.ny, 1, 2)
+                        jnp.array(velocity).reshape(1, 1, 1, 2), (self.nx, self.ny, 1, 2)
                     )
             
                     # Return the equilibrium distribution for this state
                     return self.equilibrium(rho, u)
             
-                def initialise_multiphase_droplet(self, rho_l: float, rho_v: float, interface_width: int):
+                def initialise_multiphase_droplet(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
                     """
                     Initialises a multiphase simulation with a low-density bubble in the center.
             
@@ -598,13 +1231,15 @@ wblbm/
                         jnp.ndarray: Initialised population distribution f.
                     """
                     # Create a density field with a bubble in the center
-                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing='ij')
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
                     center_x, center_y = self.nx // 2, self.ny // 2
                     radius = min(self.nx, self.ny) // 4
             
                     # Use tanh for a smooth, stable interface
                     distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
-                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh((distance - radius) / interface_width)
+                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+                        (distance - radius) / interface_width
+                    )
             
                     # Reshape to 4D
                     rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
@@ -615,7 +1250,9 @@ wblbm/
                     # Return the equilibrium distribution
                     return self.equilibrium(rho, u)
             
-                def initialise_multiphase_bubble(self, rho_l: float, rho_v: float, interface_width: int):
+                def initialise_multiphase_bubble(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
                     """
                     Initialises a multiphase simulation with a low-density bubble in the center.
             
@@ -627,13 +1264,15 @@ wblbm/
                         jnp.ndarray: Initialised population distribution f.
                     """
                     # Create a density field with a bubble in the center
-                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing='ij')
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
                     center_x, center_y = self.nx // 2, self.ny // 2
                     radius = min(self.nx, self.ny) // 4
             
                     # Use tanh for a smooth, stable interface
                     distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
-                    rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh((distance - radius) / interface_width)
+                    rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        (distance - radius) / interface_width
+                    )
             
                     # Reshape to 4D
                     rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
@@ -642,6 +1281,88 @@ wblbm/
                     u = jnp.zeros((self.nx, self.ny, 1, 2))
             
                     # Return the equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
+                def initialise_wetting_chemical_step(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialize the simulation with a droplet wetting a solid surface.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase density.
+                        interface_width (int): Width of the interface for tanh profile.
+            
+                    Returns:
+                        jnp.ndarray: Initial distribution function.
+                    """
+                    # Radius of the droplet (adapted from user query)
+                    r = (self.ny) / 3.3
+            
+                    # Initialize velocity (zero) and density fields with correct shapes
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+                    rho = jnp.zeros((self.nx, self.ny, 1, 1))
+            
+                    # Create grid (shifted by 0.5 for cell centers)
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+            
+                    # Calculate center coordinates (droplet centered horizontally, near bottom)
+                    xc, yc = self.nx / 2, self.ny / 2
+            
+                    # Calculate distance from center (shifted to simulate wetting at bottom)
+                    distance = jnp.sqrt((x - xc / 2) ** 2 + (y) ** 2)
+            
+                    # Calculate density distribution using tanh for smooth interface
+                    rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        2 * (r - distance) / interface_width
+                    )
+            
+                    # Assign to rho (reshape to 4D)
+                    rho = rho.at[:, :, 0, 0].set(rho_2d)
+            
+                    # Return equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
+                def initialise_wetting(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialize the simulation with a droplet wetting a solid surface.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase density.
+                        interface_width (int): Width of the interface for tanh profile.
+            
+                    Returns:
+                        jnp.ndarray: Initial distribution function.
+                    """
+                    # Radius of the droplet (adapted from user query)
+                    r = (self.ny) / 3.3
+            
+                    # Initialize velocity (zero) and density fields with correct shapes
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+                    rho = jnp.zeros((self.nx, self.ny, 1, 1))
+            
+                    # Create grid (shifted by 0.5 for cell centers)
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+            
+                    # Calculate center coordinates (droplet centered horizontally, near bottom)
+                    xc, yc = self.nx / 2, self.ny / 2
+            
+                    # Calculate distance from center (shifted to simulate wetting at bottom)
+                    distance = jnp.sqrt((x - xc) ** 2 + (y) ** 2)
+            
+                    # Calculate density distribution using tanh for smooth interface
+                    rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        2 * (r - distance) / interface_width
+                    )
+            
+                    # Assign to rho (reshape to 4D)
+                    rho = rho.at[:, :, 0, 0].set(rho_2d)
+            
+                    # Return equilibrium distribution
                     return self.equilibrium(rho, u)
             --- End of init.py ---
 
@@ -661,6 +1382,7 @@ wblbm/
             from wblbm.lattice.lattice import Lattice
             from wblbm.utils.timing import time_function, TIMING_ENABLED
             
+            
             class BoundaryCondition:
                 """
                 Applies boundary conditions to the post-streaming distribution function.
@@ -674,59 +1396,75 @@ wblbm/
                     self.bc_config = bc_config
                     self.opp_indices = lattice.opp_indices
                     self.edges = grid.get_edges()
-                    valid_edges = ['top', 'bottom', 'left', 'right']
-                    valid_types = ['bounce-back', 'symmetry', 'periodic']
+                    valid_edges = ["top", "bottom", "left", "right"]
+                    valid_types = ["bounce-back", "symmetry", "periodic"]
                     for edge, bc_type in bc_config.items():
                         if edge not in valid_edges:
                             raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
                         if bc_type not in valid_types:
-                            raise ValueError(f"Invalid BC type: {bc_type}. Must be one of {valid_types}.")
+                            raise ValueError(
+                                f"Invalid BC type: {bc_type}. Must be one of {valid_types}."
+                            )
             
                 @time_function(enable_timing=TIMING_ENABLED)
                 @partial(jit, static_argnums=(0,))
-                def __call__(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray) -> jnp.ndarray:
+                def __call__(
+                    self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray
+                ) -> jnp.ndarray:
                     for edge, bc_type in self.bc_config.items():
-                        if bc_type == 'bounce-back':
+                        if bc_type == "bounce-back":
                             f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
-                        elif bc_type == 'symmetry':
+                        elif bc_type == "symmetry":
                             f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
-                        elif bc_type == 'periodic':
-                            f_streamed = self._apply_periodic(f_streamed, edge)
+                        elif bc_type == "periodic":
+                            f_streamed = self._apply_periodic(f_streamed)
                     return f_streamed
             
                 @partial(jit, static_argnums=(0, 3))
-                def _apply_bounce_back(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str) -> jnp.ndarray:
+                def _apply_bounce_back(
+                    self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str
+                ) -> jnp.ndarray:
                     lattice = self.lattice
-                    if edge == 'bottom':
+                    if edge == "bottom":
                         idx = 0
                         incoming_dirs = lattice.construct_top_indices
                         for i in incoming_dirs:
                             opp_i = self.opp_indices[i]
-                            f_streamed = f_streamed.at[:, idx, i, 0].set(f_collision[:, idx, opp_i, 0])
-                    elif edge == 'top':
+                            f_streamed = f_streamed.at[:, idx, i, 0].set(
+                                f_collision[:, idx, opp_i, 0]
+                            )
+                    elif edge == "top":
                         idx = -1
                         incoming_dirs = lattice.construct_bottom_indices
                         for i in incoming_dirs:
                             opp_i = self.opp_indices[i]
-                            f_streamed = f_streamed.at[:, idx, i, 0].set(f_collision[:, idx, opp_i, 0])
-                    elif edge == 'left':
+                            f_streamed = f_streamed.at[:, idx, i, 0].set(
+                                f_collision[:, idx, opp_i, 0]
+                            )
+                    elif edge == "left":
                         idx = 0
                         incoming_dirs = lattice.construct_right_indices
                         for i in incoming_dirs:
                             opp_i = self.opp_indices[i]
-                            f_streamed = f_streamed.at[idx, :, i, 0].set(f_collision[idx, :, opp_i, 0])
-                    elif edge == 'right':
+                            f_streamed = f_streamed.at[idx, :, i, 0].set(
+                                f_collision[idx, :, opp_i, 0]
+                            )
+                    elif edge == "right":
                         idx = -1
                         incoming_dirs = lattice.construct_left_indices
                         for i in incoming_dirs:
                             opp_i = self.opp_indices[i]
-                            f_streamed = f_streamed.at[idx, :, i, 0].set(f_collision[idx, :, opp_i, 0])
+                            f_streamed = f_streamed.at[idx, :, i, 0].set(
+                                f_collision[idx, :, opp_i, 0]
+                            )
                     return f_streamed
             
                 @partial(jit, static_argnums=(0, 3))
-                def _apply_symmetry(self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str) -> jnp.ndarray:
+                def _apply_symmetry(
+                    self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str
+                ) -> jnp.ndarray:
                     lattice = self.lattice
-                    if edge == 'bottom':
+                    if edge == "bottom":
                         idx = 0
                         top_dirs = lattice.construct_top_indices
                         bottom_dirs = lattice.construct_bottom_indices
@@ -734,51 +1472,75 @@ wblbm/
                         diag_bottom_right = lattice.construct_bottom_indices[2]
                         diag_top_left = lattice.construct_top_indices[1]
                         diag_bottom_left = lattice.construct_bottom_indices[1]
-                        f_streamed = f_streamed.at[:, idx, top_dirs[0], 0].set(f_collision[:, idx, bottom_dirs[0], 0])
-                        f_streamed = f_streamed.at[:, idx, diag_top_right, 0].set(f_collision[:, idx, diag_bottom_right, 0])
-                        f_streamed = f_streamed.at[:, idx, diag_top_left, 0].set(f_collision[:, idx, diag_bottom_left, 0])
-                    elif edge == 'top':
+                        f_streamed = f_streamed.at[:, idx, top_dirs[0], 0].set(
+                            f_collision[:, idx, bottom_dirs[0], 0]
+                        )
+                        f_streamed = f_streamed.at[:, idx, diag_top_right, 0].set(
+                            f_collision[:, idx, diag_bottom_right, 0]
+                        )
+                        f_streamed = f_streamed.at[:, idx, diag_top_left, 0].set(
+                            f_collision[:, idx, diag_bottom_left, 0]
+                        )
+                    elif edge == "top":
                         idx = -1
                         bottom_dirs = lattice.construct_bottom_indices
                         top_dirs = lattice.construct_top_indices
-                        f_streamed = f_streamed.at[:, idx, bottom_dirs[0], 0].set(f_collision[:, idx, top_dirs[0], 0])
-                        f_streamed = f_streamed.at[:, idx, bottom_dirs[1], 0].set(jnp.roll(f_collision[:, idx, top_dirs[1], 0], 1, axis=0))
-                        f_streamed = f_streamed.at[:, idx, bottom_dirs[2], 0].set(jnp.roll(f_collision[:, idx, top_dirs[2], 0], -1, axis=0))
-                    elif edge == 'left':
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[0], 0].set(
+                            f_collision[:, idx, top_dirs[0], 0]
+                        )
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[1], 0].set(
+                            jnp.roll(f_collision[:, idx, top_dirs[1], 0], 1, axis=0)
+                        )
+                        f_streamed = f_streamed.at[:, idx, bottom_dirs[2], 0].set(
+                            jnp.roll(f_collision[:, idx, top_dirs[2], 0], -1, axis=0)
+                        )
+                    elif edge == "left":
                         idx = 0
                         right_dirs = lattice.construct_right_indices
                         left_dirs = lattice.construct_left_indices
-                        f_streamed = f_streamed.at[idx, :, right_dirs[0], 0].set(f_collision[idx, :, left_dirs[0], 0])
-                        f_streamed = f_streamed.at[idx, :, right_dirs[1], 0].set(f_collision[idx, :, left_dirs[1], 0])
-                        f_streamed = f_streamed.at[idx, :, right_dirs[2], 0].set(f_collision[idx, :, left_dirs[2], 0])
-                    elif edge == 'right':
+                        f_streamed = f_streamed.at[idx, :, right_dirs[0], 0].set(
+                            f_collision[idx, :, left_dirs[0], 0]
+                        )
+                        f_streamed = f_streamed.at[idx, :, right_dirs[1], 0].set(
+                            f_collision[idx, :, left_dirs[1], 0]
+                        )
+                        f_streamed = f_streamed.at[idx, :, right_dirs[2], 0].set(
+                            f_collision[idx, :, left_dirs[2], 0]
+                        )
+                    elif edge == "right":
                         idx = -1
                         left_dirs = lattice.construct_left_indices
                         right_dirs = lattice.construct_right_indices
-                        f_streamed = f_streamed.at[idx, :, left_dirs[0], 0].set(f_collision[idx, :, right_dirs[0], 0])
-                        f_streamed = f_streamed.at[idx, :, left_dirs[1], 0].set(f_collision[idx, :, right_dirs[1], 0])
-                        f_streamed = f_streamed.at[idx, :, left_dirs[2], 0].set(f_collision[idx, :, right_dirs[2], 0])
+                        f_streamed = f_streamed.at[idx, :, left_dirs[0], 0].set(
+                            f_collision[idx, :, right_dirs[0], 0]
+                        )
+                        f_streamed = f_streamed.at[idx, :, left_dirs[1], 0].set(
+                            f_collision[idx, :, right_dirs[1], 0]
+                        )
+                        f_streamed = f_streamed.at[idx, :, left_dirs[2], 0].set(
+                            f_collision[idx, :, right_dirs[2], 0]
+                        )
                     return f_streamed
             
-                @partial(jit, static_argnums=(0, 2))
-                def _apply_periodic(self, f_streamed: jnp.ndarray, edge: str) -> jnp.ndarray:
+                @partial(jit, static_argnums=(0, ))
+                def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
+                    # For periodic boundaries, no additional transformation is needed
+                    # The streaming step already handles periodicity correctly
                     return f_streamed
+            
             --- End of boundary_condition.py ---
 
             __init__.py
             --- Code in __init__.py ---
+            from .boundary_condition import BoundaryCondition
             --- End of __init__.py ---
 
             __pycache__/
                 boundary_condition.cpython-312.pyc
                 __init__.cpython-312.pyc
         equilibrium/
-            __init__.py
-            --- Code in __init__.py ---
-            --- End of __init__.py ---
-
-            equilibirum.py
-            --- Code in equilibirum.py ---
+            equilibrium.py
+            --- Code in equilibrium.py ---
             from functools import partial
             
             import jax.numpy as jnp
@@ -836,16 +1598,21 @@ wblbm/
                         cu2 = cu * cu
                         u2 = ux * ux + uy * uy
             
-                        f_eq = f_eq.at[:, :, i, :].set(
-                            w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2)
-                        )
-                    f_eq = f_eq.at[:, :, 0, :].set(rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy))))
+                        f_eq = f_eq.at[:, :, i, :].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
+                    f_eq = f_eq.at[:, :, 0, :].set(
+                        rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy)))
+                    )
             
                     return f_eq
-            --- End of equilibirum.py ---
+            --- End of equilibrium.py ---
+
+            __init__.py
+            --- Code in __init__.py ---
+            from .equilibrium import Equilibrium
+            --- End of __init__.py ---
 
             __pycache__/
-                equilibirum.cpython-312.pyc
+                equilibrium.cpython-312.pyc
                 __init__.cpython-312.pyc
         run/
             run.py
@@ -858,8 +1625,9 @@ wblbm/
             from wblbm.operators.update.update import Update
             from wblbm.operators.update.update_multiphase import UpdateMultiphase
             from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
+            from wblbm.operators.update.update_mutliphase_wetting import UpdateMultiphaseWetting
             from wblbm.utils.io import SimulationIO
-            from wblbm.utils.profiler import JAXProfiler
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             
             
@@ -883,7 +1651,11 @@ wblbm/
                         results_dir: str = "results",
                         bc_config: dict = None,
                         force_enabled: bool = False,
-                        force_obj=None  # New parameter for force object
+                        force_obj=None,
+                        wetting_enabled: bool = False,
+                        hysteresis_params: dict = None,
+                        phi_value: float = 1.0,      # <-- Added
+                        d_rho_value: float = 0.0     # <-- Added
                 ):
                     self.grid_shape = grid_shape
                     self.nt = nt
@@ -896,6 +1668,10 @@ wblbm/
                     self.interface_width = interface_width if multiphase else None
                     self.force_enabled = force_enabled
                     self.force_obj = force_obj
+                    self.wetting_enabled = wetting_enabled
+                    self.hysteresis_params = hysteresis_params
+                    self.phi_value = phi_value
+                    self.d_rho_value = d_rho_value
             
                     # Initialize core components
                     self.grid = Grid(grid_shape)
@@ -905,42 +1681,110 @@ wblbm/
                     # Boundary condition handler
                     self.boundary_condition = None
                     if bc_config is not None:
-                        self.boundary_condition = BoundaryCondition(self.grid, self.lattice, bc_config)
+                        self.boundary_condition = BoundaryCondition(
+                            self.grid, self.lattice, bc_config
+                        )
             
                     # Select the appropriate update and macroscopic operators
-                    if multiphase:
-                        from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+                    if multiphase and not wetting_enabled:
                         self.update = UpdateMultiphase(
-                            self.grid, self.lattice, tau, kappa, interface_width, rho_l, rho_v, bc_config=bc_config, force_enabled=force_enabled
+                            self.grid,
+                            self.lattice,
+                            tau,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            bc_config=bc_config,
+                            force_enabled=force_enabled,
                         )
                         self.macroscopic_multiphase = MacroscopicMultiphase(
-                            self.grid, self.lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled  # Add this
+                            self.grid,
+                            self.lattice,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            force_enabled=force_enabled,
+                        )
+                    elif wetting_enabled and multiphase:
+                        self.update = UpdateMultiphaseWetting(
+                            self.grid,
+                            self.lattice,
+                            tau,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            bc_config=bc_config,
+                            force_enabled=force_enabled,
+                            wetting_enabled=wetting_enabled,
+                        )
+                        self.macroscopic_multiphase_wetting = MacroscopicWetting(
+                            self.grid,
+                            self.lattice,
+                            kappa,
+                            interface_width,
+                            rho_l,
+                            rho_v,
+                            force_enabled=force_enabled,
+                            wetting_enabled=wetting_enabled,
                         )
                     else:
                         from wblbm.operators.macroscopic.macroscopic import Macroscopic
-                        self.update = Update(self.grid, self.lattice, tau, bc_config=bc_config, force_enabled=force_enabled)
-                        self.macroscopic = Macroscopic(self.grid, self.lattice, force_enabled=force_enabled)
+                        self.update = Update(
+                            self.grid,
+                            self.lattice,
+                            tau,
+                            bc_config=bc_config,
+                            force_enabled=force_enabled,
+                        )
+                        self.macroscopic = Macroscopic(
+                            self.grid, self.lattice, force_enabled=force_enabled
+                        )
+            
+                    # Initialize Wetting and Hysteresis if enabled
+                    self.wetting = None
+                    self.hysteresis = None
+                    self.contact_angle = None
+                    self.contact_line_location = None
+                    if wetting_enabled and multiphase:
+                        from wblbm import GradientWetting
+                        from wblbm.operators.wetting.contact_angle import ContactAngle
+                        from wblbm.operators.wetting.contact_line_location import ContactLineLocation
+                        self.wetting = GradientWetting(self.lattice, rho_l, rho_v)
+                        rho_mean = (rho_l + rho_v) / 2
+                        self.contact_angle = ContactAngle(rho_mean)
+                        self.contact_line_location = ContactLineLocation(rho_mean)
+            
+                    if hysteresis_params is not None and wetting_enabled:
+                        from wblbm.operators.wetting.hysteresis import Hysteresis
+                        self.hysteresis = Hysteresis(**hysteresis_params)
             
                     # Prepare config dictionary for the IO handler
                     self.config = {
-                        'grid_shape': grid_shape,
-                        'lattice_type': lattice_type,
-                        'tau': tau,
-                        'nt': nt,
-                        'multiphase': multiphase,
-                        'save_interval': save_interval,
-                        'kappa': kappa if multiphase else None,
-                        'beta': self.update.macroscopic.beta if multiphase else None,
-                        'rho_l': rho_l if multiphase else None,
-                        'rho_v': rho_v if multiphase else None,
-                        'interface_width': self.interface_width,
-                        'bc_config': bc_config,
-                        'force_enabled': force_enabled,
-                        'force_obj': str(type(force_obj)) if force_obj is not None else None
+                        "grid_shape": grid_shape,
+                        "lattice_type": lattice_type,
+                        "tau": tau,
+                        "nt": nt,
+                        "multiphase": multiphase,
+                        "save_interval": save_interval,
+                        "kappa": kappa if multiphase else None,
+                        "beta": self.update.macroscopic.beta if multiphase else None,
+                        "rho_l": rho_l if multiphase else None,
+                        "rho_v": rho_v if multiphase else None,
+                        "interface_width": self.interface_width,
+                        "bc_config": bc_config,
+                        "force_enabled": force_enabled,
+                        "force_obj": str(type(force_obj)) if force_obj is not None else None,
+                        "wetting_enabled": wetting_enabled,
+                        "hysteresis_params": hysteresis_params,
+                        "phi_value": phi_value,      # <-- Added
+                        "d_rho_value": d_rho_value   # <-- Added
                     }
                     self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
             
-                def run(self, init_type: str = 'standard', verbose: bool = True):
+                def run(self, init_type: str = "standard", verbose: bool = True):
                     """
                     Main function to run the LBM simulation.
             
@@ -949,51 +1793,122 @@ wblbm/
                         verbose (bool): Whether to print progress updates to the console.
                     """
                     # Initialize the population distribution based on the simulation type
-                    if self.multiphase and init_type == 'multiphase_droplet':
-                        f_prev = self.initialiser.initialise_multiphase_droplet(self.rho_l, self.rho_v, self.interface_width)
-                    elif self.multiphase and init_type == 'multiphase_bubble':
-                        f_prev = self.initialiser.initialise_multiphase_bubble(self.rho_l, self.rho_v, self.interface_width)
+                    if self.multiphase and init_type == "multiphase_droplet":
+                        f_prev = self.initialiser.initialise_multiphase_droplet(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
+                    elif self.multiphase and init_type == "multiphase_bubble":
+                        f_prev = self.initialiser.initialise_multiphase_bubble(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
+                    elif self.multiphase and init_type == "wetting_chemical_step":
+                        f_prev = self.initialiser.initialise_wetting_chemical_step(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
+                    elif self.multiphase and init_type == "wetting":
+                        f_prev = self.initialiser.initialise_wetting(
+                            self.rho_l, self.rho_v, self.interface_width
+                        )
                     else:
                         f_prev = self.initialiser.initialise_standard()
             
+                    # Initialize wetting parameters if wetting is enabled
+                    phi_left = None
+                    phi_right = None
+                    d_rho_left = None
+                    d_rho_right = None
+                    if self.wetting_enabled:
+                        nx = self.grid.nx
+                        phi_left = jnp.ones(nx)
+                        phi_left = phi_left.at[:].set(self.phi_value)
+                        d_rho_left = jnp.zeros(nx)
+                        d_rho_left = d_rho_left.at[:].set(self.d_rho_value)
+                        phi_right = jnp.ones(nx)
+                        phi_right = phi_right.at[:].set(self.phi_value)
+                        d_rho_right = jnp.zeros(nx)
+                        d_rho_right = d_rho_right.at[:].set(self.d_rho_value)
+            
+                    # Initialize hysteresis state variables if hysteresis is enabled
+                    left_step_passed = False
+                    right_step_passed = False
+                    cah_window_left_philic = False
+                    cah_window_right_philic = False
+                    cah_window_left_phobic = False
+                    cah_window_right_phobic = False
+                    pinned_count_left = 0
+                    pinned_count_right = 0
+            
                     if verbose:
                         print(f"Starting LBM simulation with {self.nt} time steps...")
-                        print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}")
+                        print(f"Config -> Grid: {self.grid_shape}, Multiphase: {self.multiphase}, Wetting: {self.wetting_enabled}")
             
                     # Main simulation loop
                     for it in range(self.nt):
                         force = None
                         if self.force_enabled and self.force_obj is not None:
-                            # Compute force using the force object (optionally pass rho if needed)
-                            if self.multiphase:
+                            if self.wetting_enabled and self.multiphase:
+                                rho, _, _ = self.macroscopic_multiphase_wetting(f_prev)
+                            elif self.multiphase:
                                 rho, _, _ = self.macroscopic_multiphase(f_prev)
                             else:
                                 rho, _ = self.macroscopic(f_prev)
-                            force = (self.force_obj.compute_force(rho))*(rho-self.rho_v)
+                            force = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
                         elif self.force_enabled:
-                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.01, 0.0])
-                        f_next = self.update(f_prev, force=force) if self.force_enabled else self.update(f_prev)
+                            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+            
+                        # Apply hysteresis adjustments if enabled (compute wetting parameters dynamically)
+                        if self.hysteresis is not None and self.wetting_enabled:
+                            contact_angle_func = self.contact_angle.compute
+                            cll_func = self.contact_line_location.compute
+                            get_rho_func = lambda f: self.macroscopic_multiphase_wetting(f)[0]
+                            (phi_left, phi_right, d_rho_left, d_rho_right,
+                             left_step_passed, right_step_passed,
+                             cah_window_left_philic, cah_window_right_philic,
+                             cah_window_left_phobic, cah_window_right_phobic,
+                             pinned_count_left, pinned_count_right,
+                             p_m_left, p_m_right) = self.hysteresis.apply(
+                                f_prev, it, left_step_passed, right_step_passed,
+                                cah_window_left_philic, cah_window_right_philic,
+                                cah_window_left_phobic, cah_window_right_phobic,
+                                pinned_count_left, pinned_count_right,
+                                self.update, contact_angle_func, cll_func, get_rho_func
+                            )
+                        if self.wetting_enabled:
+                            f_next = self.update(
+                                f_prev, force=force, phi_left=phi_left, phi_right=phi_right,
+                                d_rho_left=d_rho_left, d_rho_right=d_rho_right
+                            )
+                        else:
+                            f_next = (
+                                self.update(f_prev, force=force)
+                                if self.force_enabled
+                                else self.update(f_prev)
+                            )
+            
                         # Apply boundary conditions if present
                         if self.boundary_condition is not None:
                             f_next = self.boundary_condition(f_next, f_next)
+            
                         f_prev = f_next
             
                         # Save data at the specified interval
                         if it % self.save_interval == 0 or it == self.nt - 1:
                             if self.multiphase:
-                                rho_, u_, force_tot_ = self.macroscopic_multiphase(f_prev)
+                                rho, u, force_tot = self.macroscopic_multiphase(f_prev)
                                 data_to_save = {
-                                    'rho': np.array(rho_), 'u': np.array(u_), 'force': np.array(force_tot_)
+                                    "rho": np.array(rho),
+                                    "u": np.array(u),
+                                    "force": np.array(force),
                                 }
                             else:
                                 rho, u = self.macroscopic(f_prev)
-                                data_to_save = {'rho': np.array(rho), 'u': np.array(u)}
+                                data_to_save = {"rho": np.array(rho), "u": np.array(u)}
             
                             self.io_handler.save_data_step(it, data_to_save)
             
                             if verbose:
-                                avg_rho = np.mean(rho_)
-                                max_u = np.max(np.sqrt(u_[..., 0] ** 2 + u_[..., 1] ** 2))
+                                avg_rho = np.mean(rho)
+                                max_u = np.max(np.sqrt(u[..., 0] ** 2 + u[..., 1] ** 2))
                                 print(f"Step {it}/{self.nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}")
             
                     if verbose:
@@ -1007,6 +1922,513 @@ wblbm/
 
             __pycache__/
                 run.cpython-312.pyc
+                __init__.cpython-312.pyc
+        wetting/
+            __init__.py
+            --- Code in __init__.py ---
+            --- End of __init__.py ---
+
+            hysteresis.py
+            --- Code in hysteresis.py ---
+            import jax.numpy as jnp
+            import logging
+            
+            
+            class Hysteresis:
+                """
+                Class to model contact angle hysteresis in wetting simulations.
+                """
+            
+                def __init__(self, advancing_ca_hydrophobic, receding_ca_hydrophobic,
+                             advancing_ca_hydrophilic, receding_ca_hydrophilic,
+                             cll_threshold, ca_threshold, change_d_rho, change_phi,
+                             while_limiter, nx, phi_val, d_rho_val, w):
+                    self.advancing_ca_hydrophobic = advancing_ca_hydrophobic
+                    self.receding_ca_hydrophobic = receding_ca_hydrophobic
+                    self.advancing_ca_hydrophilic = advancing_ca_hydrophilic
+                    self.receding_ca_hydrophilic = receding_ca_hydrophilic
+                    self.cll_threshold = cll_threshold
+                    self.ca_threshold = ca_threshold
+                    self.change_d_rho = change_d_rho
+                    self.change_phi = change_phi
+                    self.while_limiter = while_limiter
+                    self.nx = nx
+                    self.phi_val = phi_val
+                    self.d_rho_val = d_rho_val
+                    self.w = w
+            
+                def apply(self, f_prev, it, left_step_passed, right_step_passed, cah_window_left_philic,
+                          cah_window_right_philic, cah_window_left_phobic, cah_window_right_phobic,
+                          pinned_count_left, pinned_count_right, update_func, contact_angle_func, cll_func, get_rho_func):
+                    # Initialize parameters
+                    phi_left = jnp.ones(self.nx)
+                    d_rho_left = jnp.zeros(self.nx)
+                    phi_left = phi_left.at[(self.nx // 2):].set(self.phi_val)
+                    d_rho_left = d_rho_left.at[:(self.nx // 2)].set(self.d_rho_val)
+            
+                    phi_right = jnp.ones(self.nx)
+                    d_rho_right = jnp.zeros(self.nx)
+                    phi_right = phi_right.at[(self.nx // 2):].set(self.phi_val)
+                    d_rho_right = d_rho_right.at[:(self.nx // 2)].set(self.d_rho_val)
+            
+                    f_t = f_prev
+                    f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                    rho_tplus1 = get_rho_func(f_tplus1)
+                    ca_left_t, ca_right_t = contact_angle_func(rho_t)
+                    cll_left_t, cll_right_t = cll_func(rho_t, ca_left_t, ca_right_t)
+                    ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                    cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Hysteresis logic ---
+                    # Left side
+                    if ca_left_tplus1 < self.advancing_ca_hydrophilic:
+                        cah_window_left_philic = True
+                    if cll_left_tplus1 > self.nx // 2 - self.w // 2:
+                        left_step_passed = True
+                    if cll_left_tplus1 < self.nx // 2 - self.w // 2 and not left_step_passed:
+                        receding_ca_left = self.receding_ca_hydrophobic
+                        advancing_ca_left = self.advancing_ca_hydrophobic
+                        cll_threshold_left = self.cll_threshold
+                    elif ca_left_tplus1 > self.advancing_ca_hydrophilic and left_step_passed and not cah_window_left_philic:
+                        receding_ca_left = ca_left_tplus1 * (1 + 1e-7)
+                        advancing_ca_left = ca_left_tplus1
+                        cll_threshold_left = self.cll_threshold
+                    else:
+                        receding_ca_left = self.receding_ca_hydrophilic
+                        advancing_ca_left = self.advancing_ca_hydrophilic
+                        cll_threshold_left = self.cll_threshold
+            
+                    # Right side
+                    if ca_right_tplus1 < self.advancing_ca_hydrophilic:
+                        cah_window_right_philic = True
+                    if cll_right_tplus1 > self.nx // 2 - self.w // 2:
+                        right_step_passed = True
+                    if cll_right_tplus1 < self.nx // 2 - self.w // 2 and not right_step_passed:
+                        receding_ca_right = self.receding_ca_hydrophobic
+                        advancing_ca_right = self.advancing_ca_hydrophobic
+                        cll_threshold_right = self.cll_threshold
+                    elif ca_right_tplus1 > self.advancing_ca_hydrophilic and right_step_passed and not cah_window_right_philic:
+                        receding_ca_right = ca_right_tplus1
+                        advancing_ca_right = ca_right_tplus1 * (1 - 1e-7)
+                        cll_threshold_right = self.cll_threshold
+                    else:
+                        receding_ca_right = self.receding_ca_hydrophilic
+                        advancing_ca_right = self.advancing_ca_hydrophilic
+                        cll_threshold_right = self.cll_threshold
+            
+                    # --- Left logic ---
+                    p_m_left = None
+                    if cll_left_tplus1 > cll_left_t:
+                        # receding left
+                        if ca_left_tplus1 >= receding_ca_left:
+                            count = 0
+                            p_m_left = 'receding pinned'
+                            pinned_count_left += 1
+                            while True:
+                                if (1 + cll_threshold_left) * cll_left_t > cll_left_tplus1 > (1 - cll_threshold_left) * cll_left_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left receding pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left receding pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_left_tplus1 > cll_left_t:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.min(phi_left) > 1:
+                                phi_left = phi_left - self.change_phi
+                            else:
+                                d_rho_left = d_rho_left + self.change_d_rho
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_left = 'receding moving'
+                            while True:
+                                if (1 + self.ca_threshold) * receding_ca_left > ca_left_tplus1 > (1 - self.ca_threshold) * receding_ca_left:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left receding moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif jnp.min(d_rho_left) > 1:
+                                    print(f'At it= {it} min(d_rho_left) > 1, in the left receding moving while loop\n'
+                                          'This means that there is a problem, possibly the threshold values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} min(d_rho_left) > 1, in the left receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the threshold values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_left_tplus1 < receding_ca_left:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                    else:
+                        # advancing left
+                        if ca_left_tplus1 <= advancing_ca_left:
+                            count = 0
+                            p_m_left = 'advancing pinned'
+                            pinned_count_left += 1
+                            while True:
+                                if (1 + cll_threshold_left) * cll_left_t > cll_left_tplus1 > (1 - cll_threshold_left) * cll_left_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left advancing pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left advancing pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_left_tplus1 < cll_left_t:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.max(d_rho_left) > 0:
+                                d_rho_left = d_rho_left - self.change_d_rho
+                            else:
+                                phi_left = phi_left + self.change_phi
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_left = 'advancing moving'
+                            while True:
+                                if (1 + self.ca_threshold) * advancing_ca_left > ca_left_tplus1 > (1 - self.ca_threshold) * advancing_ca_left:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the left advancing moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the left advancing moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_left_tplus1 > advancing_ca_left:
+                                    if jnp.max(d_rho_left) > 0:
+                                        d_rho_left = d_rho_left - self.change_d_rho
+                                    else:
+                                        phi_left = phi_left + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_left) > 1:
+                                        phi_left = phi_left - self.change_phi
+                                    else:
+                                        d_rho_left = d_rho_left + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Right logic ---
+                    p_m_right = None
+                    if cll_right_tplus1 > cll_right_t:
+                        # advancing right
+                        if ca_right_tplus1 <= advancing_ca_right:
+                            count = 0
+                            p_m_right = 'advancing pinned'
+                            pinned_count_right += 1
+                            while True:
+                                if (1 + cll_threshold_right) * cll_right_t > cll_right_tplus1 > (1 - cll_threshold_right) * cll_right_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right advancing pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right advancing pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif cll_right_tplus1 > cll_right_t:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.max(d_rho_right) > 0:
+                                d_rho_right = d_rho_right - self.change_d_rho
+                                count += 1
+                            else:
+                                phi_right = phi_right + self.change_phi
+                                count += 1
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_right = 'advancing moving'
+                            while True:
+                                if (1 + self.ca_threshold) * advancing_ca_right > ca_right_tplus1 > (1 - self.ca_threshold) * advancing_ca_right:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right advancing moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right advancing moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_right_tplus1 > advancing_ca_right:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                else:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                    else:
+                        # receding right
+                        if ca_right_tplus1 >= receding_ca_right:
+                            count = 0
+                            p_m_right = 'receding pinned'
+                            pinned_count_right += 1
+                            while True:
+                                if (1 + cll_threshold_right) * cll_right_t > cll_right_tplus1 > (1 - cll_threshold_right) * cll_right_t:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right receding pinned while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large.')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right receding pinned while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large.')
+                                    break
+                                elif cll_right_tplus1 > cll_right_t:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                        else:
+                            if jnp.min(phi_right) > 1:
+                                phi_right = phi_right - self.change_phi
+                                count += 1
+                            else:
+                                d_rho_right = d_rho_right + self.change_d_rho
+                                count += 1
+                            f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                            rho_tplus1 = get_rho_func(f_tplus1)
+                            ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                            cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+                            count = 0
+                            p_m_right = 'receding moving'
+                            while True:
+                                if (1 + self.ca_threshold) * receding_ca_right > ca_right_tplus1 > (1 - self.ca_threshold) * receding_ca_right:
+                                    break
+                                if count > self.while_limiter:
+                                    print(f'At it= {it} count>WHILE_LIMITER, in the right receding moving while loop\n'
+                                          'This means that there is a problem, possibly the adaptation values for '
+                                          'the wetting parameters are too large')
+                                    logging.info(f'At it= {it} count>WHILE_LIMITER, in the right receding moving while loop\n'
+                                                 'This means that there is a problem, possibly the adaptation values for '
+                                                 'the wetting parameters are too large')
+                                    break
+                                elif ca_right_tplus1 < receding_ca_right:
+                                    if jnp.min(phi_right) > 1:
+                                        phi_right = phi_right - self.change_phi
+                                    else:
+                                        d_rho_right = d_rho_right + self.change_d_rho
+                                    count += 1
+                                else:
+                                    if jnp.max(d_rho_right) > 0:
+                                        d_rho_right = d_rho_right - self.change_d_rho
+                                    else:
+                                        phi_right = phi_right + self.change_phi
+                                    count += 1
+                                f_tplus1, rho_t = update_func(f_t, phi_left, phi_right, d_rho_left, d_rho_right)
+                                rho_tplus1 = get_rho_func(f_tplus1)
+                                ca_left_tplus1, ca_right_tplus1 = contact_angle_func(rho_tplus1)
+                                cll_left_tplus1, cll_right_tplus1 = cll_func(rho_tplus1, ca_left_tplus1, ca_right_tplus1)
+            
+                    # --- Pinning count logic ---
+                    if ca_left_t < receding_ca_left + 1 or ca_left_t > advancing_ca_left - 1:
+                        pinned_count_left += -1
+                    if ca_right_t < receding_ca_right + 1 or ca_right_t > advancing_ca_right - 1:
+                        pinned_count_right += -1
+            
+                    return (phi_left, phi_right, d_rho_left, d_rho_right, left_step_passed, right_step_passed,
+                            cah_window_left_philic, cah_window_right_philic, cah_window_left_phobic,
+                            cah_window_right_phobic, pinned_count_left, pinned_count_right, p_m_left, p_m_right)
+            --- End of hysteresis.py ---
+
+            contact_line_location.py
+            --- Code in contact_line_location.py ---
+            import jax.numpy as jnp
+            
+            class ContactLineLocation:
+                """
+                Class to calculate contact line locations (left and right) from density and angles.
+                """
+            
+                def __init__(self, rho_mean):
+                    self.rho_mean = rho_mean
+            
+                def compute(self, rho, ca_left, ca_right):
+                    array_i_j0 = rho[:, 0]
+            
+                    mask_i_j0 = array_i_j0 < self.rho_mean
+            
+                    mask_int_i_j0 = jnp.array(mask_i_j0, dtype=int)
+            
+                    diff_mask_i_j0 = jnp.diff(mask_int_i_j0)
+            
+                    transition_index_left_i_j0 = jnp.where(diff_mask_i_j0 == -1, size=1, fill_value=0)[0]
+                    transition_index_right_i_j0 = (jnp.where(diff_mask_i_j0 == 1, size=1, fill_value=0)[0]) + 1
+            
+                    index_left_i_j0 = transition_index_left_i_j0[0].astype(int)
+                    index_right_i_j0 = transition_index_right_i_j0[0].astype(int)
+            
+                    x_val_left_j0 = (index_left_i_j0 +
+                                     (self.rho_mean - array_i_j0[index_left_i_j0]) /
+                                     (array_i_j0[index_left_i_j0 + 1] - array_i_j0[index_left_i_j0]))
+                    x_val_right_j0 = ((index_right_i_j0) -
+                                      (self.rho_mean - array_i_j0[index_right_i_j0]) /
+                                      (array_i_j0[index_right_i_j0 - 1] - array_i_j0[index_right_i_j0]))
+            
+                    x_val_left_jsolid = x_val_left_j0 - (1 / (2 * jnp.tan(jnp.deg2rad(ca_left))))
+                    x_val_right_jsolid = x_val_right_j0 + (1 / (2 * jnp.tan(jnp.deg2rad(ca_right))))
+            
+                    return x_val_left_jsolid, x_val_right_jsolid
+            
+            --- End of contact_line_location.py ---
+
+            contact_angle.py
+            --- Code in contact_angle.py ---
+            import jax.numpy as jnp
+            import math
+            
+            class ContactAngle:
+                """
+                Class to calculate contact angles (left and right) from a density field.
+                """
+            
+                def __init__(self, rho_mean):
+                    self.rho_mean = rho_mean
+            
+                def compute(self, rho):
+                    array_i_j0 = rho[:, 1]
+                    array_i_jpos1 = rho[:, 2]
+            
+                    mask_i_j0 = array_i_j0 < self.rho_mean
+                    mask_i_jpos1 = array_i_jpos1 < self.rho_mean
+            
+                    mask_int_i_j0 = jnp.array(mask_i_j0, dtype=int)
+                    mask_int_i_jpos1 = jnp.array(mask_i_jpos1, dtype=int)
+            
+                    diff_mask_i_j0 = jnp.diff(mask_int_i_j0)
+                    diff_mask_i_jpos1 = jnp.diff(mask_int_i_jpos1)
+            
+                    transition_index_left_i_j0 = jnp.where(diff_mask_i_j0 == -1, size=1, fill_value=0)[0]
+                    transition_index_left_i_jpos1 = jnp.where(diff_mask_i_jpos1 == -1, size=1, fill_value=0)[0]
+                    transition_index_right_i_j0 = (jnp.where(diff_mask_i_j0 == 1, size=1, fill_value=0)[0]) + 1
+                    transition_index_right_i_jpos1 = jnp.where(diff_mask_i_jpos1 == 1, size=1, fill_value=0)[0] + 1
+            
+                    index_left_i_j0 = transition_index_left_i_j0[0].astype(int)
+                    index_left_i_jpos1 = transition_index_left_i_jpos1[0].astype(int)
+                    index_right_i_j0 = transition_index_right_i_j0[0].astype(int)
+                    index_right_i_jpos1 = transition_index_right_i_jpos1[0].astype(int)
+            
+                    x_val_left_j0 = (index_left_i_j0 +
+                                     (self.rho_mean - array_i_j0[index_left_i_j0]) /
+                                     (array_i_j0[index_left_i_j0 + 1] - array_i_j0[index_left_i_j0]))
+                    x_val_left_jpos1 = (index_left_i_jpos1 +
+                                        (self.rho_mean - array_i_jpos1[index_left_i_jpos1]) /
+                                        (array_i_jpos1[index_left_i_jpos1 + 1] - array_i_jpos1[index_left_i_jpos1]))
+                    x_val_right_j0 = (index_right_i_j0 -
+                                      (self.rho_mean - array_i_j0[index_right_i_j0]) /
+                                      (array_i_j0[index_right_i_j0 - 1] - array_i_j0[index_right_i_j0]))
+                    x_val_right_jpos1 = (index_right_i_jpos1 -
+                                         (self.rho_mean - array_i_jpos1[index_right_i_jpos1]) /
+                                         (array_i_jpos1[index_right_i_jpos1 - 1] - array_i_jpos1[index_right_i_jpos1]))
+            
+                    contact_angle_left = jnp.rad2deg(math.pi / 2 + jnp.arctan(x_val_left_j0 - x_val_left_jpos1))
+                    contact_angle_right = jnp.rad2deg(math.pi / 2 + jnp.arctan(x_val_right_jpos1 - x_val_right_j0))
+            
+                    return contact_angle_left, contact_angle_right
+            
+            --- End of contact_angle.py ---
+
+            __pycache__/
+                contact_angle.cpython-312.pyc
+                contact_line_location.cpython-312.pyc
                 __init__.cpython-312.pyc
         collision/
             collision_multiphase.py
@@ -1023,7 +2445,9 @@ wblbm/
                 def __init__(self, grid: Grid, lattice: Lattice, tau: float) -> None:
                     super().__init__(grid, lattice, tau)
             
-                def __call__(self, f: jnp.ndarray, feq: jnp.ndarray, source: jnp.ndarray = None) -> jnp.ndarray:
+                def __call__(
+                    self, f: jnp.ndarray, feq: jnp.ndarray, source: jnp.ndarray = None
+                ) -> jnp.ndarray:
                     result = super().__call__(f, feq)
                     if source is not None:
                         result += (1 - (1 / (2 * self.tau))) * source
@@ -1033,7 +2457,9 @@ wblbm/
             __init__.py
             --- Code in __init__.py ---
             from .collision import Collision
-            from .source import SourceTerm            --- End of __init__.py ---
+            from .source import SourceTerm
+            from .collision_multiphase import CollisionMultiphase
+            --- End of __init__.py ---
 
             collision.py
             --- Code in collision.py ---
@@ -1100,7 +2526,9 @@ wblbm/
                     self.cy = lattice.c[1]
                     self.gradient = Gradient(lattice)
             
-                def __call__(self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray) -> jnp.ndarray:
+                def __call__(
+                    self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray
+                ) -> jnp.ndarray:
                     """
                     Calculate the source term for the LBM equation.
             
@@ -1138,13 +2566,19 @@ wblbm/
                         source_ = jnp.zeros((nx, ny, q))
             
                         for i in range(q):
-                            source_ = source_.at[:, :, i].set(w[i] * (
-                                    3 * (cx[i] * fx + cy[i] * fy) +
-                                    9 * (cx[i] * fx_cor + cy[i] * fy_cor) * (cx[i] * ux + cy[i] * uy) -
-                                    3 * (ux * fx_cor + uy * fy_cor) +
-                                    0.5 * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d) * (
-                                            ux * grad_rho_x + uy * grad_rho_y)
-                            ))
+                            source_ = source_.at[:, :, i].set(
+                                w[i]
+                                * (
+                                    3 * (cx[i] * fx + cy[i] * fy)
+                                    + 9
+                                    * (cx[i] * fx_cor + cy[i] * fy_cor)
+                                    * (cx[i] * ux + cy[i] * uy)
+                                    - 3 * (ux * fx_cor + uy * fy_cor)
+                                    + 0.5
+                                    * (3 * (cx[i] * cx[i] + cy[i] * cy[i]) - d)
+                                    * (ux * grad_rho_x + uy * grad_rho_y)
+                                )
+                            )
             
                         return source_
             
@@ -1188,37 +2622,43 @@ wblbm/
                 print(f"Saving plots to: {plot_dir}")
         
                 # Get all data files and sort them by timestep
-                files = [f for f in os.listdir(data_dir) if f.endswith('.npz')]
+                files = [f for f in os.listdir(data_dir) if f.endswith(".npz")]
                 if not files:
                     print("No data files found to visualize.")
                     return
         
                 # Sort files based on the iteration number in the filename
-                files.sort(key=lambda f: int(f.split('_')[-1].split('.')[0]))
+                files.sort(key=lambda f: int(f.split("_")[-1].split(".")[0]))
         
                 # Loop through each timestep file and generate a plot
                 for filename in files:
                     file_path = os.path.join(data_dir, filename)
-                    timestep = int(filename.split('_')[-1].split('.')[0])
+                    timestep = int(filename.split("_")[-1].split(".")[0])
         
                     data = np.load(file_path)
-                    final_rho = data['rho']
-                    final_u = data['u']
-                    final_force = data.get('force', None)
+                    final_rho = data["rho"]
+                    final_u = data["u"]
+                    final_force = data.get("force", None)
         
-                    fig, axes = plt.subplots(1, 2 if final_force is None else 3, figsize=(12 if final_force is None else 18, 5))
+                    fig, axes = plt.subplots(
+                        1,
+                        2 if final_force is None else 3,
+                        figsize=(12 if final_force is None else 18, 5),
+                    )
         
                     # Plot density
-                    im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin='lower', cmap='viridis')
-                    axes[0].set_title(f'Density (t={timestep})')
+                    im1 = axes[0].imshow(
+                        final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis"
+                    )
+                    axes[0].set_title(f"Density (t={timestep})")
                     plt.colorbar(im1, ax=axes[0], label="Density")
         
                     # --- Velocity Plotting with Vector Overlay ---
         
                     # 1. Plot velocity magnitude heatmap
                     vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
-                    im2 = axes[1].imshow(vel_mag.T, origin='lower', cmap='plasma')
-                    axes[1].set_title('Velocity Magnitude & Vectors')
+                    im2 = axes[1].imshow(vel_mag.T, origin="lower", cmap="plasma")
+                    axes[1].set_title("Velocity Magnitude & Vectors")
                     plt.colorbar(im2, ax=axes[1], label="Velocity Magnitude")
         
                     # 2. Overlay velocity vector plot (quiver)
@@ -1236,25 +2676,43 @@ wblbm/
                     skip = 10
         
                     # Plotting quiver requires transposing U and V to match the meshgrid and imshow orientation
-                    axes[1].quiver(X[::skip, ::skip], Y[::skip, ::skip], U.T[::skip, ::skip], V.T[::skip, ::skip],
-                                   color='white', scale=None, scale_units='xy', angles='xy')
+                    axes[1].quiver(
+                        X[::skip, ::skip],
+                        Y[::skip, ::skip],
+                        U.T[::skip, ::skip],
+                        V.T[::skip, ::skip],
+                        color="white",
+                        scale=None,
+                        scale_units="xy",
+                        angles="xy",
+                    )
         
                     # --- End of Velocity Plotting Section ---
         
                     if final_force is not None:
                         # Plot force magnitude and vectors
-                        force_mag = np.sqrt(final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2)
-                        im3 = axes[2].imshow(force_mag.T, origin='lower', cmap='cividis')
-                        axes[2].set_title('Force Magnitude & Vectors')
+                        force_mag = np.sqrt(
+                            final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2
+                        )
+                        im3 = axes[2].imshow(force_mag.T, origin="lower", cmap="cividis")
+                        axes[2].set_title("Force Magnitude & Vectors")
                         plt.colorbar(im3, ax=axes[2], label="Force Magnitude")
                         U_force = final_force[:, :, 0, 0]
                         V_force = final_force[:, :, 0, 1]
-                        axes[2].quiver(X[::skip, ::skip], Y[::skip, ::skip], U_force.T[::skip, ::skip], V_force.T[::skip, ::skip],
-                                       color='white', scale=None, scale_units='xy', angles='xy')
+                        axes[2].quiver(
+                            X[::skip, ::skip],
+                            Y[::skip, ::skip],
+                            U_force.T[::skip, ::skip],
+                            V_force.T[::skip, ::skip],
+                            color="white",
+                            scale=None,
+                            scale_units="xy",
+                            angles="xy",
+                        )
         
                     for ax in axes:
-                        ax.set_xlabel('x')
-                        ax.set_ylabel('y')
+                        ax.set_xlabel("x")
+                        ax.set_ylabel("y")
         
                     plt.suptitle(f"{title} - Timestep {timestep}")
                     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -1280,10 +2738,12 @@ wblbm/
         from datetime import datetime
         from typing import Dict
         
+        
         class SimulationIO:
             """
             Handles all I/O operations for the simulation, including logging and saving results.
             """
+        
             def __init__(self, base_dir: str = "results", config: Dict = None):
                 """
                 Initializes the IO handler.
@@ -1311,12 +2771,14 @@ wblbm/
             def save_config(self, config: Dict):
                 """Saves the simulation configuration to a JSON file."""
                 config_path = os.path.join(self.run_dir, "config.json")
-                
+        
                 # Rename boundary condition details if present (avoids duplication)
-                if 'bc_config' in config:
-                    config['boundary_conditions'] = config.pop('bc_config')  # Rename without copying
-                
-                with open(config_path, 'w') as f:
+                if "bc_config" in config:
+                    config["boundary_conditions"] = config.pop(
+                        "bc_config"
+                    )  # Rename without copying
+        
+                with open(config_path, "w") as f:
                     json.dump(config, f, indent=4)
                 print(f"Configuration saved to {config_path}")
         
@@ -1328,6 +2790,18 @@ wblbm/
 
         __init__.py
         --- Code in __init__.py ---
+        from .io import SimulationIO
+        from .plotting import visualise
+        from .profiler import JAXProfiler
+        from .timing import time_function, TIMING_ENABLED
+        
+        __all__ = [
+            "SimulationIO",
+            "visualise",
+            "JAXProfiler",
+            "time_function",
+            "TIMING_ENABLED",
+        ]
         --- End of __init__.py ---
 
         timing.py
@@ -1348,12 +2822,12 @@ wblbm/
                     start = time.perf_counter()
                     result = func(*args, **kwargs)
                     # Block until computation completes (important for JAX)
-                    if hasattr(result, 'block_until_ready'):
+                    if hasattr(result, "block_until_ready"):
                         result.block_until_ready()
                     elif isinstance(result, tuple):
                         # Handle multiple return values
                         for item in result:
-                            if hasattr(item, 'block_until_ready'):
+                            if hasattr(item, "block_until_ready"):
                                 item.block_until_ready()
                     end = time.perf_counter()
                     print(f"{func.__name__}: {end - start:.4f} seconds")
@@ -1370,6 +2844,7 @@ wblbm/
         from jax import profiler
         import os
         
+        # Have not managed to get this to work, removed the profiling from the run class.
         
         class JAXProfiler:
             def __init__(self, output_dir="./profiler_output", create_perfetto_link=True):
@@ -1421,7 +2896,7 @@ wblbm/
         
             def __init__(self, name: str) -> None:
                 self.name: str = name
-                dq = re.findall(r'\d+', name)
+                dq = re.findall(r"\d+", name)
                 self.d: int = int(dq[0])
                 self.q: int = int(dq[1])
         
@@ -1445,18 +2920,24 @@ wblbm/
                     cy = [0, 0, 1, 0, -1, 1, 1, -1, -1]
                     c = np.array(tuple(zip(cx, cy)))
                 else:
-                    raise ValueError("Lattice not supported, D2Q9 is currently the only supported lattice.")
+                    raise ValueError(
+                        "Lattice not supported, D2Q9 is currently the only supported lattice."
+                    )
         
                 return c.T
         
             @property
             def construct_lattice_weigths(self) -> ndarray:
                 if self.name == "D2Q9":
-                    w = np.array([4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36])
+                    w = np.array(
+                        [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36]
+                    )
                 elif self.name == "D3Q15":
                     raise NotImplementedError("Dimension larger than 2 not supported.")
                 else:
-                    raise ValueError("Lattice not supported, D2Q9 is currently the only supported lattice.")
+                    raise ValueError(
+                        "Lattice not supported, D2Q9 is currently the only supported lattice."
+                    )
         
                 return w
         
@@ -1557,6 +3038,8 @@ wblbm/
 
         __init__.py
         --- Code in __init__.py ---
+        from .force import Force
+        from .gravitational_force import GravityForce
         --- End of __init__.py ---
 
         gravitational_force.py
@@ -1564,11 +3047,15 @@ wblbm/
         import jax.numpy as jnp
         from wblbm.force.force import Force
         
+        
         class GravityForce(Force):
             """
             Subclass for gravitational force, constant across the grid.
             """
-            def __init__(self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float):
+        
+            def __init__(
+                self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float
+            ):
                 if d != 2:
                     raise ValueError("Currently supports 2D (d=2) only")
         
@@ -1581,13 +3068,13 @@ wblbm/
         
                 super().__init__(force_array)
         
-            def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
+            def compute_force(self, rho: jnp.ndarray, rho_l: float, rho_v: float) -> jnp.ndarray:
                 """
                 Returns the constant gravitational force field.
                 Ignores rho as gravity is density-independent.
                 """
-                return self.force
-        
+                mask = rho > 0.95 * rho_v + 0.05 * rho_l
+                return self.force * rho * mask
         --- End of gravitational_force.py ---
 
         __pycache__/
@@ -1618,7 +3105,7 @@ wblbm/
                         "left": (grid[0][0, :], grid[1][0, :]),
                         "right": (grid[0][-1, :], grid[1][-1, :]),
                         "bottom": (grid[0][:, 0], grid[1][:, 0]),
-                        "top": (grid[0][:, -1], grid[1][:, -1])
+                        "top": (grid[0][:, -1], grid[1][:, -1]),
                     }
                     return edges
                 elif self.dim == 3:
@@ -1632,12 +3119,15 @@ wblbm/
                     }
                     return edges
                 else:
-                    raise NotImplementedError("Edge extraction for grids with dim != 2 or 3 is not implemented.")
+                    raise NotImplementedError(
+                        "Edge extraction for grids with dim != 2 or 3 is not implemented."
+                    )
         --- End of grid.py ---
 
         __init__.py
         --- Code in __init__.py ---
-        from .grid import Grid        --- End of __init__.py ---
+        from .grid import Grid
+        --- End of __init__.py ---
 
         __pycache__/
             grid.cpython-312.pyc
@@ -1647,9 +3137,9 @@ example/
         single_phase_gravity_test.py
         --- Code in single_phase_gravity_test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.force.gravitational_force import GravityForce
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import GravityForce
+        from wblbm import visualise
         
         
         def test_single_phase_gravity_simulation():
@@ -1666,10 +3156,7 @@ example/
             gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
         
             # Add bounce-back boundary conditions to left and right
-            bc_config = {
-                'left': 'bounce-back',
-                'right': 'bounce-back'
-            }
+            bc_config = {"left": "bounce-back", "right": "bounce-back"}
         
             sim = Run(
                 grid_shape=grid_shape,
@@ -1680,9 +3167,9 @@ example/
                 save_interval=save_interval,
                 force_enabled=True,
                 force_obj=gravity,
-                bc_config=bc_config
+                bc_config=bc_config,
             )
-            sim.run(init_type='standard', verbose=True)
+            sim.run(init_type="standard", verbose=True)
             return sim
         
         
@@ -1703,8 +3190,8 @@ example/
         test_bc.py
         --- Code in test_bc.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import visualise
         
         
         def test_boundary_conditions():
@@ -1718,10 +3205,10 @@ example/
         
             # Define boundary configuration
             bc_config = {
-                'top': 'bounce-back',  # No-slip wall at top
-                'bottom': 'bounce-back',  # Symmetric boundary at bottom
-                'left': 'bounce-back',  # Periodic left-right wrapping
-                'right': 'bounce-back'
+                "top": "bounce-back",  # No-slip wall at top
+                "bottom": "bounce-back",  # Symmetric boundary at bottom
+                "left": "bounce-back",  # Periodic left-right wrapping
+                "right": "bounce-back",
             }
         
             # Set up the simulation
@@ -1736,11 +3223,11 @@ example/
                 rho_v=0.1,
                 interface_width=5,
                 save_interval=2000,
-                bc_config=bc_config  # Apply custom BCs
+                bc_config=bc_config,  # Apply custom BCs
             )
         
             # Run the simulation with a droplet initialization to test interactions with boundaries
-            sim.run(init_type='multiphase_bubble', verbose=True)
+            sim.run(init_type="multiphase_bubble", verbose=True)
         
             # Visualize results
             print("\n=== Visualizing Boundary Condition Effects ===")
@@ -1756,9 +3243,9 @@ example/
         multiphase_gravity_bubble_test.py
         --- Code in multiphase_gravity_bubble_test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.force.gravitational_force import GravityForce
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import GravityForce
+        from wblbm import visualise
         
         
         def test_multiphase_gravity_simulation():
@@ -1790,9 +3277,9 @@ example/
                 interface_width=interface_width,
                 save_interval=save_interval,
                 force_enabled=True,
-                force_obj=gravity
+                force_obj=gravity,
             )
-            sim.run(init_type='multiphase_bubble', verbose=True)
+            sim.run(init_type="multiphase_bubble", verbose=True)
             return sim
         
         
@@ -1814,8 +3301,8 @@ example/
         --- Code in timing_analysis.py ---
         import time
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.timing import time_function, TIMING_ENABLED
+        from wblbm import Run
+        from wblbm import time_function, TIMING_ENABLED
         
         
         def detailed_timing_analysis():
@@ -1835,7 +3322,7 @@ example/
                 rho_v=0.1,
                 interface_width=4,
                 save_interval=50,
-                bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
+                bc_config={"top": "symmetry", "bottom": "bounce-back"},  # Example BCs
             )
         
             # Initialize
@@ -1848,7 +3335,7 @@ example/
             for _ in range(5):
                 f_next = sim.update(f_prev)
                 # Apply boundary conditions if present
-                if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                if hasattr(sim, "boundary_condition") and sim.boundary_condition is not None:
                     f_next = sim.boundary_condition(f_next, f_next)
                 f_prev = f_next
         
@@ -1856,11 +3343,11 @@ example/
         
             # Time individual components
             total_times = {
-                'macroscopic': [],
-                'equilibrium': [],
-                'collision': [],
-                'streaming': [],
-                'total_update': []
+                "macroscopic": [],
+                "equilibrium": [],
+                "collision": [],
+                "streaming": [],
+                "total_update": [],
             }
         
             for i in range(50):  # Time 50 iterations
@@ -1868,52 +3355,54 @@ example/
         
                 # Time macroscopic calculation
                 start = time.perf_counter()
-                rho, u, force = sim.macroscopic_multiphase(f_prev)
-                if hasattr(rho, 'block_until_ready'):
+                rho, u, force = sim.macroscopic_multiphase_wetting(f_prev)
+                if hasattr(rho, "block_until_ready"):
                     rho.block_until_ready()
                 macro_time = time.perf_counter() - start
         
                 # Time equilibrium calculation
                 start = time.perf_counter()
                 feq = sim.update.equilibrium(rho, u)
-                if hasattr(feq, 'block_until_ready'):
+                if hasattr(feq, "block_until_ready"):
                     feq.block_until_ready()
                 eq_time = time.perf_counter() - start
         
                 # Time source term
                 start = time.perf_counter()
                 source = sim.update.source_term(rho, u, force)
-                if hasattr(source, 'block_until_ready'):
+                if hasattr(source, "block_until_ready"):
                     source.block_until_ready()
                 source_time = time.perf_counter() - start
         
                 # Time collision
                 start = time.perf_counter()
                 fcol = sim.update.collision(f_prev, feq, source)
-                if hasattr(fcol, 'block_until_ready'):
+                if hasattr(fcol, "block_until_ready"):
                     fcol.block_until_ready()
                 collision_time = time.perf_counter() - start
         
                 # Time streaming
                 start = time.perf_counter()
                 fstream = sim.update.streaming(fcol)
-                if hasattr(fstream, 'block_until_ready'):
+                if hasattr(fstream, "block_until_ready"):
                     fstream.block_until_ready()
                 stream_time = time.perf_counter() - start
         
                 # Apply boundary conditions if present
-                if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                if hasattr(sim, "boundary_condition") and sim.boundary_condition is not None:
                     fstream = sim.boundary_condition(fstream, fcol)
-                    if hasattr(fstream, 'block_until_ready'):
+                    if hasattr(fstream, "block_until_ready"):
                         fstream.block_until_ready()
                 total_time = time.perf_counter() - start_total
         
                 # Store times
-                total_times['macroscopic'].append(macro_time + source_time)  # Include source term
-                total_times['equilibrium'].append(eq_time)
-                total_times['collision'].append(collision_time)
-                total_times['streaming'].append(stream_time)
-                total_times['total_update'].append(total_time)
+                total_times["macroscopic"].append(
+                    macro_time + source_time
+                )  # Include source term
+                total_times["equilibrium"].append(eq_time)
+                total_times["collision"].append(collision_time)
+                total_times["streaming"].append(stream_time)
+                total_times["total_update"].append(total_time)
         
                 f_prev = fstream
         
@@ -1922,13 +3411,15 @@ example/
         
             # Calculate and display statistics
             print("\n=== Timing Results (milliseconds) ===")
-            print(f"{'Component':<15} {'Mean':<8} {'Std':<8} {'Min':<8} {'Max':<8} {'% of Total':<12}")
+            print(
+                f"{'Component':<15} {'Mean':<8} {'Std':<8} {'Min':<8} {'Max':<8} {'% of Total':<12}"
+            )
             print("-" * 70)
         
-            total_mean = np.mean(total_times['total_update']) * 1000
+            total_mean = np.mean(total_times["total_update"]) * 1000
         
             for component, times in total_times.items():
-                if component != 'total_update':
+                if component != "total_update":
                     times_ms = np.array(times) * 1000
                     mean_time = np.mean(times_ms)
                     std_time = np.std(times_ms)
@@ -1937,17 +3428,20 @@ example/
                     percentage = (mean_time / total_mean) * 100
         
                     print(
-                        f"{component:<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {percentage:<12.1f}")
+                        f"{component:<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {percentage:<12.1f}"
+                    )
         
             # Total
-            times_ms = np.array(total_times['total_update']) * 1000
+            times_ms = np.array(total_times["total_update"]) * 1000
             mean_time = np.mean(times_ms)
             std_time = np.std(times_ms)
             min_time = np.min(times_ms)
             max_time = np.max(times_ms)
         
             print("-" * 70)
-            print(f"{'TOTAL':<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {'100.0':<12}")
+            print(
+                f"{'TOTAL':<15} {mean_time:<8.3f} {std_time:<8.3f} {min_time:<8.3f} {max_time:<8.3f} {'100.0':<12}"
+            )
         
         
         if __name__ == "__main__":
@@ -1959,7 +3453,7 @@ example/
         import time
         import numpy as np
         import matplotlib.pyplot as plt
-        from wblbm.operators.run.run import Run
+        from wblbm import Run
         
         
         def complexity_analysis():
@@ -1982,7 +3476,7 @@ example/
                     rho_v=0.1,
                     interface_width=4,
                     save_interval=10,
-                    bc_config={'top': 'symmetry', 'bottom': 'bounce-back'}  # Example BCs
+                    bc_config={"top": "symmetry", "bottom": "bounce-back"},  # Example BCs
                 )
         
                 f_prev = sim.initialiser.initialise_multiphase_bubble(
@@ -1993,7 +3487,10 @@ example/
                 for _ in range(3):
                     f_next = sim.update(f_prev)
                     # Apply boundary conditions if present
-                    if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                    if (
+                        hasattr(sim, "boundary_condition")
+                        and sim.boundary_condition is not None
+                    ):
                         f_next = sim.boundary_condition(f_next, f_next)
                     f_prev = f_next
         
@@ -2003,9 +3500,12 @@ example/
                     start = time.perf_counter()
                     f_next = sim.update(f_prev)
                     # Apply boundary conditions if present
-                    if hasattr(sim, 'boundary_condition') and sim.boundary_condition is not None:
+                    if (
+                        hasattr(sim, "boundary_condition")
+                        and sim.boundary_condition is not None
+                    ):
                         f_next = sim.boundary_condition(f_next, f_next)
-                    if hasattr(f_next, 'block_until_ready'):
+                    if hasattr(f_next, "block_until_ready"):
                         f_next.block_until_ready()
                     end = time.perf_counter()
                     times.append(end - start)
@@ -2014,12 +3514,14 @@ example/
                 avg_time = np.mean(times) * 1000  # Convert to ms
                 grid_points = nx * ny
         
-                timing_results.append({
-                    'grid_size': f"{nx}x{ny}",
-                    'grid_points': grid_points,
-                    'avg_time_ms': avg_time,
-                    'time_per_point_us': (avg_time * 1000) / grid_points
-                })
+                timing_results.append(
+                    {
+                        "grid_size": f"{nx}x{ny}",
+                        "grid_points": grid_points,
+                        "avg_time_ms": avg_time,
+                        "time_per_point_us": (avg_time * 1000) / grid_points,
+                    }
+                )
         
                 print(f"Average time per iteration: {avg_time:.3f} ms")
                 print(f"Time per grid point: {(avg_time * 1000) / grid_points:.3f} μs")
@@ -2030,49 +3532,94 @@ example/
             print("-" * 50)
         
             for result in timing_results:
-                print(f"{result['grid_size']:<12} {result['grid_points']:<10} "
-                      f"{result['avg_time_ms']:<12.3f} {result['time_per_point_us']:<12.3f}")
+                print(
+                    f"{result['grid_size']:<12} {result['grid_points']:<10} "
+                    f"{result['avg_time_ms']:<12.3f} {result['time_per_point_us']:<12.3f}"
+                )
         
         
         if __name__ == "__main__":
             complexity_analysis()
         --- End of complexity_analysis.py ---
 
-        test_bubble_profiler.py
-        --- Code in test_bubble_profiler.py ---
-        from wblbm.operators.run.run import Run
+        wetting_test.py
+        --- Code in wetting_test.py ---
+        import numpy as np
+        from wblbm import Run, GravityForce, visualise
         
         
-        def profile_lbm():
-            """Profile a small LBM simulation to identify bottlenecks."""
+        def test_wetting_simulation():
+            """Test wetting implementation with a droplet on a surface under gravity."""
+            print("\n=== Testing LBM Wetting Implementation ===")
         
-            # Use a smaller grid for profiling to focus on computational patterns
+            # Simulation parameters
+            grid_shape = (400, 200)  # nx, ny
+            tau = 0.9  # Relaxation time
+            nt = 50  # Number of time steps
+            save_interval = 1  # Save every 500 steps
+            kappa = 0.01  # Surface tension parameter
+            rho_l = 1.0  # Liquid density
+            rho_v = 0.001  # Vapor density
+            interface_width = 5  # Interface width for smooth transition
+        
+            # Wetting parameters
+            phi_value = 1.0  # Wetting strength parameter
+            d_rho_value = 0.0  # Density adjustment parameter
+        
+            # Gravity setup (downward force for droplet settling)
+            force_g = 0  # Small gravity to observe wetting without rapid fall
+            inclination_angle = 0  # Vertical gravity
+            gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+        
+            # Boundary conditions: bounce-back at bottom for solid surface
+            bc_config = {
+                "bottom": "bounce-back",  # Solid wall for wetting
+                "top": "symmetry",  # Open top
+                "left": "periodic",  # Periodic sides
+                "right": "periodic"
+            }
+        
+            # Initialize and run simulation with wetting enabled
             sim = Run(
-                grid_shape=(50, 50),  # Smaller grid for profiling
+                grid_shape=grid_shape,
                 lattice_type="D2Q9",
-                tau=1.0,
-                nt=100,  # Only profile 100 steps
-                multiphase=True,  # Profile the more complex multiphase case
-                kappa=0.01,
-                rho_l=1.0,
-                rho_v=0.1,
-                interface_width=4,
-                save_interval=50
+                tau=tau,
+                nt=nt,
+                multiphase=True,
+                kappa=kappa,
+                rho_l=rho_l,
+                rho_v=rho_v,
+                interface_width=interface_width,
+                save_interval=save_interval,
+                bc_config=bc_config,
+                force_enabled=True,
+                force_obj=gravity,
+                wetting_enabled=True,
+                hysteresis_params=None,
+                phi_value=phi_value,
+                d_rho_value=d_rho_value
             )
         
-            # Run with profiling
-            sim.run_with_profiling(init_type='multiphase_bubble', profile_steps=100)
+            # Run with wetting initialization
+            sim.run(init_type="wetting", verbose=True)
+            return sim
         
         
         if __name__ == "__main__":
-            profile_lbm()
-        --- End of test_bubble_profiler.py ---
+            sim_wetting = test_wetting_simulation()
+        
+            # Visualize results
+            print("\n=== Visualizing Wetting Test Results ===")
+            visualise(sim_wetting, "Wetting Implementation Test")
+        
+            print("\nTest completed! Check the 'results' directory for data and plots.")
+        --- End of wetting_test.py ---
 
         test.py
         --- Code in test.py ---
         import numpy as np
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise  # Import the new function
+        from wblbm import Run
+        from wblbm import visualise  # Import the new function
         
         
         def test_basic_simulation():
@@ -2084,9 +3631,9 @@ example/
                 tau=1.0,
                 nt=500,
                 save_interval=100,
-                multiphase=False
+                multiphase=False,
             )
-            sim.run(init_type='standard', verbose=True)
+            sim.run(init_type="standard", verbose=True)
             return sim
         
         
@@ -2103,9 +3650,9 @@ example/
                 kappa=0.01,
                 rho_l=1.0,
                 rho_v=0.001,
-                interface_width=10
+                interface_width=10,
             )
-            sim.run(init_type='multiphase_droplet', verbose=True)
+            sim.run(init_type="multiphase_droplet", verbose=True)
             return sim
         
         
@@ -2138,17 +3685,24 @@ example/
             print("\n=== Multiphase LBM Simulation with Gravity Test ===")
         
             grid_shape = (200, 800)
-            tau = 0.99
-            nt = 20000
+            tau = 1.2
+            nt = 100000
             save_interval = 1000
-            kappa = 0.01
+            kappa = 0.04
             rho_l = 1.0
             rho_v = 0.001
-            interface_width = 8
+            interface_width = 10
         
-            force_g = 0.000001
+            force_g = 0.0000002
             inclination_angle = 0
             gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+        
+            bc_config = {
+                'top': 'bounce-back',  # No-slip wall at top
+                'bottom': 'bounce-back',  # Symmetric boundary at bottom
+                'left': 'bounce-back',  # Periodic left-right wrapping
+                'right': 'bounce-back'
+            }
         
             sim = Run(
                 grid_shape=grid_shape,
@@ -2161,6 +3715,7 @@ example/
                 rho_v=rho_v,
                 interface_width=interface_width,
                 save_interval=save_interval,
+                bc_config=bc_config,
                 force_enabled=True,
                 force_obj=gravity
             )
@@ -2184,8 +3739,8 @@ example/
 
         bubble_high_density.py
         --- Code in bubble_high_density.py ---
-        from wblbm.operators.run.run import Run
-        from wblbm.utils.plotting import visualise
+        from wblbm import Run
+        from wblbm import visualise
         
         
         def test_multiphase_simulation():
@@ -2210,9 +3765,9 @@ example/
                 kappa=0.01,
                 rho_l=1.0,
                 rho_v=0.001,
-                interface_width=10
+                interface_width=10,
             )
-            sim.run(init_type='multiphase_bubble', verbose=True)
+            sim.run(init_type="multiphase_bubble", verbose=True)
             return sim
         
         
@@ -2235,6 +3790,71 @@ example/
         
             print("\nAll tests completed!")
         --- End of bubble_high_density.py ---
+
+        test_droplet_periodic_top_bot_bc.py
+        --- Code in test_droplet_periodic_top_bot_bc.py ---
+        import numpy as np
+        from wblbm.operators.run.run import Run
+        from wblbm.force.gravitational_force import GravityForce
+        from wblbm.utils.plotting import visualise
+        
+        
+        def test_multiphase_gravity_simulation():
+            """Test a multiphase LBM simulation with gravity and a central droplet."""
+            print("\n=== Multiphase LBM Simulation with Gravity Test ===")
+        
+            grid_shape = (200, 800)
+            tau = 1.2
+            nt = 50000
+            save_interval = 10000
+            kappa = 0.04
+            rho_l = 1.0
+            rho_v = 0.001
+            interface_width = 10
+        
+            force_g = 0.0000002
+            inclination_angle = 0
+            gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+        
+            bc_config = {
+                'top': 'periodic',
+                'bottom': 'periodic',
+                'left': 'bounce-back',
+                'right': 'bounce-back'
+            }
+        
+            sim = Run(
+                grid_shape=grid_shape,
+                lattice_type="D2Q9",
+                tau=tau,
+                nt=nt,
+                multiphase=True,
+                kappa=kappa,
+                rho_l=rho_l,
+                rho_v=rho_v,
+                interface_width=interface_width,
+                save_interval=save_interval,
+                bc_config=bc_config,
+                force_enabled=True,
+                force_obj=gravity
+            )
+            sim.run(init_type='multiphase_droplet', verbose=True)
+            return sim
+        
+        
+        if __name__ == "__main__":
+            print("Testing Multiphase LBM Codebase with Gravity")
+            print("=" * 60)
+        
+            # Run simulation
+            sim_multiphase_gravity = test_multiphase_gravity_simulation()
+        
+            # Visualize results
+            print("\n=== Visualizing Results ===")
+            visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+        
+            print("\nTest completed!")
+        --- End of test_droplet_periodic_top_bot_bc.py ---
 
         results/
             2025-07-14/
@@ -14790,3 +16410,662 @@ example/
                         timestep_8000.png
                         timestep_9999.png
                         timestep_2000.png
+            2025-07-16/
+                11-23-21/
+                    config.json
+                    data/
+                        timestep_0.npz
+                11-52-28/
+                    config.json
+                    data/
+                        timestep_0.npz
+                10-36-10/
+                    config.json
+                    data/
+                        timestep_31000.npz
+                        timestep_52000.npz
+                        timestep_7000.npz
+                        timestep_23000.npz
+                        timestep_40000.npz
+                        timestep_68000.npz
+                        timestep_15000.npz
+                        timestep_76000.npz
+                        timestep_64000.npz
+                        timestep_19000.npz
+                        timestep_97000.npz
+                        timestep_89000.npz
+                        timestep_85000.npz
+                        timestep_99000.npz
+                        timestep_87000.npz
+                        timestep_95000.npz
+                        timestep_42000.npz
+                        timestep_5000.npz
+                        timestep_21000.npz
+                        timestep_50000.npz
+                        timestep_9000.npz
+                        timestep_33000.npz
+                        timestep_66000.npz
+                        timestep_78000.npz
+                        timestep_74000.npz
+                        timestep_17000.npz
+                        timestep_91000.npz
+                        timestep_83000.npz
+                        timestep_70000.npz
+                        timestep_13000.npz
+                        timestep_62000.npz
+                        timestep_29000.npz
+                        timestep_54000.npz
+                        timestep_37000.npz
+                        timestep_46000.npz
+                        timestep_1000.npz
+                        timestep_25000.npz
+                        timestep_58000.npz
+                        timestep_60000.npz
+                        timestep_11000.npz
+                        timestep_72000.npz
+                        timestep_3000.npz
+                        timestep_27000.npz
+                        timestep_39000.npz
+                        timestep_44000.npz
+                        timestep_35000.npz
+                        timestep_48000.npz
+                        timestep_56000.npz
+                        timestep_81000.npz
+                        timestep_93000.npz
+                        timestep_88000.npz
+                        timestep_96000.npz
+                        timestep_84000.npz
+                        timestep_0.npz
+                        timestep_77000.npz
+                        timestep_14000.npz
+                        timestep_69000.npz
+                        timestep_18000.npz
+                        timestep_65000.npz
+                        timestep_53000.npz
+                        timestep_30000.npz
+                        timestep_41000.npz
+                        timestep_22000.npz
+                        timestep_6000.npz
+                        timestep_79000.npz
+                        timestep_67000.npz
+                        timestep_16000.npz
+                        timestep_75000.npz
+                        timestep_20000.npz
+                        timestep_4000.npz
+                        timestep_43000.npz
+                        timestep_32000.npz
+                        timestep_8000.npz
+                        timestep_51000.npz
+                        timestep_86000.npz
+                        timestep_98000.npz
+                        timestep_94000.npz
+                        timestep_36000.npz
+                        timestep_55000.npz
+                        timestep_28000.npz
+                        timestep_59000.npz
+                        timestep_24000.npz
+                        timestep_47000.npz
+                        timestep_12000.npz
+                        timestep_99999.npz
+                        timestep_71000.npz
+                        timestep_63000.npz
+                        timestep_90000.npz
+                        timestep_82000.npz
+                        timestep_80000.npz
+                        timestep_92000.npz
+                        timestep_45000.npz
+                        timestep_38000.npz
+                        timestep_26000.npz
+                        timestep_2000.npz
+                        timestep_57000.npz
+                        timestep_49000.npz
+                        timestep_34000.npz
+                        timestep_61000.npz
+                        timestep_73000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_52000.png
+                        timestep_31000.png
+                        timestep_40000.png
+                        timestep_7000.png
+                        timestep_23000.png
+                        timestep_76000.png
+                        timestep_15000.png
+                        timestep_68000.png
+                        timestep_19000.png
+                        timestep_64000.png
+                        timestep_89000.png
+                        timestep_97000.png
+                        timestep_85000.png
+                        timestep_87000.png
+                        timestep_99000.png
+                        timestep_95000.png
+                        timestep_5000.png
+                        timestep_21000.png
+                        timestep_42000.png
+                        timestep_33000.png
+                        timestep_9000.png
+                        timestep_50000.png
+                        timestep_78000.png
+                        timestep_66000.png
+                        timestep_17000.png
+                        timestep_74000.png
+                        timestep_91000.png
+                        timestep_83000.png
+                        timestep_13000.png
+                        timestep_70000.png
+                        timestep_62000.png
+                        timestep_37000.png
+                        timestep_54000.png
+                        timestep_29000.png
+                        timestep_58000.png
+                        timestep_1000.png
+                        timestep_25000.png
+                        timestep_46000.png
+                        timestep_60000.png
+                        timestep_72000.png
+                        timestep_11000.png
+                        timestep_44000.png
+                        timestep_39000.png
+                        timestep_3000.png
+                        timestep_27000.png
+                        timestep_56000.png
+                        timestep_48000.png
+                        timestep_35000.png
+                        timestep_81000.png
+                        timestep_93000.png
+                        timestep_96000.png
+                        timestep_88000.png
+                        timestep_0.png
+                        timestep_84000.png
+                        timestep_69000.png
+                        timestep_14000.png
+                        timestep_77000.png
+                        timestep_65000.png
+                        timestep_18000.png
+                        timestep_30000.png
+                        timestep_53000.png
+                        timestep_22000.png
+                        timestep_6000.png
+                        timestep_41000.png
+                        timestep_67000.png
+                        timestep_79000.png
+                        timestep_75000.png
+                        timestep_16000.png
+                        timestep_43000.png
+                        timestep_20000.png
+                        timestep_4000.png
+                        timestep_51000.png
+                        timestep_8000.png
+                        timestep_32000.png
+                        timestep_98000.png
+                        timestep_86000.png
+                        timestep_94000.png
+                        timestep_28000.png
+                        timestep_55000.png
+                        timestep_36000.png
+                        timestep_47000.png
+                        timestep_24000.png
+                        timestep_59000.png
+                        timestep_71000.png
+                        timestep_12000.png
+                        timestep_99999.png
+                        timestep_63000.png
+                        timestep_90000.png
+                        timestep_82000.png
+                        timestep_80000.png
+                        timestep_92000.png
+                        timestep_26000.png
+                        timestep_2000.png
+                        timestep_38000.png
+                        timestep_45000.png
+                        timestep_34000.png
+                        timestep_49000.png
+                        timestep_57000.png
+                        timestep_61000.png
+                        timestep_10000.png
+                        timestep_73000.png
+                10-37-26/
+                    config.json
+                    data/
+                        timestep_31000.npz
+                        timestep_52000.npz
+                        timestep_7000.npz
+                        timestep_23000.npz
+                        timestep_40000.npz
+                        timestep_68000.npz
+                        timestep_15000.npz
+                        timestep_76000.npz
+                        timestep_64000.npz
+                        timestep_19000.npz
+                        timestep_97000.npz
+                        timestep_89000.npz
+                        timestep_85000.npz
+                        timestep_99000.npz
+                        timestep_87000.npz
+                        timestep_95000.npz
+                        timestep_42000.npz
+                        timestep_5000.npz
+                        timestep_21000.npz
+                        timestep_50000.npz
+                        timestep_9000.npz
+                        timestep_33000.npz
+                        timestep_66000.npz
+                        timestep_78000.npz
+                        timestep_74000.npz
+                        timestep_17000.npz
+                        timestep_91000.npz
+                        timestep_83000.npz
+                        timestep_70000.npz
+                        timestep_13000.npz
+                        timestep_62000.npz
+                        timestep_29000.npz
+                        timestep_54000.npz
+                        timestep_37000.npz
+                        timestep_46000.npz
+                        timestep_1000.npz
+                        timestep_25000.npz
+                        timestep_58000.npz
+                        timestep_60000.npz
+                        timestep_11000.npz
+                        timestep_72000.npz
+                        timestep_3000.npz
+                        timestep_27000.npz
+                        timestep_39000.npz
+                        timestep_44000.npz
+                        timestep_35000.npz
+                        timestep_48000.npz
+                        timestep_56000.npz
+                        timestep_81000.npz
+                        timestep_93000.npz
+                        timestep_88000.npz
+                        timestep_96000.npz
+                        timestep_84000.npz
+                        timestep_0.npz
+                        timestep_77000.npz
+                        timestep_14000.npz
+                        timestep_69000.npz
+                        timestep_18000.npz
+                        timestep_65000.npz
+                        timestep_53000.npz
+                        timestep_30000.npz
+                        timestep_41000.npz
+                        timestep_22000.npz
+                        timestep_6000.npz
+                        timestep_79000.npz
+                        timestep_67000.npz
+                        timestep_16000.npz
+                        timestep_75000.npz
+                        timestep_20000.npz
+                        timestep_4000.npz
+                        timestep_43000.npz
+                        timestep_32000.npz
+                        timestep_8000.npz
+                        timestep_51000.npz
+                        timestep_86000.npz
+                        timestep_98000.npz
+                        timestep_94000.npz
+                        timestep_36000.npz
+                        timestep_55000.npz
+                        timestep_28000.npz
+                        timestep_59000.npz
+                        timestep_24000.npz
+                        timestep_47000.npz
+                        timestep_12000.npz
+                        timestep_99999.npz
+                        timestep_71000.npz
+                        timestep_63000.npz
+                        timestep_90000.npz
+                        timestep_82000.npz
+                        timestep_80000.npz
+                        timestep_92000.npz
+                        timestep_45000.npz
+                        timestep_38000.npz
+                        timestep_26000.npz
+                        timestep_2000.npz
+                        timestep_57000.npz
+                        timestep_49000.npz
+                        timestep_34000.npz
+                        timestep_61000.npz
+                        timestep_73000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_52000.png
+                        timestep_31000.png
+                        timestep_40000.png
+                        timestep_7000.png
+                        timestep_23000.png
+                        timestep_76000.png
+                        timestep_15000.png
+                        timestep_68000.png
+                        timestep_19000.png
+                        timestep_64000.png
+                        timestep_89000.png
+                        timestep_97000.png
+                        timestep_85000.png
+                        timestep_87000.png
+                        timestep_99000.png
+                        timestep_95000.png
+                        timestep_5000.png
+                        timestep_21000.png
+                        timestep_42000.png
+                        timestep_33000.png
+                        timestep_9000.png
+                        timestep_50000.png
+                        timestep_78000.png
+                        timestep_66000.png
+                        timestep_17000.png
+                        timestep_74000.png
+                        timestep_91000.png
+                        timestep_83000.png
+                        timestep_13000.png
+                        timestep_70000.png
+                        timestep_62000.png
+                        timestep_37000.png
+                        timestep_54000.png
+                        timestep_29000.png
+                        timestep_58000.png
+                        timestep_1000.png
+                        timestep_25000.png
+                        timestep_46000.png
+                        timestep_60000.png
+                        timestep_72000.png
+                        timestep_11000.png
+                        timestep_44000.png
+                        timestep_39000.png
+                        timestep_3000.png
+                        timestep_27000.png
+                        timestep_56000.png
+                        timestep_48000.png
+                        timestep_35000.png
+                        timestep_81000.png
+                        timestep_93000.png
+                        timestep_96000.png
+                        timestep_88000.png
+                        timestep_0.png
+                        timestep_84000.png
+                        timestep_69000.png
+                        timestep_14000.png
+                        timestep_77000.png
+                        timestep_65000.png
+                        timestep_18000.png
+                        timestep_30000.png
+                        timestep_53000.png
+                        timestep_22000.png
+                        timestep_6000.png
+                        timestep_41000.png
+                        timestep_67000.png
+                        timestep_79000.png
+                        timestep_75000.png
+                        timestep_16000.png
+                        timestep_43000.png
+                        timestep_20000.png
+                        timestep_4000.png
+                        timestep_51000.png
+                        timestep_8000.png
+                        timestep_32000.png
+                        timestep_98000.png
+                        timestep_86000.png
+                        timestep_94000.png
+                        timestep_28000.png
+                        timestep_55000.png
+                        timestep_36000.png
+                        timestep_47000.png
+                        timestep_24000.png
+                        timestep_59000.png
+                        timestep_71000.png
+                        timestep_12000.png
+                        timestep_99999.png
+                        timestep_63000.png
+                        timestep_90000.png
+                        timestep_82000.png
+                        timestep_80000.png
+                        timestep_92000.png
+                        timestep_26000.png
+                        timestep_2000.png
+                        timestep_38000.png
+                        timestep_45000.png
+                        timestep_34000.png
+                        timestep_49000.png
+                        timestep_57000.png
+                        timestep_61000.png
+                        timestep_10000.png
+                        timestep_73000.png
+                11-53-34/
+                    config.json
+                    data/
+                        timestep_4999.npz
+                        timestep_1000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_4000.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_4999.png
+                        timestep_1000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_4000.png
+                        timestep_2000.png
+                11-54-22/
+                    config.json
+                    data/
+                        timestep_0.npz
+                10-01-50/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_15000.npz
+                        timestep_19000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_17000.npz
+                        timestep_13000.npz
+                        timestep_1000.npz
+                        timestep_11000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_14000.npz
+                        timestep_18000.npz
+                        timestep_6000.npz
+                        timestep_16000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_12000.npz
+                        timestep_19999.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_15000.png
+                        timestep_19000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_17000.png
+                        timestep_13000.png
+                        timestep_1000.png
+                        timestep_11000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_14000.png
+                        timestep_18000.png
+                        timestep_6000.png
+                        timestep_16000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_12000.png
+                        timestep_19999.png
+                        timestep_2000.png
+                        timestep_10000.png
+                10-11-35/
+                    config.json
+                    data/
+                        timestep_7000.npz
+                        timestep_15000.npz
+                        timestep_19000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_17000.npz
+                        timestep_13000.npz
+                        timestep_1000.npz
+                        timestep_11000.npz
+                        timestep_3000.npz
+                        timestep_0.npz
+                        timestep_14000.npz
+                        timestep_18000.npz
+                        timestep_6000.npz
+                        timestep_16000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_12000.npz
+                        timestep_19999.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_15000.png
+                        timestep_19000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_17000.png
+                        timestep_13000.png
+                        timestep_1000.png
+                        timestep_11000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_14000.png
+                        timestep_18000.png
+                        timestep_6000.png
+                        timestep_16000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_12000.png
+                        timestep_19999.png
+                        timestep_2000.png
+                        timestep_10000.png
+                11-24-16/
+                    config.json
+                    data/
+                        timestep_120000.npz
+                        timestep_40000.npz
+                        timestep_130000.npz
+                        timestep_50000.npz
+                        timestep_70000.npz
+                        timestep_110000.npz
+                        timestep_60000.npz
+                        timestep_100000.npz
+                        timestep_0.npz
+                        timestep_30000.npz
+                        timestep_150000.npz
+                        timestep_20000.npz
+                        timestep_140000.npz
+                        timestep_160000.npz
+                        timestep_90000.npz
+                        timestep_80000.npz
+                        timestep_10000.npz
+                10-28-07/
+                    config.json
+                    data/
+                        timestep_31000.npz
+                        timestep_7000.npz
+                        timestep_23000.npz
+                        timestep_40000.npz
+                        timestep_15000.npz
+                        timestep_19000.npz
+                        timestep_49999.npz
+                        timestep_42000.npz
+                        timestep_5000.npz
+                        timestep_21000.npz
+                        timestep_9000.npz
+                        timestep_33000.npz
+                        timestep_17000.npz
+                        timestep_13000.npz
+                        timestep_29000.npz
+                        timestep_37000.npz
+                        timestep_46000.npz
+                        timestep_1000.npz
+                        timestep_25000.npz
+                        timestep_11000.npz
+                        timestep_3000.npz
+                        timestep_27000.npz
+                        timestep_39000.npz
+                        timestep_44000.npz
+                        timestep_35000.npz
+                        timestep_48000.npz
+                        timestep_0.npz
+                        timestep_14000.npz
+                        timestep_18000.npz
+                        timestep_30000.npz
+                        timestep_41000.npz
+                        timestep_22000.npz
+                        timestep_6000.npz
+                        timestep_16000.npz
+                        timestep_20000.npz
+                        timestep_4000.npz
+                        timestep_43000.npz
+                        timestep_32000.npz
+                        timestep_8000.npz
+                        timestep_36000.npz
+                        timestep_28000.npz
+                        timestep_24000.npz
+                        timestep_47000.npz
+                        timestep_12000.npz
+                        timestep_45000.npz
+                        timestep_38000.npz
+                        timestep_26000.npz
+                        timestep_2000.npz
+                        timestep_49000.npz
+                        timestep_34000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_31000.png
+                        timestep_40000.png
+                        timestep_7000.png
+                        timestep_23000.png
+                        timestep_15000.png
+                        timestep_19000.png
+                        timestep_49999.png
+                        timestep_5000.png
+                        timestep_21000.png
+                        timestep_42000.png
+                        timestep_33000.png
+                        timestep_9000.png
+                        timestep_17000.png
+                        timestep_13000.png
+                        timestep_37000.png
+                        timestep_29000.png
+                        timestep_1000.png
+                        timestep_25000.png
+                        timestep_46000.png
+                        timestep_11000.png
+                        timestep_44000.png
+                        timestep_39000.png
+                        timestep_3000.png
+                        timestep_27000.png
+                        timestep_48000.png
+                        timestep_35000.png
+                        timestep_0.png
+                        timestep_14000.png
+                        timestep_18000.png
+                        timestep_30000.png
+                        timestep_22000.png
+                        timestep_6000.png
+                        timestep_41000.png
+                        timestep_16000.png
+                        timestep_43000.png
+                        timestep_20000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_32000.png
+                        timestep_28000.png
+                        timestep_36000.png
+                        timestep_47000.png
+                        timestep_24000.png
+                        timestep_12000.png
+                        timestep_26000.png
+                        timestep_2000.png
+                        timestep_38000.png
+                        timestep_45000.png
+                        timestep_34000.png
+                        timestep_49000.png
+                        timestep_10000.png
