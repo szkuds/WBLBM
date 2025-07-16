@@ -233,7 +233,8 @@ class Run:
                     rho, _, _ = self.macroscopic_multiphase(f_prev)
                 else:
                     rho, _ = self.macroscopic(f_prev)
-                force = self.force_obj.compute_force(rho)
+                mask: bool = rho > 0.95 * self.rho_v + 0.05 * self.rho_l
+                force = (self.force_obj.compute_force(rho)) * rho * mask
             elif self.force_enabled:
                 force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
 
@@ -275,7 +276,7 @@ class Run:
             # Save data at the specified interval
             if it % self.save_interval == 0 or it == self.nt - 1:
                 if self.multiphase:
-                    rho, u, force = self.macroscopic_multiphase(f_prev)
+                    rho, u, force_tot = self.macroscopic_multiphase(f_prev)
                     data_to_save = {
                         "rho": np.array(rho),
                         "u": np.array(u),
@@ -283,7 +284,7 @@ class Run:
                     }
                 else:
                     rho, u = self.macroscopic(f_prev)
-                    data_to_save = {"rho": np.array(rho), "u": np.array(u)}
+                    data_to_save = {"rho": np.array(rho), "u": np.array(u), "force_tot": np.array(force_tot)}
 
                 self.io_handler.save_data_step(it, data_to_save)
 
