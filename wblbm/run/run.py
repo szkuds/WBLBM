@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class SimulationFactcd .ory:
+class SimulationFactory:
     @staticmethod
     def create_simulation(simulation_type, **kwargs):
         if simulation_type == "singlephase":
