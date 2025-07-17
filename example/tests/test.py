@@ -1,18 +1,18 @@
 import numpy as np
-from wblbm import Run
-from wblbm import visualise  # Import the new function
+from wblbm.run import Run
+from wblbm import visualise
 
 
 def test_basic_simulation():
     """Test a basic single-phase LBM simulation."""
     print("\n=== Basic LBM Simulation Test ===")
     sim = Run(
+        simulation_type="singlephase",
         grid_shape=(100, 50),
         lattice_type="D2Q9",
         tau=1.0,
-        nt=500,
-        save_interval=100,
-        multiphase=False,
+        nt=5000,
+        save_interval=1000,
     )
     sim.run(init_type="standard", verbose=True)
     return sim
@@ -22,12 +22,12 @@ def test_multiphase_simulation():
     """Test a multiphase LBM simulation with a central bubble."""
     print("\n=== Multiphase LBM Simulation Test ===")
     sim = Run(
+        simulation_type="multiphase",
         grid_shape=(400, 400),
         lattice_type="D2Q9",
         tau=0.9,
-        nt=500000,
+        nt=5000,
         save_interval=1000,
-        multiphase=True,
         kappa=0.01,
         rho_l=1.0,
         rho_v=0.001,

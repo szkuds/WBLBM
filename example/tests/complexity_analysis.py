@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from wblbm import Run
+from wblbm.run import Run
 
 
 def complexity_analysis():
@@ -14,11 +14,11 @@ def complexity_analysis():
         print(f"\nTesting grid size: {nx}x{ny}")
 
         sim = Run(
+            simulation_type="multiphase",
             grid_shape=(nx, ny),
             lattice_type="D2Q9",
             tau=1.0,
             nt=10,  # Just a few steps for timing
-            multiphase=True,
             kappa=0.01,
             rho_l=1.0,
             rho_v=0.1,
@@ -27,32 +27,22 @@ def complexity_analysis():
             bc_config={"top": "symmetry", "bottom": "bounce-back"},  # Example BCs
         )
 
-        f_prev = sim.initialiser.initialise_multiphase_bubble(
-            sim.rho_l, sim.rho_v, sim.interface_width
-        )
+        f_prev = sim.simulation.initialize_fields("multiphase_bubble")
 
         # Warm up
         for _ in range(3):
-            f_next = sim.update(f_prev)
-            # Apply boundary conditions if present
-            if (
-                hasattr(sim, "boundary_condition")
-                and sim.boundary_condition is not None
-            ):
-                f_next = sim.boundary_condition(f_next, f_next)
+            f_next = sim.simulation.run_timestep(f_prev, 0)
+            if hasattr(sim.simulation, "boundary_condition"):
+                f_next = sim.simulation.boundary_condition(f_next, f_next)
             f_prev = f_next
 
         # Time multiple iterations
         times = []
         for _ in range(10):
             start = time.perf_counter()
-            f_next = sim.update(f_prev)
-            # Apply boundary conditions if present
-            if (
-                hasattr(sim, "boundary_condition")
-                and sim.boundary_condition is not None
-            ):
-                f_next = sim.boundary_condition(f_next, f_next)
+            f_next = sim.simulation.run_timestep(f_prev, 0)
+            if hasattr(sim.simulation, "boundary_condition"):
+                f_next = sim.simulation.boundary_condition(f_next, f_next)
             if hasattr(f_next, "block_until_ready"):
                 f_next.block_until_ready()
             end = time.perf_counter()

@@ -1,5 +1,5 @@
 import numpy as np
-from wblbm import Run
+from wblbm.run import Run
 from wblbm import visualise
 
 
@@ -22,11 +22,11 @@ def test_boundary_conditions():
 
     # Set up the simulation
     sim = Run(
+        simulation_type="multiphase",
         grid_shape=(200, 200),  # Small grid for quick testing
         lattice_type="D2Q9",
         tau=0.8,
         nt=10000,  # Short run to observe BC effects
-        multiphase=True,
         kappa=0.01,
         rho_l=1.0,
         rho_v=0.1,

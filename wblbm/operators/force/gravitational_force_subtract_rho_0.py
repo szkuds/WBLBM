@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from wblbm.force.force import Force
+from wblbm.operators.force.force import Force
 
 
 class GravityForce(Force):

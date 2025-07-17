@@ -1,5 +1,5 @@
 import numpy as np
-from wblbm import Run
+from wblbm.run import Run
 from wblbm import GravityForce
 from wblbm import visualise
 
@@ -22,11 +22,11 @@ def test_multiphase_gravity_simulation():
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
     sim = Run(
+        simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
         tau=tau,
         nt=nt,
-        multiphase=True,
         kappa=kappa,
         rho_l=rho_l,
         rho_v=rho_v,

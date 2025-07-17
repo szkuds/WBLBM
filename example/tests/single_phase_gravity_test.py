@@ -1,5 +1,5 @@
 import numpy as np
-from wblbm import Run
+from wblbm.run import Run
 from wblbm import GravityForce
 from wblbm import visualise
 
@@ -17,15 +17,14 @@ def test_single_phase_gravity_simulation():
     inclination_angle = 0
     gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
-    # Add bounce-back boundary conditions to left and right
     bc_config = {"left": "bounce-back", "right": "bounce-back"}
 
     sim = Run(
+        simulation_type="singlephase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
         tau=tau,
         nt=nt,
-        multiphase=False,
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
