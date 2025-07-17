@@ -1,6 +1,5 @@
-import numpy as np
-from wblbm.operators.run.run import Run
-from wblbm.force.gravitational_force_subtract_rho_0 import GravityForce
+from wblbm.run import Run
+from wblbm.operators.force import GravityForce
 from wblbm.utils.plotting import visualise
 
 
@@ -29,11 +28,11 @@ def test_multiphase_gravity_simulation():
     }
 
     sim = Run(
+        simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
         tau=tau,
         nt=nt,
-        multiphase=True,
         kappa=kappa,
         rho_l=rho_l,
         rho_v=rho_v,

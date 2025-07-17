@@ -1,5 +1,6 @@
 import numpy as np
-from wblbm import Run, GravityForce, visualise
+from wblbm.run import Run
+from wblbm import GravityForce, visualise
 import jax
 
 # this line is added for debugging
@@ -40,11 +41,11 @@ def test_wetting_simulation():
 
     # Initialize and run simulation with wetting enabled
     sim = Run(
+        simulation_type="wetting",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
         tau=tau,
         nt=nt,
-        multiphase=True,
         kappa=kappa,
         rho_l=rho_l,
         rho_v=rho_v,
@@ -53,10 +54,10 @@ def test_wetting_simulation():
         bc_config=bc_config,
         force_enabled=True,
         force_obj=gravity,
-        wetting_enabled=True,
-        hysteresis_params=None,
         phi_value=phi_value,
-        d_rho_value=d_rho_value
+        d_rho_value=d_rho_value,
+        wetting_enabled=True,
+        hysteresis_params=None
     )
 
     # Run with wetting initialization
