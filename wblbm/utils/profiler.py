@@ -4,6 +4,7 @@ import os
 
 # Have not managed to get this to work, removed the profiling from the run class.
 
+
 class JAXProfiler:
     def __init__(self, output_dir="./profiler_output", create_perfetto_link=True):
         self.output_dir = output_dir

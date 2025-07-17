@@ -7,14 +7,13 @@ import jax
 jax.config.update("jax_disable_jit", True)
 
 
-
 def test_wetting_simulation():
     """Test wetting implementation with a droplet on a surface under gravity."""
     print("\n=== Testing LBM Wetting Implementation ===")
 
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
-    tau = .99  # Relaxation time
+    tau = 0.99  # Relaxation time
     nt = 100  # Number of time steps
     save_interval = 10  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
@@ -36,7 +35,7 @@ def test_wetting_simulation():
         "bottom": "bounce-back",  # Solid wall for wetting
         "top": "symmetry",  # Open top
         "left": "periodic",  # Periodic sides
-        "right": "periodic"
+        "right": "periodic",
     }
 
     # Initialize and run simulation with wetting enabled
@@ -57,7 +56,7 @@ def test_wetting_simulation():
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
-        hysteresis_params=None
+        hysteresis_params=None,
     )
 
     # Run with wetting initialization

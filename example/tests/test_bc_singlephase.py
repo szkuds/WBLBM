@@ -25,7 +25,9 @@ class UniformForce(Force):
 
         # Create force array with uniform force in x-direction
         force_array = jnp.zeros((nx, ny, 1, d))
-        force_array = force_array.at[:, :, 0, 0].set(force_magnitude)  # Force in x-direction
+        force_array = force_array.at[:, :, 0, 0].set(
+            force_magnitude
+        )  # Force in x-direction
         force_array = force_array.at[:, :, 0, 1].set(0.0)  # No force in y-direction
 
         super().__init__(force_array)
@@ -66,10 +68,7 @@ def test_boundary_conditions_uniform_force():
 
     # Create uniform force object
     uniform_force = UniformForce(
-        nx=grid_shape[0],
-        ny=grid_shape[1],
-        d=2,
-        force_magnitude=force_magnitude
+        nx=grid_shape[0], ny=grid_shape[1], d=2, force_magnitude=force_magnitude
     )
 
     # Define boundary conditions
@@ -77,7 +76,7 @@ def test_boundary_conditions_uniform_force():
         "top": "bounce-back",  # No-slip wall at top
         "bottom": "bounce-back",  # No-slip wall at bottom
         "left": "periodic",  # Periodic boundary on left
-        "right": "periodic"  # Periodic boundary on right
+        "right": "periodic",  # Periodic boundary on right
     }
 
     print(f"Grid shape: {grid_shape}")
@@ -96,7 +95,7 @@ def test_boundary_conditions_uniform_force():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=True,
-        force_obj=uniform_force
+        force_obj=uniform_force,
     )
 
     # Run the simulation with standard initialization

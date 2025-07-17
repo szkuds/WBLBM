@@ -8,7 +8,9 @@ class LaplacianWetting(AbstractWetting):
     Callable class to calculate the Laplacian of a 2D grid with wetting boundary conditions.
     """
 
-    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+    def __init__(
+        self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1
+    ):
         super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
 
     def __call__(self, grid, phi_left, phi_right, d_rho_left, d_rho_right):
