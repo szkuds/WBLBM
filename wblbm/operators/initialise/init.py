@@ -147,9 +147,7 @@ class Initialise:
         # Return equilibrium distribution
         return self.equilibrium(rho, u)
 
-    def initialise_wetting(
-        self, rho_l: float, rho_v: float, interface_width: int
-    ):
+    def initialise_wetting(self, rho_l: float, rho_v: float, interface_width: int):
         """
         Initialize the simulation with a droplet wetting a solid surface.
 

@@ -6,8 +6,11 @@ from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.collision.collision_multiphase import CollisionMultiphase
 from wblbm.operators.update.update import Update
-from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import MacroscopicWetting
+from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import (
+    MacroscopicWetting,
+)
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
+
 
 class UpdateMultiphaseWetting(Update):
     def __init__(
@@ -53,7 +56,9 @@ class UpdateMultiphaseWetting(Update):
         d_rho_right: jnp.ndarray = None,
     ):
         if self.force_enabled and force is None:
-            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array([0.0, 0.01])
+            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
+                [0.0, 0.01]
+            )
 
         rho, u, force_tot = self.macroscopic(
             f,

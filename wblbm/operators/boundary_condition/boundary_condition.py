@@ -146,9 +146,8 @@ class BoundaryCondition:
             )
         return f_streamed
 
-    @partial(jit, static_argnums=(0, ))
+    @partial(jit, static_argnums=(0,))
     def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
         # For periodic boundaries, no additional transformation is needed
         # The streaming step already handles periodicity correctly
         return f_streamed
-

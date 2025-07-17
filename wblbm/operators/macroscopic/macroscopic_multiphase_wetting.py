@@ -8,6 +8,7 @@ from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.differential.gradient_wetting import GradientWetting
 from wblbm.operators.differential.laplacian_wetting import LaplacianWetting
 
+
 class MacroscopicWetting(Macroscopic):
     """
     Calculates macroscopic variables for wetting-aware multiphase simulations.
@@ -25,15 +26,17 @@ class MacroscopicWetting(Macroscopic):
         force_enabled: bool = False,
         wetting_enabled: bool = False,  # Flag to enable wetting-specific operators
     ):
-        super().__init__(
-            grid, lattice, force_enabled
-        )
+        super().__init__(grid, lattice, force_enabled)
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
         self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
-        self.gradient = GradientWetting(lattice, rho_l, rho_v, interface_width=interface_width)
-        self.laplacian = LaplacianWetting(lattice, rho_l, rho_v, interface_width=interface_width)
+        self.gradient = GradientWetting(
+            lattice, rho_l, rho_v, interface_width=interface_width
+        )
+        self.laplacian = LaplacianWetting(
+            lattice, rho_l, rho_v, interface_width=interface_width
+        )
         self.wetting_enabled = wetting_enabled
 
     @partial(jit, static_argnums=(0,))
@@ -70,7 +73,9 @@ class MacroscopicWetting(Macroscopic):
                 rho, phi_left, phi_right, d_rho_left, d_rho_right
             )
         else:
-            raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+            raise ValueError(
+                "When using the MacroscopicWetting class wetting must be enabled."
+            )
         return chem_pot__
 
     @partial(jit, static_argnums=(0,))
@@ -91,7 +96,9 @@ class MacroscopicWetting(Macroscopic):
                 d_rho_right,
             )
         else:
-            raise ValueError('When using the MacroscopicWetting class wetting must be enabled.')
+            raise ValueError(
+                "When using the MacroscopicWetting class wetting must be enabled."
+            )
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))
@@ -107,11 +114,11 @@ class MacroscopicWetting(Macroscopic):
         """Equation of state - extract 2D data for computation"""
         rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
         eos_2d = (
-                2
-                * self.beta
-                * (rho_2d - self.rho_l)
-                * (rho_2d - self.rho_v)
-                * (2 * rho_2d - self.rho_l - self.rho_v)
+            2
+            * self.beta
+            * (rho_2d - self.rho_l)
+            * (rho_2d - self.rho_v)
+            * (2 * rho_2d - self.rho_l - self.rho_v)
         )
 
         # Convert back to 4D format

@@ -8,7 +8,9 @@ class GradientWetting(AbstractWetting):
     Calculates gradients for wetting boundary conditions.
     """
 
-    def __init__(self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1):
+    def __init__(
+        self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1
+    ):
         super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
         self.c = lattice.c
 

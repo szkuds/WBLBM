@@ -13,10 +13,10 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(obj, jnp.ndarray):
             return obj.tolist()
         # Handle custom force objects
-        if hasattr(obj, '__class__') and hasattr(obj, '__dict__'):
+        if hasattr(obj, "__class__") and hasattr(obj, "__dict__"):
             result = {
-                '__class__': obj.__class__.__name__,
-                '__module__': obj.__class__.__module__
+                "__class__": obj.__class__.__name__,
+                "__module__": obj.__class__.__module__,
             }
             for key, value in obj.__dict__.items():
                 try:
@@ -26,7 +26,7 @@ class CustomJSONEncoder(json.JSONEncoder):
                     result[key] = str(value)
             return result
         # Handle other numpy arrays if present
-        if hasattr(obj, 'tolist'):
+        if hasattr(obj, "tolist"):
             return obj.tolist()
         return super().default(obj)
 
