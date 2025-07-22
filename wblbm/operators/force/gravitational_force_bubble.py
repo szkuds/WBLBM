@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from wblbm.operators.force.force import Force
 
 
-class GravityForce(Force):
+class GravityForceMultiphaseBubble(Force):
     """
     Subclass for gravitational force, constant across the grid.
     I have tested this class and compared it to the masked implementation.
@@ -32,4 +32,4 @@ class GravityForce(Force):
         Ignores rho as gravity is density-independent.
         """
         # mask = rho > 0.95 * rho_v + 0.05 * rho_l
-        return self.force * (rho - rho_v)
+        return self.force * (rho - rho_l)

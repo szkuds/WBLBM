@@ -32,14 +32,14 @@ class UniformForce(Force):
 
         super().__init__(force_array)
 
-    def compute_force(self, rho: jnp.ndarray, rhol: float, rhov: float) -> jnp.ndarray:
+    def compute_force(self, rho: jnp.ndarray, rho_l: float, rho_v: float) -> jnp.ndarray:
         """
         Compute the uniform force field.
 
         Args:
             rho: Density field (not used for uniform force)
-            rhol: Liquid density (not used for uniform force)
-            rhov: Vapor density (not used for uniform force)
+            rho_l: Liquid density (not used for uniform force)
+            rho_v: Vapor density (not used for uniform force)
 
         Returns:
             jnp.ndarray: Uniform force field

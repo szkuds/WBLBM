@@ -2,6 +2,7 @@ from .base import BaseSimulation
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.initialise.init import Initialise
+import jax.numpy as jnp
 
 
 class SinglePhaseSimulation(BaseSimulation):
@@ -53,13 +54,11 @@ class SinglePhaseSimulation(BaseSimulation):
     def run_timestep(self, fprev, it):
         force_ext = None
         if self.force_enabled and self.force_obj:
-            rho = self.macroscopic(fprev)[0]
+            rho = jnp.sum(fprev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho)
         fnext = (
             self.update(fprev, force=force_ext)
             if self.force_enabled
             else self.update(fprev)
         )
-        if hasattr(self, "boundary_condition"):
-            fnext = self.boundary_condition(fnext, fnext)
         return fnext

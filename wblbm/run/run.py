@@ -1,4 +1,5 @@
 import numpy as np
+import jax.numpy as jnp
 
 
 class SimulationFactory:
@@ -54,7 +55,16 @@ class Run:
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
             try:
-                result = macroscopic(fprev)
+                if self.config.get('force_enabled') and self.config.get('force_obj'):
+                    rho = jnp.sum(fprev, axis=2, keepdims=True)
+                    force = self.config.get('force_obj')
+                    if self.config.get('simulation_type') == 'multiphase':
+                        force_ext = force.compute_force(rho, self.config.get('rho_l'), self.config.get('rho_v'))
+                    else:
+                        force_ext = force.compute_force(rho)
+                    result = macroscopic(fprev, force_ext)
+                else:
+                    result = macroscopic(fprev)
                 if isinstance(result, tuple) and len(result) == 3:
                     rho, u, force = result
                     data_to_save = {
@@ -80,7 +90,7 @@ class Run:
         if verbose:
             print(f"Starting LBM simulation with {nt} time steps...")
             print(
-                f"Config -> Grid: {self.simulation.grid_shape}, Multiphase: {self.simulation.multiphase}, Wetting: {self.simulation.wetting_enabled}"
+                f"Config -> Grid: {self.simulation.grid_shape}, Multiphase: {self.simulation.multiphase}, Wetting: {self.simulation.wetting_enabled}, Force: {self.simulation.force_enabled}"
             )
         for it in range(nt):
             fprev = self.simulation.run_timestep(fprev, it)

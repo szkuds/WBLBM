@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from wblbm.operators.force.force import Force
 
 
-class GravityForce(Force):
+class GravityForceSinglephase(Force):
     """
     Subclass for gravitational force, constant across the grid.
     """
@@ -23,11 +23,10 @@ class GravityForce(Force):
         super().__init__(force_array)
 
     def compute_force(
-        self, rho: jnp.ndarray, rho_l: float, rho_v: float
+            self, rho: jnp.ndarray
     ) -> jnp.ndarray:
         """
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.
         """
-        mask = rho > 0.95 * rho_v + 0.05 * rho_l
-        return self.force * rho * mask
+        return self.force * rho

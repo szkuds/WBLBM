@@ -1,7 +1,7 @@
 from functools import partial
 
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, Array
 
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
@@ -31,7 +31,7 @@ class Macroscopic:
     @partial(jit, static_argnums=(0,))
     def __call__(
         self, f: jnp.ndarray, force: jnp.ndarray = None
-    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    ) -> tuple[Array, Array, Array] | tuple[Array, Array]:
         """
         Args:
             f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
@@ -53,7 +53,10 @@ class Macroscopic:
             uy = jnp.sum(f * cy, axis=2, keepdims=True)
             u = jnp.concatenate([ux, uy], axis=-1) / rho  # (nx, ny, 1, 2)
 
-            # NO force correction here!
-            return rho, u
+            if force is not None:
+                u_eq = u + force / (2 * rho)
+                return rho, u_eq, force
+            if force is None:
+                return rho, u
         elif self.d == 3:
             raise NotImplementedError("Dimension larger than 2 not supported.")
