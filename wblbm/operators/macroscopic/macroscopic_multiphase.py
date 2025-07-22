@@ -58,7 +58,6 @@ class MacroscopicMultiphase(Macroscopic):
 
         # Calculate interaction force
         force_int = self.force_int(rho)
-
         # Total force for equilibrium calculation
         if force is not None:
             force_total = force + force_int

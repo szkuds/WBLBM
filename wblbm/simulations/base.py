@@ -11,6 +11,10 @@ class BaseSimulation(ABC):
         self.lattice = Lattice(lattice_type)
         self.tau = tau
 
+        self.update = None
+        self.initialiser = None
+        self.macroscopic = None
+
         # Add simulation type flags
         self.multiphase = False
         self.wetting_enabled = False

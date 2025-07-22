@@ -1,7 +1,11 @@
 import numpy as np
 from wblbm.run import Run
-from wblbm import GravityForce
+from wblbm.operators.force import GravityForceMultiphaseBubble
 from wblbm import visualise
+import jax
+
+# this line is added for debugging
+#jax.config.update("jax_disable_jit", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -10,16 +14,16 @@ def test_multiphase_gravity_simulation():
 
     grid_shape = (200, 200)
     tau = 0.9
-    nt = 5000
+    nt = 2000
     save_interval = 100
-    kappa = 0.01
+    kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 10
+    interface_width = 6
 
-    force_g = 0.000005
+    force_g = 0.0000001
     inclination_angle = 0
-    gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    gravity = GravityForceMultiphaseBubble(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
     sim = Run(
         simulation_type="multiphase",

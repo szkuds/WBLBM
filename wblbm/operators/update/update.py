@@ -15,12 +15,12 @@ from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 class Update(object):
     def __init__(
-        self,
-        grid: Grid,
-        lattice: Lattice,
-        tau: float,
-        bc_config: dict = None,
-        force_enabled: bool = False,
+            self,
+            grid: Grid,
+            lattice: Lattice,
+            tau: float,
+            bc_config: dict = None,
+            force_enabled: bool = False,
     ):
         self.grid = grid
         self.lattice = lattice
@@ -39,20 +39,15 @@ class Update(object):
     @partial(jit, static_argnums=(0,))
     @time_function(enable_timing=TIMING_ENABLED)
     def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None):
-        # If force_enabled and no force provided, use a simple constant force for testing
-        if self.force_enabled and force is None:
-            # Example: uniform force in x-direction
-            force = jnp.ones((self.grid.nx, self.grid.ny, 1, 2)) * jnp.array(
-                [0.01, 0.0]
-            )
-        rho, u = (
-            self.macroscopic(f, force=force)
-            if self.force_enabled
-            else self.macroscopic(f)
-        )
+        if self.force_enabled:
+            rho, u, force_tot = self.macroscopic(f, force=force)
+        else:
+            rho, u = self.macroscopic(f)
         feq = self.equilibrium(rho, u)
         fcol = self.collision(f, feq)
         fstream = self.streaming(fcol)
         if self.boundary_condition is not None:
-            fstream = self.boundary_condition(fstream, fcol)
-        return fstream
+            fbc = self.boundary_condition(fstream, fcol)
+            return fbc
+        else:
+            return fstream

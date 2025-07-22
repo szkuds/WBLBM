@@ -1,2 +1,5 @@
 from .force import Force
-from .gravitational_force_subtract_rho_0 import GravityForce
+from .gravitational_force_bubble import GravityForceMultiphaseBubble
+from .gravitational_force_single_phase import GravityForceSinglephase
+from .gravitational_force_multiphase import GravityForceMultiphaseDroplet
+

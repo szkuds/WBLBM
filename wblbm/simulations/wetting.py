@@ -14,13 +14,15 @@ class WettingSimulation(MultiphaseSimulation):
         hysteresis_params=None,
         **kwargs
     ):
+        super().__init__(grid_shape, **kwargs)
         self.macroscopic = None
         self.update = None
         self.hysteresis = None
         self.phi_value = phi_value
         self.d_rho_value = d_rho_value
         self.hysteresis_params = hysteresis_params
-        super().__init__(grid_shape, **kwargs)
+        self.multiphase = True
+        self.wetting_enabled = True
 
     def setup_operators(self):
         super().setup_operators()
@@ -31,8 +33,8 @@ class WettingSimulation(MultiphaseSimulation):
             self.tau,
             self.kappa,
             self.interface_width,
-            self.rhol,
-            self.rhov,
+            self.rho_l,
+            self.rho_v,
             wetting_enabled=True,
         )
         self.macroscopic = MacroscopicWetting(
@@ -40,8 +42,8 @@ class WettingSimulation(MultiphaseSimulation):
             self.lattice,
             self.kappa,
             self.interface_width,
-            self.rhol,
-            self.rhov,
+            self.rho_l,
+            self.rho_v,
             wetting_enabled=True,
         )
         # Setup wetting-specific components
@@ -69,7 +71,7 @@ class WettingSimulation(MultiphaseSimulation):
     def initialize_fields(self, init_type="wetting"):
         if init_type == "wetting":
             return self.initialiser.initialise_wetting(
-                self.rhol, self.rhov, self.interface_width
+                self.rho_l, self.rho_v, self.interface_width
             )
         else:
             return super().initialize_fields(init_type)
