@@ -16,7 +16,7 @@ class GravityForceMultiphaseBubble(Force):
             raise ValueError("Currently supports 2D (d=2) only")
 
         force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
-        force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+        force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
 
         force_array = jnp.zeros((nx, ny, 1, d))
         force_array = force_array.at[:, :, 0, 0].set(force_x)
@@ -31,5 +31,5 @@ class GravityForceMultiphaseBubble(Force):
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.
         """
-        # mask = rho > 0.95 * rho_v + 0.05 * rho_l
-        return self.force * (rho - rho_l)
+        mask = rho < 0.95 * rho_l + 0.05 * rho_v
+        return self.force * rho * mask
