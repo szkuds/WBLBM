@@ -38,3 +38,15 @@ class CollisionMRT(CollisionBase):
                 ],
                 dtype=jnp.float64,
             )
+        self.K = k_diag
+
+    def __call__(
+        self, f: jnp.ndarray, feq: jnp.ndarray, source: jnp.ndarray = None
+    ) -> jnp.ndarray:
+        m = jnp.einsum("ij,xyj->xyi", M, f[..., 0])
+        m_eq = jnp.einsum("ij,xyj->xyi", M, feq[..., 0])
+        if source is None:
+            S = 0.0
+        else:
+            S = jnp.einsum("ij,xyj->xyi", M, source[..., 0])
+        m_post = m - self.K * (m - m_eq) + (1 - 0.5 * self.K) * S
