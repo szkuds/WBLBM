@@ -15,12 +15,12 @@ from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 class Update(object):
     def __init__(
-            self,
-            grid: Grid,
-            lattice: Lattice,
-            tau: float,
-            bc_config: dict = None,
-            force_enabled: bool = False,
+        self,
+        grid: Grid,
+        lattice: Lattice,
+        tau: float,
+        bc_config: dict = None,
+        force_enabled: bool = False,
     ):
         self.grid = grid
         self.lattice = lattice

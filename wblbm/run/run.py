@@ -55,11 +55,13 @@ class Run:
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
             try:
-                if self.config.get('force_enabled') and self.config.get('force_obj'):
+                if self.config.get("force_enabled") and self.config.get("force_obj"):
                     rho = jnp.sum(fprev, axis=2, keepdims=True)
-                    force = self.config.get('force_obj')
-                    if self.config.get('simulation_type') == 'multiphase':
-                        force_ext = force.compute_force(rho, self.config.get('rho_l'), self.config.get('rho_v'))
+                    force = self.config.get("force_obj")
+                    if self.config.get("simulation_type") == "multiphase":
+                        force_ext = force.compute_force(
+                            rho, self.config.get("rho_l"), self.config.get("rho_v")
+                        )
                     else:
                         force_ext = force.compute_force(rho)
                     result = macroscopic(fprev, force_ext)

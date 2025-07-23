@@ -32,7 +32,9 @@ class UniformForce(Force):
 
         super().__init__(force_array)
 
-    def compute_force(self, rho: jnp.ndarray, rho_l: float, rho_v: float) -> jnp.ndarray:
+    def compute_force(
+        self, rho: jnp.ndarray, rho_l: float, rho_v: float
+    ) -> jnp.ndarray:
         """
         Compute the uniform force field.
 

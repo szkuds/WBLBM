@@ -4,7 +4,7 @@ from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-#jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -12,7 +12,7 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    tau = .9
+    tau = 0.9
     nt = 10000
     save_interval = 1000
     kappa = 0.04
@@ -22,7 +22,9 @@ def test_multiphase_gravity_simulation():
 
     force_g = 0.000002
     inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    gravity = GravityForceMultiphaseDroplet(
+        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+    )
 
     bc_config = {
         "top": "bounce-back",  # No-slip wall at top

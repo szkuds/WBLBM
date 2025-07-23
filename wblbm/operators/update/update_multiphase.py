@@ -13,16 +13,16 @@ from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondit
 
 class UpdateMultiphase(Update):
     def __init__(
-            self,
-            grid: Grid,
-            lattice: Lattice,
-            tau: float,
-            kappa: float,
-            interface_width: int,
-            rho_l: float,
-            rho_v: float,
-            bc_config: dict = None,
-            force_enabled: bool = False,
+        self,
+        grid: Grid,
+        lattice: Lattice,
+        tau: float,
+        kappa: float,
+        interface_width: int,
+        rho_l: float,
+        rho_v: float,
+        bc_config: dict = None,
+        force_enabled: bool = False,
     ):
         super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
         self.macroscopic = MacroscopicMultiphase(
@@ -51,7 +51,9 @@ class UpdateMultiphase(Update):
         elif self.force_enabled:
             rho, u, force_tot = self.macroscopic(f, force=force)
         else:
-            rho, u, force_tot = self.macroscopic(f)  # In this case the total force is only the interaction force
+            rho, u, force_tot = self.macroscopic(
+                f
+            )  # In this case the total force is only the interaction force
         feq = self.equilibrium(rho, u)
         source = self.source_term(rho, u, force_tot)
         fcol = self.collision(f, feq, source)

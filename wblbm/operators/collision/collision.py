@@ -1,9 +1,10 @@
 import jax.numpy as jnp
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
+from .base import CollisionBase
 
 
-class Collision:
+class Collision(CollisionBase):
     """
     Callable class to perform the collision step of the LBM.
     Implements the BGK collision operators with source terms.
@@ -18,10 +19,7 @@ class Collision:
             lattice (Lattice): Lattice object containing lattice properties
             tau (float): Relaxation time parameter
         """
-        self.nx: int = grid.nx
-        self.ny: int = grid.ny
-        self.q: int = lattice.q
-        self.d: int = lattice.d
+        super().__init__(grid, lattice)
         self.tau: float = tau
 
     def __call__(self, f: jnp.ndarray, feq: jnp.ndarray) -> jnp.ndarray:
