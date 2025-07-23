@@ -1860,7 +1860,7 @@ wblbm/
                         raise ValueError("Currently supports 2D (d=2) only")
             
                     force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
-                    force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+                    force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
             
                     force_array = jnp.zeros((nx, ny, 1, d))
                     force_array = force_array.at[:, :, 0, 0].set(force_x)
@@ -1875,8 +1875,8 @@ wblbm/
                     Returns the constant gravitational force field.
                     Ignores rho as gravity is density-independent.
                     """
-                    # mask = rho > 0.95 * rho_v + 0.05 * rho_l
-                    return self.force * (rho - rho_l)
+                    mask = rho < 0.95 * rho_l + 0.05 * rho_v
+                    return self.force * rho * mask
             --- End of gravitational_force_bubble.py ---
 
             __pycache__/
@@ -2608,9 +2608,10 @@ wblbm/
             import jax.numpy as jnp
             from wblbm.grid.grid import Grid
             from wblbm.lattice.lattice import Lattice
+            from .base import CollisionBase
             
             
-            class Collision:
+            class Collision(CollisionBase):
                 """
                 Callable class to perform the collision step of the LBM.
                 Implements the BGK collision operators with source terms.
@@ -2625,10 +2626,7 @@ wblbm/
                         lattice (Lattice): Lattice object containing lattice properties
                         tau (float): Relaxation time parameter
                     """
-                    self.nx: int = grid.nx
-                    self.ny: int = grid.ny
-                    self.q: int = lattice.q
-                    self.d: int = lattice.d
+                    super().__init__(grid, lattice)
                     self.tau: float = tau
             
                 def __call__(self, f: jnp.ndarray, feq: jnp.ndarray) -> jnp.ndarray:
@@ -2644,6 +2642,32 @@ wblbm/
                     """
                     return (1 - (1 / self.tau)) * f + (1 / self.tau) * feq
             --- End of collision.py ---
+
+            collision_MRT.py
+            --- Code in collision_MRT.py ---
+            import jax.numpy as jnp
+            from .collision import Collision
+            from wblbm.grid.grid import Grid
+            from wblbm.lattice.lattice import Lattice
+            
+            M = jnp.array([
+                [1,  1,  1,  1,  1,  1,  1,  1,  1],
+                [-4, -1, -1, -1, -1,  2,  2,  2,  2],
+                [4, -2, -2, -2, -2,  1,  1,  1,  1],
+                [0,  1,  0, -1,  0,  1, -1, -1,  1],
+                [0, -2,  0,  2,  0,  1, -1, -1,  1],
+                [0,  0,  1,  0, -1,  1,  1, -1, -1],
+                [0,  0, -2,  0,  2,  1,  1, -1, -1],
+                [0,  1, -1,  1, -1,  0,  0,  0,  0],
+                [0,  0,  0,  0,  0,  1, -1,  1, -1]
+            ], dtype=jnp.float64)
+            M_INV = jnp.linalg.inv(M)
+            
+            class CollisionMRT(CollisionBase):
+                def __init__(self, grid: Grid, lattice: Lattice, k_diag = None, **kwargs):
+                    super().__init__(grid, lattice)
+                    if k_diag is None:
+            --- End of collision_MRT.py ---
 
             source.py
             --- Code in source.py ---
@@ -2731,6 +2755,44 @@ wblbm/
             
                     return source_4d
             --- End of source.py ---
+
+            base.py
+            --- Code in base.py ---
+            from abc import ABC
+            
+            import jax.numpy as jnp
+            from wblbm.grid.grid import Grid
+            from wblbm.lattice.lattice import Lattice
+            
+            
+            class CollisionBase(ABC):
+                """
+                Callable class to perform the collision step of the LBM.
+                Implements the BGK collision operators with source terms.
+                """
+            
+                def __init__(self, grid: Grid, lattice: Lattice) -> None:
+                    """
+                    Initialize the Collision operators.
+            
+                    Args:
+                        grid (Grid): Grid object containing simulation domain information
+                        lattice (Lattice): Lattice object containing lattice properties
+                        tau (float): Relaxation time parameter
+                    """
+                    self.nx: int = grid.nx
+                    self.ny: int = grid.ny
+                    self.q: int = lattice.q
+                    self.d: int = lattice.d
+            
+                def __call__(self, f: jnp.ndarray, feq: jnp.ndarray) -> jnp.ndarray:
+                    """
+                    Perform the collision step of the LBM.
+            
+                    Needs to be implemented by the subclass
+                    """
+                    pass
+            --- End of base.py ---
 
             __pycache__/
                 collision.cpython-312.pyc
@@ -3885,16 +3947,16 @@ example/
             """Test a multiphase LBM simulation with gravity and a central droplet."""
             print("\n=== Multiphase LBM Simulation with Gravity Test ===")
         
-            grid_shape = (200, 200)
+            grid_shape = (200, 800)
             tau = 0.9
-            nt = 2000
-            save_interval = 100
+            nt = 40000
+            save_interval = 4000
             kappa = 0.04
             rho_l = 1.0
             rho_v = 0.001
             interface_width = 10
         
-            force_g = 0.0000001
+            force_g = 0.000002
             inclination_angle = 0
             gravity = GravityForceMultiphaseBubble(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
         
@@ -4423,7 +4485,7 @@ example/
             print("\n=== Multiphase LBM Simulation with Gravity Test ===")
         
             grid_shape = (200, 800)
-            tau = 1.2
+            tau = .9
             nt = 1000
             save_interval = 100
             kappa = 0.04
@@ -4476,177 +4538,6 @@ example/
         --- End of test_droplet_periodic_top_bot_bc.py ---
 
         results/
-            2025-07-22/
-                09-48-16/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                09-58-42/
-                    config.json
-                    data/
-                        timestep_1100.npz
-                        timestep_1300.npz
-                        timestep_1700.npz
-                        timestep_1500.npz
-                        timestep_900.npz
-                        timestep_1200.npz
-                        timestep_1000.npz
-                        timestep_800.npz
-                        timestep_1400.npz
-                        timestep_1600.npz
-                        timestep_600.npz
-                        timestep_0.npz
-                        timestep_1800.npz
-                        timestep_400.npz
-                        timestep_200.npz
-                        timestep_1999.npz
-                        timestep_500.npz
-                        timestep_1900.npz
-                        timestep_700.npz
-                        timestep_300.npz
-                        timestep_100.npz
-                    plots/
-                        timestep_1100.png
-                        timestep_1300.png
-                        timestep_1700.png
-                        timestep_1500.png
-                        timestep_900.png
-                        timestep_1200.png
-                        timestep_1000.png
-                        timestep_800.png
-                        timestep_1400.png
-                        timestep_1600.png
-                        timestep_600.png
-                        timestep_0.png
-                        timestep_1800.png
-                        timestep_400.png
-                        timestep_200.png
-                        timestep_1999.png
-                        timestep_500.png
-                        timestep_1900.png
-                        timestep_700.png
-                        timestep_300.png
-                        timestep_100.png
-                09-59-59/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                09-55-30/
-                    config.json
-                    data/
-                        timestep_1100.npz
-                        timestep_1300.npz
-                        timestep_1700.npz
-                        timestep_1500.npz
-                        timestep_900.npz
-                        timestep_1200.npz
-                        timestep_1000.npz
-                        timestep_800.npz
-                        timestep_1400.npz
-                        timestep_1600.npz
-                        timestep_600.npz
-                        timestep_0.npz
-                        timestep_1800.npz
-                        timestep_400.npz
-                        timestep_200.npz
-                        timestep_1999.npz
-                        timestep_500.npz
-                        timestep_1900.npz
-                        timestep_700.npz
-                        timestep_300.npz
-                        timestep_100.npz
-                    plots/
-                        timestep_1100.png
-                        timestep_1300.png
-                        timestep_1700.png
-                        timestep_1500.png
-                        timestep_900.png
-                        timestep_1200.png
-                        timestep_1000.png
-                        timestep_800.png
-                        timestep_1400.png
-                        timestep_1600.png
-                        timestep_600.png
-                        timestep_0.png
-                        timestep_1800.png
-                        timestep_400.png
-                        timestep_200.png
-                        timestep_1999.png
-                        timestep_500.png
-                        timestep_1900.png
-                        timestep_700.png
-                        timestep_300.png
-                        timestep_100.png
-                09-47-37/
-                    config.json
-                    data/
-                        timestep_900.npz
-                        timestep_999.npz
-                        timestep_800.npz
-                        timestep_600.npz
-                        timestep_0.npz
-                        timestep_400.npz
-                        timestep_200.npz
-                        timestep_500.npz
-                        timestep_700.npz
-                        timestep_300.npz
-                        timestep_100.npz
-                    plots/
-                        timestep_900.png
-                        timestep_999.png
-                        timestep_800.png
-                        timestep_600.png
-                        timestep_0.png
-                        timestep_400.png
-                        timestep_200.png
-                        timestep_500.png
-                        timestep_700.png
-                        timestep_300.png
-                        timestep_100.png
             2025-07-10/
                 14-28-58/
                     config.json

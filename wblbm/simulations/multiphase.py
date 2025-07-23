@@ -43,7 +43,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.rho_l,
             self.rho_v,
             self.bc_config,
-            self.force_enabled
+            self.force_enabled,
         )
         self.macroscopic = MacroscopicMultiphase(
             self.grid,
@@ -52,7 +52,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.interface_width,
             self.rho_l,
             self.rho_v,
-            self.force_enabled
+            self.force_enabled,
         )
 
     def initialize_fields(self, init_type="multiphase_droplet"):

@@ -5,7 +5,7 @@ from wblbm import visualise
 import jax
 
 # this line is added for debugging
-#jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -23,7 +23,9 @@ def test_multiphase_gravity_simulation():
 
     force_g = 0.000002
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    gravity = GravityForceMultiphaseBubble(
+        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+    )
 
     sim = Run(
         simulation_type="multiphase",

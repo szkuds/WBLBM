@@ -14,7 +14,12 @@ from wblbm.operators.differential import (
 from wblbm.operators.collision import Collision, SourceTerm, CollisionMultiphase
 from wblbm.operators.boundary_condition import BoundaryCondition
 from wblbm.run import Run
-from wblbm.operators.force import Force, GravityForceMultiphaseBubble, GravityForceMultiphaseDroplet, GravityForceSinglephase
+from wblbm.operators.force import (
+    Force,
+    GravityForceMultiphaseBubble,
+    GravityForceMultiphaseDroplet,
+    GravityForceSinglephase,
+)
 from wblbm.utils import (
     SimulationIO,
     visualise,

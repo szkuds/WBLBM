@@ -14,17 +14,17 @@ from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondit
 
 class UpdateMultiphaseWetting(Update):
     def __init__(
-            self,
-            grid: Grid,
-            lattice: Lattice,
-            tau: float,
-            kappa: float,
-            interface_width: int,
-            rho_l: float,
-            rho_v: float,
-            bc_config: dict = None,
-            force_enabled: bool = False,
-            wetting_enabled: bool = True,
+        self,
+        grid: Grid,
+        lattice: Lattice,
+        tau: float,
+        kappa: float,
+        interface_width: int,
+        rho_l: float,
+        rho_v: float,
+        bc_config: dict = None,
+        force_enabled: bool = False,
+        wetting_enabled: bool = True,
     ):
         super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
         self.macroscopic = MacroscopicWetting(
@@ -47,13 +47,13 @@ class UpdateMultiphaseWetting(Update):
 
     @partial(jit, static_argnums=(0,))
     def __call__(
-            self,
-            f: jnp.array,
-            force: jnp.ndarray = None,
-            phi_left: jnp.ndarray = None,
-            phi_right: jnp.ndarray = None,
-            d_rho_left: jnp.ndarray = None,
-            d_rho_right: jnp.ndarray = None,
+        self,
+        f: jnp.array,
+        force: jnp.ndarray = None,
+        phi_left: jnp.ndarray = None,
+        phi_right: jnp.ndarray = None,
+        d_rho_left: jnp.ndarray = None,
+        d_rho_right: jnp.ndarray = None,
     ):
 
         if self.force_enabled and force is None:
@@ -61,19 +61,22 @@ class UpdateMultiphaseWetting(Update):
                 "When the force is enabled an external force needs to be provided"
             )
         elif self.force_enabled:
-            rho, u, force_tot = self.macroscopic(f, force=force,
-                                                 phi_left=phi_left,
-                                                 phi_right=phi_right,
-                                                 d_rho_left=d_rho_left,
-                                                 d_rho_right=d_rho_right,
-                                                 )
+            rho, u, force_tot = self.macroscopic(
+                f,
+                force=force,
+                phi_left=phi_left,
+                phi_right=phi_right,
+                d_rho_left=d_rho_left,
+                d_rho_right=d_rho_right,
+            )
         else:
-            rho, u, force_tot = self.macroscopic(f,
-                                                 phi_left=phi_left,
-                                                 phi_right=phi_right,
-                                                 d_rho_left=d_rho_left,
-                                                 d_rho_right=d_rho_right,
-                                                 )  # In this case the total force is only the interaction force
+            rho, u, force_tot = self.macroscopic(
+                f,
+                phi_left=phi_left,
+                phi_right=phi_right,
+                d_rho_left=d_rho_left,
+                d_rho_right=d_rho_right,
+            )  # In this case the total force is only the interaction force
 
         feq = self.equilibrium(rho, u)
         source = self.source_term(rho, u, force_tot)
