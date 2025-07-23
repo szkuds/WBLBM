@@ -23,6 +23,7 @@ class Update(object):
         force_enabled: bool = False,
         collision_scheme: str = "bgk",
         kvec=None,
+        **kwargs
     ):
         self.grid = grid
         self.lattice = lattice
@@ -31,7 +32,12 @@ class Update(object):
         self.equilibrium = Equilibrium(grid, lattice)
         # Select collision scheme
         if collision_scheme == "mrt":
-            self.collision = CollisionMRT(grid, lattice, k_diag=kvec)
+            # Extract MRT parameters from kwargs if provided
+            mrt_params = {}
+            for param in ["k0", "kb", "k2", "k4", "kv"]:
+                if param in kwargs:
+                    mrt_params[param] = kwargs[param]
+            self.collision = CollisionMRT(grid, lattice, k_diag=kvec, **mrt_params)
         else:
             self.collision = CollisionBGK(grid, lattice, tau)
         self.source_term = SourceTerm(grid, lattice)

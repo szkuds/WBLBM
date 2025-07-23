@@ -28,8 +28,18 @@ class UpdateMultiphaseWetting(Update):
         wetting_enabled: bool = True,
         collision_scheme: str = "bgk",
         kvec=None,
+        **kwargs
     ):
-        super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
+        super().__init__(
+            grid,
+            lattice,
+            tau,
+            bc_config,
+            force_enabled=force_enabled,
+            collision_scheme=collision_scheme,
+            kvec=kvec,
+            **kwargs
+        )
         self.macroscopic = MacroscopicWetting(
             grid,
             lattice,

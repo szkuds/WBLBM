@@ -48,8 +48,7 @@ class CollisionMRT(CollisionBase):
                     1 / kwargs.get("k4", 1.0),
                     1 / kwargs.get("kv", 0.8),
                     1 / kwargs.get("kv", 0.8),
-                ],
-                dtype=jnp.float64,
+                ]
             )
         self.K = k_diag
 
@@ -77,5 +76,5 @@ class CollisionMRT(CollisionBase):
         # Relaxation in moment space
         m_post = m - self.K * (m - m_eq) + (1 - 0.5 * self.K) * S
         # Transform back to distribution space
-        f_post = jnp.einsum("ij,xyi->xyj", M_INV, m_post)[..., None]
+        f_post = jnp.einsum("ij,xyj->xyi", M_INV, m_post)[..., None]
         return f_post

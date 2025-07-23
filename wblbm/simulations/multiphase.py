@@ -33,6 +33,7 @@ class MultiphaseSimulation(BaseSimulation):
         self.bc_config = bc_config
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
+        self.kwargs = kwargs
         self.setup_operators()
         self.multiphase = True
 
@@ -50,6 +51,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.force_enabled,
             collision_scheme=self.collision_scheme,
             kvec=self.k_diag,
+            **self.kwargs  # Pass additional keyword arguments
         )
         self.macroscopic = MacroscopicMultiphase(
             self.grid,
