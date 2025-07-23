@@ -6,6 +6,7 @@ from jax import jit
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.collision.collision_BGK import CollisionBGK
+from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
@@ -23,6 +24,8 @@ class UpdateMultiphase(Update):
         rho_v: float,
         bc_config: dict = None,
         force_enabled: bool = False,
+        collision_scheme: str = "bgk",
+        kvec=None,
     ):
         super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
         self.macroscopic = MacroscopicMultiphase(
@@ -34,12 +37,6 @@ class UpdateMultiphase(Update):
             rho_v,
             force_enabled=force_enabled,
         )
-        self.collision = CollisionBGK(grid, lattice, tau)
-        if bc_config is not None:
-            self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
-        else:
-            self.boundary_condition = None
-        self.force_enabled = force_enabled
 
     @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.array, force: jnp.ndarray = None):

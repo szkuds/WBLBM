@@ -5,6 +5,7 @@ from jax import jit
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.collision.collision_BGK import CollisionBGK
+from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic_multiphase_wetting import (
     MacroscopicWetting,
@@ -25,6 +26,8 @@ class UpdateMultiphaseWetting(Update):
         bc_config: dict = None,
         force_enabled: bool = False,
         wetting_enabled: bool = True,
+        collision_scheme: str = "bgk",
+        kvec=None,
     ):
         super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
         self.macroscopic = MacroscopicWetting(
@@ -37,12 +40,6 @@ class UpdateMultiphaseWetting(Update):
             force_enabled=force_enabled,
             wetting_enabled=wetting_enabled,
         )
-        self.collision = CollisionBGK(grid, lattice, tau)
-        if bc_config is not None:
-            self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
-        else:
-            self.boundary_condition = None
-        self.force_enabled = force_enabled
         self.wetting_enabled = wetting_enabled
 
     @partial(jit, static_argnums=(0,))

@@ -12,9 +12,13 @@ class WettingSimulation(MultiphaseSimulation):
         phi_value=1.0,
         d_rho_value=0.0,
         hysteresis_params=None,
+        collision_scheme="bgk",
+        k_diag=None,
         **kwargs
     ):
-        super().__init__(grid_shape, **kwargs)
+        super().__init__(
+            grid_shape, collision_scheme=collision_scheme, k_diag=k_diag, **kwargs
+        )
         self.macroscopic = None
         self.update = None
         self.hysteresis = None
@@ -36,6 +40,8 @@ class WettingSimulation(MultiphaseSimulation):
             self.rho_l,
             self.rho_v,
             wetting_enabled=True,
+            collision_scheme=self.collision_scheme,
+            kvec=self.k_diag,
         )
         self.macroscopic = MacroscopicWetting(
             self.grid,

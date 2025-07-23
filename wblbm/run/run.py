@@ -33,6 +33,11 @@ class Run:
         results_dir="results",
         **kwargs,
     ):
+        # Allow collision config as a dict or CLI/JSON entry and pass it untouched
+        collision_cfg = kwargs.pop("collision", None)
+        if collision_cfg is not None:
+            # Flatten collision config into kwargs for simulation constructors
+            kwargs.update(collision_cfg)
         self.simulation = SimulationFactory.create_simulation(simulation_type, **kwargs)
         self.save_interval = save_interval
         self.results_dir = results_dir

@@ -7,18 +7,17 @@ from wblbm.lattice.lattice import Lattice
 
 class CollisionBase(ABC):
     """
-    Callable class to perform the collision step of the LBM.
+    Base class for LBM collision operators.
     Implements the BGK collision operators with source terms.
+    Subclasses should implement the __call__ method.
     """
 
     def __init__(self, grid: Grid, lattice: Lattice) -> None:
         """
-        Initialize the CollisionBGK operators.
-
+        Initializes the grid and lattice parameters required for the collision step.
         Args:
             grid (Grid): Grid object containing simulation domain information
             lattice (Lattice): Lattice object containing lattice properties
-            tau (float): Relaxation time parameter
         """
         self.nx: int = grid.nx
         self.ny: int = grid.ny
@@ -29,6 +28,6 @@ class CollisionBase(ABC):
         """
         Perform the collision step of the LBM.
 
-        Needs to be implemented by the subclass
+        Needs to be implemented by the subclass.
         """
         pass

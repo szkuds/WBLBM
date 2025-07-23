@@ -19,6 +19,8 @@ class MultiphaseSimulation(BaseSimulation):
         force_enabled=False,
         force_obj=None,
         bc_config=None,
+        collision_scheme="bgk",
+        k_diag=None,
         **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
@@ -29,6 +31,8 @@ class MultiphaseSimulation(BaseSimulation):
         self.force_enabled = force_enabled
         self.force_obj = force_obj
         self.bc_config = bc_config
+        self.collision_scheme = collision_scheme
+        self.k_diag = k_diag
         self.setup_operators()
         self.multiphase = True
 
@@ -44,6 +48,8 @@ class MultiphaseSimulation(BaseSimulation):
             self.rho_v,
             self.bc_config,
             self.force_enabled,
+            collision_scheme=self.collision_scheme,
+            kvec=self.k_diag,
         )
         self.macroscopic = MacroscopicMultiphase(
             self.grid,
