@@ -12,14 +12,14 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    nt = 1300
-    save_interval = 100
+    nt = 20000
+    save_interval = 1000
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 10
+    interface_width = 8
 
-    force_g = 0.00002
+    force_g = 0.000002
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
@@ -28,11 +28,11 @@ def test_multiphase_gravity_simulation():
     # Specify MRT collision operator and its rates
     collision = {
         "collision_scheme": "mrt",
-        "kv": 0.7,
-        "kb": 0.7,
-        "k0": 0.99,
-        "k2": 0.8,
-        "k4": 0.7,
+        "kv": 0.9,
+        "kb": 1.6,
+        "k0": 1.0,
+        "k2": 1.6,
+        "k4": 1.0,
     }
 
     sim = Run(
