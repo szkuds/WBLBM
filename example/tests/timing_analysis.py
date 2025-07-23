@@ -68,7 +68,7 @@ def detailed_timing_analysis():
             source.block_until_ready()
         source_time = time.perf_counter() - start
 
-        # Collision
+        # CollisionBGK
         start = time.perf_counter()
         fcol = sim.simulation.update.collision(f_prev, feq, source)
         if hasattr(fcol, "block_until_ready"):

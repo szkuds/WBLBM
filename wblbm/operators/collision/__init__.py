@@ -1,3 +1,2 @@
-from .collision import Collision
+from .collision_BGK import CollisionBGK
 from .source import SourceTerm
-from .collision_multiphase import CollisionMultiphase

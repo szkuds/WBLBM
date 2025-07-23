@@ -13,7 +13,7 @@ class CollisionBase(ABC):
 
     def __init__(self, grid: Grid, lattice: Lattice) -> None:
         """
-        Initialize the Collision operators.
+        Initialize the CollisionBGK operators.
 
         Args:
             grid (Grid): Grid object containing simulation domain information
