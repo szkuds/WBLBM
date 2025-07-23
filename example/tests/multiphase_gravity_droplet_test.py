@@ -20,7 +20,7 @@ def test_multiphase_gravity_simulation():
     rho_v = 0.001
     interface_width = 10
 
-    force_g = 0.000002
+    force_g = 0.00002
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle

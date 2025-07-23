@@ -10,6 +10,13 @@ class SourceTerm:
     """
 
     def __init__(self, grid: Grid, lattice: Lattice):
+        """
+        Initialize the source term calculator.
+
+        Args:
+            grid (Grid): Grid object containing simulation domain information
+            lattice (Lattice): Lattice object containing lattice properties
+        """
         self.nx: int = grid.nx
         self.ny: int = grid.ny
         self.q: int = lattice.q
@@ -49,6 +56,17 @@ class SourceTerm:
         grad_rho_2d = grad_rho[:, :, 0, :]  # Shape: (nx, ny, 2)
 
         def source_term(u_2d_, force_2d_, grad_rho_2d_):
+            """
+            Compute the source term for each lattice direction.
+
+            Args:
+                u_2d_ (jnp.ndarray): Velocity field, shape (nx, ny, 2)
+                force_2d_ (jnp.ndarray): Force field, shape (nx, ny, 2)
+                grad_rho_2d_ (jnp.ndarray): Gradient of density, shape (nx, ny, 2)
+
+            Returns:
+                jnp.ndarray: Source term, shape (nx, ny, q)
+            """
             cx, cy = c[0], c[1]
             fx, fy = force_2d_[:, :, 0], force_2d_[:, :, 1]
             ux, uy = u_2d_[:, :, 0], u_2d_[:, :, 1]
@@ -59,6 +77,7 @@ class SourceTerm:
             source_ = jnp.zeros((nx, ny, q))
 
             for i in range(q):
+                # Compute the source term for each direction
                 source_ = source_.at[:, :, i].set(
                     w[i]
                     * (

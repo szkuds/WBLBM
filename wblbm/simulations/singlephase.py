@@ -15,6 +15,9 @@ class SinglePhaseSimulation(BaseSimulation):
         force_enabled=False,
         force_obj=None,
         bc_config=None,
+        collision_scheme="bgk",
+        k_diag=None,
+        **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
 
@@ -25,6 +28,8 @@ class SinglePhaseSimulation(BaseSimulation):
         self.force_enabled = force_enabled
         self.force_obj = force_obj
         self.bc_config = bc_config
+        self.collision_scheme = collision_scheme
+        self.k_diag = k_diag
         self.setup_operators()
 
     def setup_operators(self):
@@ -35,6 +40,8 @@ class SinglePhaseSimulation(BaseSimulation):
             self.tau,
             bc_config=self.bc_config,
             force_enabled=self.force_enabled,
+            collision_scheme=self.collision_scheme,
+            kvec=self.k_diag,
         )
         self.macroscopic = Macroscopic(
             self.grid, self.lattice, force_enabled=self.force_enabled

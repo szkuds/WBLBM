@@ -6,7 +6,7 @@ from jax import jit
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
-from wblbm.operators.collision import CollisionBGK, SourceTerm
+from wblbm.operators.collision import CollisionBGK, CollisionMRT, SourceTerm
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.stream import Streaming
@@ -21,13 +21,19 @@ class Update(object):
         tau: float,
         bc_config: dict = None,
         force_enabled: bool = False,
+        collision_scheme: str = "bgk",
+        kvec=None,
     ):
         self.grid = grid
         self.lattice = lattice
         self.tau = tau
         self.macroscopic = Macroscopic(grid, lattice, force_enabled=force_enabled)
         self.equilibrium = Equilibrium(grid, lattice)
-        self.collision = CollisionBGK(grid, lattice, tau)
+        # Select collision scheme
+        if collision_scheme == "mrt":
+            self.collision = CollisionMRT(grid, lattice, k_diag=kvec)
+        else:
+            self.collision = CollisionBGK(grid, lattice, tau)
         self.source_term = SourceTerm(grid, lattice)
         self.streaming = Streaming(lattice)
         if bc_config is not None:

@@ -6,13 +6,13 @@ from .base import CollisionBase
 
 class CollisionBGK(CollisionBase):
     """
-    Callable class to perform the collision step of the LBM.
-    Implements the BGK collision operators with source terms.
+    Implements the BGK (Bhatnagar-Gross-Krook) collision operator for LBM.
+    Optionally supports a source term.
     """
 
     def __init__(self, grid: Grid, lattice: Lattice, tau: float) -> None:
         """
-        Initialize the CollisionBGK operators.
+        Initialize the CollisionBGK operator.
 
         Args:
             grid (Grid): Grid object containing simulation domain information
@@ -26,18 +26,21 @@ class CollisionBGK(CollisionBase):
         self, f: jnp.ndarray, feq: jnp.ndarray, source: jnp.ndarray = None
     ) -> jnp.ndarray:
         """
-        Perform the collision step of the LBM.
+        Perform the BGK collision step.
 
         Args:
             f (jnp.ndarray): Distribution function.
             feq (jnp.ndarray): Equilibrium distribution function.
+            source (jnp.ndarray, optional): Source term.
 
         Returns:
             jnp.ndarray: Post-collision distribution function.
         """
         if source is None:
+            # Standard BGK collision without source term
             return (1 - (1 / self.tau)) * f + (1 / self.tau) * feq
         else:
+            # BGK collision with source term
             return (
                 (1 - (1 / self.tau)) * f
                 + (1 / self.tau) * feq
