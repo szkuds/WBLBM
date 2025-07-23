@@ -30,6 +30,7 @@ class SinglePhaseSimulation(BaseSimulation):
         self.bc_config = bc_config
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
+        self.kwargs = kwargs
         self.setup_operators()
 
     def setup_operators(self):
@@ -42,6 +43,7 @@ class SinglePhaseSimulation(BaseSimulation):
             force_enabled=self.force_enabled,
             collision_scheme=self.collision_scheme,
             kvec=self.k_diag,
+            **self.kwargs
         )
         self.macroscopic = Macroscopic(
             self.grid, self.lattice, force_enabled=self.force_enabled
