@@ -66,19 +66,12 @@ class CollisionMRT(CollisionBase):
         Returns:
             jnp.ndarray: Post-collision distribution function.
         """
+        K = jnp.diag(self.K)
+        I = jnp.eye(len(K))
         # Transform to moment space
-        m = jnp.einsum("ij,xyj->xyi", M, f[..., 0])
-        m_eq = jnp.einsum("ij,xyj->xyi", M, feq[..., 0])
-        if source is None:
-            S = 0.0
-        else:
-            S = jnp.einsum("ij,xyj->xyi", M, source[..., 0])
-        # Relaxation in moment space
-        m_post = (
-            m
-            - self.K[jnp.newaxis, jnp.newaxis, ...] * (m - m_eq)
-            + (1 - 0.5 * self.K[jnp.newaxis, jnp.newaxis, ...]) * S
-        )
-        # Transform back to distribution space
-        f_post = jnp.einsum("ji,xyi->xyj", M_INV, m_post)[..., None]
-        return f_post
+        mat_f_neq = M_INV @ K @ M
+        mat_source = M_INV @ (I - K / 2) @ M
+        f_neq_post = jnp.einsum("ij,xyj->xyi", mat_f_neq, (feq - f)[..., 0])
+        source_post = jnp.einsum("ij,xyj->xyi", mat_source, source[..., 0])
+        f_post = f[..., 0] + f_neq_post + source_post
+        return f_post[..., None]

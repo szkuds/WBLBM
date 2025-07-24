@@ -18,7 +18,7 @@ def test_multiphase_gravity_simulation():
     rho_l = 1.0
     rho_v = 0.001
     interface_width = 12
-    tau = 0.85
+    tau = 0.9
 
     force_g = 0.000002
     inclination_angle = 0
