@@ -4,7 +4,7 @@ from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-# jax.config.update("jax_disable_jit", True)
+#jax.config.update("jax_disable_jit", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -12,12 +12,12 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    nt = 20000
+    nt = 10000
     save_interval = 1000
-    kappa = 0.04
+    kappa = 0.06
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 8
+    interface_width = 12
 
     force_g = 0.000002
     inclination_angle = 0
@@ -28,10 +28,10 @@ def test_multiphase_gravity_simulation():
     # Specify MRT collision operator and its rates
     collision = {
         "collision_scheme": "mrt",
-        "kv": 0.9,
-        "kb": 1.6,
-        "k0": 1.0,
-        "k2": 1.6,
+        "kv": 1/0.9,
+        "kb": 1.5,
+        "k0": 0.0,
+        "k2": 1.5,
         "k4": 1.0,
     }
 
@@ -39,7 +39,6 @@ def test_multiphase_gravity_simulation():
         simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
-        # tau is omitted for MRT operator
         nt=nt,
         kappa=kappa,
         rho_l=rho_l,

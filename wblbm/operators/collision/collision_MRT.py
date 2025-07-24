@@ -39,15 +39,15 @@ class CollisionMRT(CollisionBase):
         if k_diag is None:
             k_diag = jnp.array(
                 [
-                    1 / kwargs.get("k0", 1.0),
-                    1 / kwargs.get("kb", 1.0),
-                    1 / kwargs.get("k2", 1.0),
-                    1 / kwargs.get("k0", 1.0),
-                    1 / kwargs.get("k4", 1.0),
-                    1 / kwargs.get("k0", 1.0),
-                    1 / kwargs.get("k4", 1.0),
-                    1 / kwargs.get("kv", 0.8),
-                    1 / kwargs.get("kv", 0.8),
+                    kwargs.get("k0", 0.0),
+                    kwargs.get("kb", 1.0),
+                    kwargs.get("k2", 1.0),
+                    kwargs.get("k0", 0.0),
+                    kwargs.get("k4", 1.0),
+                    kwargs.get("k0", 0.0),
+                    kwargs.get("k4", 1.0),
+                    kwargs.get("kv", 0.8),
+                    kwargs.get("kv", 0.8),
                 ]
             )
         self.K = k_diag
@@ -74,7 +74,7 @@ class CollisionMRT(CollisionBase):
         else:
             S = jnp.einsum("ij,xyj->xyi", M, source[..., 0])
         # Relaxation in moment space
-        m_post = m - self.K * (m - m_eq) + (1 - 0.5 * self.K) * S
+        m_post = m - self.K[jnp.newaxis, jnp.newaxis, ...] * (m - m_eq) + (1 - 0.5 * self.K[jnp.newaxis, jnp.newaxis, ...]) * S
         # Transform back to distribution space
-        f_post = jnp.einsum("ij,xyj->xyi", M_INV, m_post)[..., None]
+        f_post = jnp.einsum("ji,xyi->xyj", M_INV, m_post)[..., None]
         return f_post
