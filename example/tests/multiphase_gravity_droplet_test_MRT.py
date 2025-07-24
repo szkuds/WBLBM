@@ -4,7 +4,7 @@ from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-#jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -28,7 +28,7 @@ def test_multiphase_gravity_simulation():
     # Specify MRT collision operator and its rates
     collision = {
         "collision_scheme": "mrt",
-        "kv": 1/0.9,
+        "kv": 1 / 0.9,
         "kb": 1.5,
         "k0": 0.0,
         "k2": 1.5,

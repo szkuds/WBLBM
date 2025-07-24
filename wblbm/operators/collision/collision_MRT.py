@@ -74,7 +74,11 @@ class CollisionMRT(CollisionBase):
         else:
             S = jnp.einsum("ij,xyj->xyi", M, source[..., 0])
         # Relaxation in moment space
-        m_post = m - self.K[jnp.newaxis, jnp.newaxis, ...] * (m - m_eq) + (1 - 0.5 * self.K[jnp.newaxis, jnp.newaxis, ...]) * S
+        m_post = (
+            m
+            - self.K[jnp.newaxis, jnp.newaxis, ...] * (m - m_eq)
+            + (1 - 0.5 * self.K[jnp.newaxis, jnp.newaxis, ...]) * S
+        )
         # Transform back to distribution space
         f_post = jnp.einsum("ji,xyi->xyj", M_INV, m_post)[..., None]
         return f_post
