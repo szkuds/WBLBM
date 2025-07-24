@@ -12,7 +12,7 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    nt = 10000
+    nt = 20000
     save_interval = 1000
     kappa = 0.06
     rho_l = 1.0
@@ -29,10 +29,10 @@ def test_multiphase_gravity_simulation():
     collision = {
         "collision_scheme": "mrt",
         "kv": 1 / 0.9,
-        "kb": 1.5,
+        "kb": 1.2,
         "k0": 0.0,
-        "k2": 1.5,
-        "k4": 1.0,
+        "k2": 1.2,
+        "k4": 1.1,
     }
 
     sim = Run(

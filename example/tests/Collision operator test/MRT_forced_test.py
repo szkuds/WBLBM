@@ -11,33 +11,34 @@ def test_multiphase_gravity_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
-    grid_shape = (200, 800)
+    grid_shape = (201, 801)
     nt = 20000
     save_interval = 1000
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 12
-    tau = 0.9
+    interface_width = 24
 
-    force_g = 0.000002
+    force_g = 0.0000002
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
-    # bc_config = {
-    #     "top": "bounce-back",  # No-slip wall at top
-    #     "bottom": "bounce-back",  # Symmetric boundary at bottom
-    #     "left": "bounce-back",  # Periodic left-right wrapping
-    #     "right": "bounce-back",
-    # }
+    # Specify MRT collision operator and its rates
+    collision = {
+        "collision_scheme": "mrt",
+        "kv": 1.1,
+        "kb": 0.7,
+        "k0": 0.0,
+        "k2": 0.6,
+        "k4": 0.6,
+    }
 
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
-        tau=tau,
         nt=nt,
         kappa=kappa,
         rho_l=rho_l,
@@ -46,6 +47,7 @@ def test_multiphase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
+        collision=collision,
     )
     sim.run(init_type="multiphase_droplet", verbose=True)
     return sim

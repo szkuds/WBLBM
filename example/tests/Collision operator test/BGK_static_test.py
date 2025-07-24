@@ -3,6 +3,7 @@ from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 import jax
 
+
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
 
@@ -11,8 +12,8 @@ def test_multiphase_gravity_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
-    grid_shape = (200, 800)
-    nt = 20000
+    grid_shape = (200, 200)
+    nt = 40000
     save_interval = 1000
     kappa = 0.04
     rho_l = 1.0
@@ -20,24 +21,26 @@ def test_multiphase_gravity_simulation():
     interface_width = 12
     tau = 0.9
 
-    force_g = 0.000002
+    force_g = 0.00000
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
-    # bc_config = {
-    #     "top": "bounce-back",  # No-slip wall at top
-    #     "bottom": "bounce-back",  # Symmetric boundary at bottom
-    #     "left": "bounce-back",  # Periodic left-right wrapping
-    #     "right": "bounce-back",
-    # }
+    # Specify MRT collision operator and its rates
+    collision = {
+        "collision_scheme": "bgk",
+        "kv": 1 / 0.9,
+        "kb": 1.2,
+        "k0": 0.0,
+        "k2": 1.2,
+        "k4": 1.1,
+    }
 
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
-        tau=tau,
         nt=nt,
         kappa=kappa,
         rho_l=rho_l,
@@ -46,6 +49,8 @@ def test_multiphase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
+        collision=collision,
+        tau=tau,
     )
     sim.run(init_type="multiphase_droplet", verbose=True)
     return sim
