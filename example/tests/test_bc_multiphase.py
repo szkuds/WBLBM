@@ -20,6 +20,15 @@ def test_boundary_conditions():
         "right": "bounce-back",
     }
 
+    collision = {
+        "collision_scheme": "mrt",
+        "kv": 1 / 0.9,
+        "kb": 1.5,
+        "k0": 0.0,
+        "k2": 1.5,
+        "k4": 1.0,
+    }
+
     # Set up the simulation
     sim = Run(
         simulation_type="multiphase",
