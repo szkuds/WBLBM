@@ -13,7 +13,7 @@ def test_multiphase_gravity_simulation():
 
     grid_shape = (201, 401)
     nt = 4000
-    save_interval = 400
+    save_interval = 200
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
