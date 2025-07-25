@@ -6,7 +6,7 @@ from jax import jit
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
-from wblbm.operators.collision import Collision, SourceTerm
+from wblbm.operators.collision import CollisionBGK, CollisionMRT, SourceTerm
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.stream import Streaming
@@ -15,19 +15,31 @@ from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 class Update(object):
     def __init__(
-            self,
-            grid: Grid,
-            lattice: Lattice,
-            tau: float,
-            bc_config: dict = None,
-            force_enabled: bool = False,
+        self,
+        grid: Grid,
+        lattice: Lattice,
+        tau: float,
+        bc_config: dict = None,
+        force_enabled: bool = False,
+        collision_scheme: str = "bgk",
+        kvec=None,
+        **kwargs
     ):
         self.grid = grid
         self.lattice = lattice
         self.tau = tau
         self.macroscopic = Macroscopic(grid, lattice, force_enabled=force_enabled)
         self.equilibrium = Equilibrium(grid, lattice)
-        self.collision = Collision(grid, lattice, tau)
+        # Select collision scheme
+        if collision_scheme == "mrt":
+            # Extract MRT parameters from kwargs if provided
+            mrt_params = {}
+            for param in ["k0", "kb", "k2", "k4", "kv"]:
+                if param in kwargs:
+                    mrt_params[param] = kwargs[param]
+            self.collision = CollisionMRT(grid, lattice, k_diag=kvec, **mrt_params)
+        else:
+            self.collision = CollisionBGK(grid, lattice, tau)
         self.source_term = SourceTerm(grid, lattice)
         self.streaming = Streaming(lattice)
         if bc_config is not None:

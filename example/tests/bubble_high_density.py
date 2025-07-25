@@ -25,8 +25,9 @@ def test_multiphase_simulation():
         rho_l=1.0,
         rho_v=0.001,
         interface_width=10,
+        init_type="multiphase_bubble",
     )
-    sim.run(init_type="multiphase_bubble", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

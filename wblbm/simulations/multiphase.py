@@ -19,6 +19,8 @@ class MultiphaseSimulation(BaseSimulation):
         force_enabled=False,
         force_obj=None,
         bc_config=None,
+        collision_scheme="bgk",
+        k_diag=None,
         **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
@@ -29,6 +31,9 @@ class MultiphaseSimulation(BaseSimulation):
         self.force_enabled = force_enabled
         self.force_obj = force_obj
         self.bc_config = bc_config
+        self.collision_scheme = collision_scheme
+        self.k_diag = k_diag
+        self.kwargs = kwargs
         self.setup_operators()
         self.multiphase = True
 
@@ -43,7 +48,10 @@ class MultiphaseSimulation(BaseSimulation):
             self.rho_l,
             self.rho_v,
             self.bc_config,
-            self.force_enabled
+            self.force_enabled,
+            collision_scheme=self.collision_scheme,
+            kvec=self.k_diag,
+            **self.kwargs  # Pass additional keyword arguments
         )
         self.macroscopic = MacroscopicMultiphase(
             self.grid,
@@ -52,16 +60,31 @@ class MultiphaseSimulation(BaseSimulation):
             self.interface_width,
             self.rho_l,
             self.rho_v,
-            self.force_enabled
+            self.force_enabled,
         )
 
-    def initialize_fields(self, init_type="multiphase_droplet"):
-        if init_type == "multiphase_droplet":
+    def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
+        if init_type == "init_from_file":
+            if init_dir is None:
+                raise ValueError(
+                    "init_from_file requires init_dir pointing to a .npz file"
+                )
+            return self.initialiser.init_from_npz(init_dir)
+
+        elif init_type == "multiphase_droplet":
             return self.initialiser.initialise_multiphase_droplet(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type == "multiphase_bubble":
             return self.initialiser.initialise_multiphase_bubble(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type == "multiphase_droplet_top":
+            return self.initialiser.initialise_multiphase_droplet_top(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type == "multiphase_bubble_bot":
+            return self.initialiser.initialise_multiphase_bubble_bot(
                 self.rho_l, self.rho_v, self.interface_width
             )
         else:

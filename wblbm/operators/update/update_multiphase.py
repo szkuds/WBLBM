@@ -5,7 +5,8 @@ from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.lattice import Lattice
-from wblbm.operators.collision.collision_multiphase import CollisionMultiphase
+from wblbm.operators.collision.collision_BGK import CollisionBGK
+from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
@@ -13,18 +14,30 @@ from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondit
 
 class UpdateMultiphase(Update):
     def __init__(
-            self,
-            grid: Grid,
-            lattice: Lattice,
-            tau: float,
-            kappa: float,
-            interface_width: int,
-            rho_l: float,
-            rho_v: float,
-            bc_config: dict = None,
-            force_enabled: bool = False,
+        self,
+        grid: Grid,
+        lattice: Lattice,
+        tau: float,
+        kappa: float,
+        interface_width: int,
+        rho_l: float,
+        rho_v: float,
+        bc_config: dict = None,
+        force_enabled: bool = False,
+        collision_scheme: str = "bgk",
+        kvec=None,
+        **kwargs
     ):
-        super().__init__(grid, lattice, tau, bc_config, force_enabled=force_enabled)
+        super().__init__(
+            grid,
+            lattice,
+            tau,
+            bc_config,
+            force_enabled=force_enabled,
+            collision_scheme=collision_scheme,
+            kvec=kvec,
+            **kwargs
+        )
         self.macroscopic = MacroscopicMultiphase(
             grid,
             lattice,
@@ -34,12 +47,6 @@ class UpdateMultiphase(Update):
             rho_v,
             force_enabled=force_enabled,
         )
-        self.collision = CollisionMultiphase(grid, lattice, tau)
-        if bc_config is not None:
-            self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)
-        else:
-            self.boundary_condition = None
-        self.force_enabled = force_enabled
 
     @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.array, force: jnp.ndarray = None):
@@ -51,7 +58,9 @@ class UpdateMultiphase(Update):
         elif self.force_enabled:
             rho, u, force_tot = self.macroscopic(f, force=force)
         else:
-            rho, u, force_tot = self.macroscopic(f)  # In this case the total force is only the interaction force
+            rho, u, force_tot = self.macroscopic(
+                f
+            )  # In this case the total force is only the interaction force
         feq = self.equilibrium(rho, u)
         source = self.source_term(rho, u, force_tot)
         fcol = self.collision(f, feq, source)

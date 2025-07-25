@@ -22,9 +22,7 @@ class GravityForceSinglephase(Force):
 
         super().__init__(force_array)
 
-    def compute_force(
-            self, rho: jnp.ndarray
-    ) -> jnp.ndarray:
+    def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
         """
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.

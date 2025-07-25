@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForce
+from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 
 
@@ -8,23 +8,25 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    tau = 1.2
-    nt = 1000
-    save_interval = 100
+    tau = 0.9
+    nt = 100000
+    save_interval = 10000
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
     interface_width = 10
 
     force_g = 0.0000002
-    inclination_angle = 0
-    gravity = GravityForce(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+    inclination_angle = 45
+    gravity = GravityForceMultiphaseDroplet(
+        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+    )
 
     bc_config = {
         "top": "periodic",
         "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
+        "left": "periodic",
+        "right": "periodic",
     }
 
     sim = Run(
@@ -41,8 +43,9 @@ def test_multiphase_gravity_simulation():
         bc_config=bc_config,
         force_enabled=True,
         force_obj=gravity,
+        init_type="multiphase_droplet",
     )
-    sim.run(init_type="multiphase_droplet", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

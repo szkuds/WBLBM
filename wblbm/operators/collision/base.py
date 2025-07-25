@@ -1,38 +1,33 @@
+from abc import ABC
+
 import jax.numpy as jnp
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 
 
-class Collision:
+class CollisionBase(ABC):
     """
-    Callable class to perform the collision step of the LBM.
+    Base class for LBM collision operators.
     Implements the BGK collision operators with source terms.
+    Subclasses should implement the __call__ method.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice, tau: float) -> None:
+    def __init__(self, grid: Grid, lattice: Lattice) -> None:
         """
-        Initialize the Collision operators.
-
+        Initializes the grid and lattice parameters required for the collision step.
         Args:
             grid (Grid): Grid object containing simulation domain information
             lattice (Lattice): Lattice object containing lattice properties
-            tau (float): Relaxation time parameter
         """
         self.nx: int = grid.nx
         self.ny: int = grid.ny
         self.q: int = lattice.q
         self.d: int = lattice.d
-        self.tau: float = tau
 
     def __call__(self, f: jnp.ndarray, feq: jnp.ndarray) -> jnp.ndarray:
         """
         Perform the collision step of the LBM.
 
-        Args:
-            f (jnp.ndarray): Distribution function.
-            feq (jnp.ndarray): Equilibrium distribution function.
-
-        Returns:
-            jnp.ndarray: Post-collision distribution function.
+        Needs to be implemented by the subclass.
         """
-        return (1 - (1 / self.tau)) * f + (1 / self.tau) * feq
+        pass

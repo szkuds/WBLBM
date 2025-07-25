@@ -29,17 +29,31 @@ class Run:
     def __init__(
         self,
         simulation_type="singlephase",
+        *,
         save_interval=100,
         results_dir="results",
+        init_type="standard",
+        init_dir=None,
+        skip_interval=0,
         **kwargs,
     ):
+        # Allow collision config as a dict or CLI/JSON entry and pass it untouched
+        collision_cfg = kwargs.pop("collision", None)
+        if collision_cfg is not None:
+            kwargs.update(collision_cfg)
         self.simulation = SimulationFactory.create_simulation(simulation_type, **kwargs)
         self.save_interval = save_interval
+        self.skip_interval = skip_interval
         self.results_dir = results_dir
+        self.init_type = init_type
+        self.init_dir = init_dir
         self.config = self._build_config(
             simulation_type=simulation_type,
             save_interval=save_interval,
             results_dir=results_dir,
+            skip_interval=skip_interval,
+            init_type=init_type,
+            init_dir=init_dir,
             **kwargs,
         )
         from wblbm.utils.io import SimulationIO
@@ -52,14 +66,17 @@ class Run:
 
     def _save_data(self, it, fprev):
         # Save data using the simulation's macroscopic operator
+        force_ext = None
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
             try:
-                if self.config.get('force_enabled') and self.config.get('force_obj'):
+                if self.config.get("force_enabled") and self.config.get("force_obj"):
                     rho = jnp.sum(fprev, axis=2, keepdims=True)
-                    force = self.config.get('force_obj')
-                    if self.config.get('simulation_type') == 'multiphase':
-                        force_ext = force.compute_force(rho, self.config.get('rho_l'), self.config.get('rho_v'))
+                    force = self.config.get("force_obj")
+                    if self.config.get("simulation_type") == "multiphase":
+                        force_ext = force.compute_force(
+                            rho, self.config.get("rho_l"), self.config.get("rho_v")
+                        )
                     else:
                         force_ext = force.compute_force(rho)
                     result = macroscopic(fprev, force_ext)
@@ -71,12 +88,15 @@ class Run:
                         "rho": np.array(rho),
                         "u": np.array(u),
                         "force": np.array(force),
+                        "force_ext": np.array(force_ext),
+                        "f": np.array(fprev),
                     }
                 else:
                     rho, u = result
                     data_to_save = {
                         "rho": np.array(rho),
                         "u": np.array(u),
+                        "f": np.array(fprev),
                     }
             except Exception:
                 data_to_save = {"f": np.array(fprev)}
@@ -84,8 +104,10 @@ class Run:
             data_to_save = {"f": np.array(fprev)}
         self.io_handler.save_data_step(it, data_to_save)
 
-    def run(self, init_type="standard", verbose=True):
-        fprev = self.simulation.initialize_fields(init_type)
+    def run(self, *, verbose=True):
+        fprev = self.simulation.initialize_fields(
+            self.init_type, init_dir=self.init_dir
+        )
         nt = getattr(self.simulation, "nt", 1000)
         if verbose:
             print(f"Starting LBM simulation with {nt} time steps...")
@@ -94,7 +116,13 @@ class Run:
             )
         for it in range(nt):
             fprev = self.simulation.run_timestep(fprev, it)
-            if it % self.save_interval == 0 or it == nt - 1:
+            if jnp.isnan(fprev).any():
+                print(f"NaN encountered at timestep {it}. Stopping simulation.")
+                break
+            # skip initial transients then save every `save_interval`
+            if (it > self.skip_interval) and (
+                it % self.save_interval == 0 or it == nt - 1
+            ):
                 self._save_data(it, fprev)
                 if verbose and hasattr(self.simulation, "macroscopic"):
                     result = self.simulation.macroscopic(fprev)

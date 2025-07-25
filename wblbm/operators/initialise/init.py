@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import os
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
@@ -73,6 +74,39 @@ class Initialise:
         # Return the equilibrium distribution
         return self.equilibrium(rho, u)
 
+    def initialise_multiphase_droplet_top(
+        self, rho_l: float, rho_v: float, interface_width: int
+    ):
+        """
+        Initialises a multiphase simulation with a low-density bubble in the center.
+
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase (bubble) density.
+
+        Returns:
+            jnp.ndarray: Initialised population distribution f.
+        """
+        # Create a density field with a bubble in the center
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+        center_x, center_y = self.nx // 2, 5 * self.ny // 6
+        radius = min(self.nx, self.ny) // 8
+
+        # Use tanh for a smooth, stable interface
+        distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+        rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+            (distance - radius) / interface_width
+        )
+
+        # Reshape to 4D
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+
+        # Initialise with zero velocity
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+        # Return the equilibrium distribution
+        return self.equilibrium(rho, u)
+
     def initialise_multiphase_bubble(
         self, rho_l: float, rho_v: float, interface_width: int
     ):
@@ -90,6 +124,39 @@ class Initialise:
         x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
         center_x, center_y = self.nx // 2, self.ny // 2
         radius = min(self.nx, self.ny) // 4
+
+        # Use tanh for a smooth, stable interface
+        distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+        rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+            (distance - radius) / interface_width
+        )
+
+        # Reshape to 4D
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+
+        # Initialise with zero velocity
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+        # Return the equilibrium distribution
+        return self.equilibrium(rho, u)
+
+    def initialise_multiphase_bubble_bot(
+        self, rho_l: float, rho_v: float, interface_width: int
+    ):
+        """
+        Initialises a multiphase simulation with a low-density bubble in the center.
+
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase (bubble) density.
+
+        Returns:
+            jnp.ndarray: Initialised population distribution f.
+        """
+        # Create a density field with a bubble in the center
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+        center_x, center_y = self.nx // 2, self.ny // 6
+        radius = min(self.nx, self.ny) // 8
 
         # Use tanh for a smooth, stable interface
         distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
@@ -185,3 +252,59 @@ class Initialise:
 
         # Return equilibrium distribution
         return self.equilibrium(rho, u)
+
+    def init_from_npz(self, npz_path: str):
+        """
+        Initialise the simulation from a saved state containing only macroscopic
+        fields (rho, u) stored in a compressed NumPy ``.npz`` file.
+
+        Parameters
+        ----------
+        npz_path : str
+            Absolute or relative path to the ``.npz`` file.
+
+        Returns
+        -------
+        jnp.ndarray
+            The initialised 4-D distribution function ``f`` created using the
+            equilibrium populations for the given rho and u.
+
+        Raises
+        ------
+        AssertionError
+            If the array dimensions do not match the current grid.
+        FileNotFoundError
+            If *npz_path* does not exist.
+        ValueError
+            If the file does not contain both 'rho' and 'u' keys.
+        """
+        if not os.path.isfile(npz_path):
+            raise FileNotFoundError(f"Could not locate file: {npz_path}")
+        data = np.load(npz_path)
+
+        if not {"rho", "u"}.issubset(data.files):
+            raise ValueError(
+                "Missing required keys in restart file: both 'rho' and 'u' must be present. "
+                f"Available keys: {list(data.files)}"
+            )
+
+        rho = data["rho"]
+        u = data["u"]
+
+        # Shape checks (customise if your grid or file dimensions differ)
+        assert rho.shape == (
+            self.nx,
+            self.ny,
+            1,
+            1,
+        ), f"rho shape mismatch – expected ({self.nx}, {self.ny}, 1, 1) but got {rho.shape}"
+        assert u.shape == (
+            self.nx,
+            self.ny,
+            1,
+            2,
+        ), f"u shape mismatch – expected ({self.nx}, {self.ny}, 1, 2) but got {u.shape}"
+
+        rho_jax = jnp.array(rho)
+        u_jax = jnp.array(u)
+        return self.equilibrium(rho_jax, u_jax)
