@@ -31,5 +31,5 @@ class GravityForceMultiphaseBubble(Force):
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.
         """
-        mask = rho < 0.95 * rho_l + 0.05 * rho_v
+        mask = rho < 0.95 * rho_v + 0.05 * rho_l
         return self.force * rho * mask
