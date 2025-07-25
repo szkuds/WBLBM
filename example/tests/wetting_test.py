@@ -59,10 +59,11 @@ def test_wetting_simulation():
         d_rho_value=d_rho_value,
         wetting_enabled=True,
         hysteresis_params=None,
+        init_type="wetting",
     )
 
     # Run with wetting initialization
-    sim.run(init_type="wetting", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 
