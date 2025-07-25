@@ -63,8 +63,15 @@ class MultiphaseSimulation(BaseSimulation):
             self.force_enabled,
         )
 
-    def initialize_fields(self, init_type="multiphase_droplet"):
-        if init_type == "multiphase_droplet":
+    def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
+        if init_type == "init_from_file":
+            if init_dir is None:
+                raise ValueError(
+                    "init_from_file requires init_dir pointing to a .npz file"
+                )
+            return self.initialiser.init_from_npz(init_dir)
+
+        elif init_type == "multiphase_droplet":
             return self.initialiser.initialise_multiphase_droplet(
                 self.rho_l, self.rho_v, self.interface_width
             )

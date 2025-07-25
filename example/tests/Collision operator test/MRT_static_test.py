@@ -7,13 +7,14 @@ import jax
 # jax.config.update("jax_disable_jit", True)
 
 
-def test_multiphase_gravity_simulation():
+def test_mrt_static():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (201, 201)
-    nt = 200000
-    save_interval = 20000
+    nt = 1000
+    save_interval = 100
+    skip_interval = 0
     kappa = 0.02
     rho_l = 1.0
     rho_v = 0.001
@@ -45,11 +46,13 @@ def test_multiphase_gravity_simulation():
         rho_v=rho_v,
         interface_width=interface_width,
         save_interval=save_interval,
+        skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
         collision=collision,
+        init_type="multiphase_droplet",
     )
-    sim.run(init_type="multiphase_droplet", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 
@@ -58,7 +61,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = test_multiphase_gravity_simulation()
+    sim_multiphase_gravity = test_mrt_static()
 
     # Visualize results
     print("\n=== Visualizing Results ===")

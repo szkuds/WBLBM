@@ -57,7 +57,14 @@ class SinglePhaseSimulation(BaseSimulation):
                 self.grid, self.lattice, self.bc_config
             )
 
-    def initialize_fields(self, init_type="standard"):
+    def initialize_fields(self, init_type="standard", *, init_dir=None):
+        if init_type == "init_from_file":
+            if init_dir is None:
+                raise ValueError(
+                    "init_from_file requires init_dir pointing to a .npz file"
+                )
+            return self.initialiser.init_from_npz(init_dir)
+        # existing options preserved
         return self.initialiser.initialise_standard()
 
     def run_timestep(self, fprev, it):

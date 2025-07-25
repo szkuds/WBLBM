@@ -26,13 +26,6 @@ def test_multiphase_gravity_simulation():
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
-    # bc_config = {
-    #     "top": "bounce-back",  # No-slip wall at top
-    #     "bottom": "bounce-back",  # Symmetric boundary at bottom
-    #     "left": "bounce-back",  # Periodic left-right wrapping
-    #     "right": "bounce-back",
-    # }
-
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
@@ -46,8 +39,9 @@ def test_multiphase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
+        init_type="multiphase_droplet",
     )
-    sim.run(init_type="multiphase_droplet", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

@@ -40,8 +40,9 @@ def test_multiphase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
+        init_type="multiphase_bubble",
     )
-    sim.run(init_type="multiphase_bubble", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

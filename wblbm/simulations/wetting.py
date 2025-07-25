@@ -74,13 +74,32 @@ class WettingSimulation(MultiphaseSimulation):
 
             self.hysteresis = Hysteresis(**self.hysteresis_params)
 
-    def initialize_fields(self, init_type="wetting"):
-        if init_type == "wetting":
+    def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
+        if init_type == "init_from_file":
+            if init_dir is None:
+                raise ValueError(
+                    "init_from_file requires init_dir pointing to a .npz file"
+                )
+            return self.initialiser.init_from_npz(init_dir)
+
+        if init_type == "multiphase_droplet":
+            return self.initialiser.initialise_multiphase_droplet(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type == "multiphase_bubble":
+            return self.initialiser.initialise_multiphase_bubble(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type == "multiphase_droplet_top":
+            return self.initialiser.initialise_multiphase_droplet_top(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type == "wetting":
             return self.initialiser.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
             )
         else:
-            return super().initialize_fields(init_type)
+            return self.initialiser.initialise_standard()
 
     def run_timestep(self, fprev, it):
         # You may want to add hysteresis logic here if needed

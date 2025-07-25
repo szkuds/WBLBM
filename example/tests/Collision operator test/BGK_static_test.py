@@ -52,8 +52,9 @@ def test_multiphase_gravity_simulation():
         force_obj=gravity,
         collision=collision,
         tau=tau,
+        init_type="multiphase_droplet",
     )
-    sim.run(init_type="multiphase_droplet", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 
