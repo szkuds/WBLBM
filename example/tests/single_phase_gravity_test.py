@@ -35,8 +35,9 @@ def test_single_phase_gravity_simulation():
         force_enabled=True,
         force_obj=gravity,
         bc_config=bc_config,
+        init_type="standard",
     )
-    sim.run(init_type="standard", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

@@ -11,10 +11,6 @@ class BaseSimulation(ABC):
         self.lattice = Lattice(lattice_type)
         self.tau = tau
 
-        self.update = None
-        self.initialiser = None
-        self.macroscopic = None
-
         # Add simulation type flags
         self.multiphase = False
         self.wetting_enabled = False
@@ -25,8 +21,15 @@ class BaseSimulation(ABC):
         pass
 
     @abstractmethod
-    def initialize_fields(self, init_type):
-        """Initialize simulation fields"""
+    def initialize_fields(self, init_type="standard", *, init_dir=None):
+        """
+        Parameters
+        ----------
+        init_type : str
+            Name of the initialisation routine.
+        init_dir : str or None, optional
+            Path to the .npz snapshot when `init_type=="init_from_file"`.
+        """
         pass
 
     @abstractmethod

@@ -13,8 +13,9 @@ def test_basic_simulation():
         tau=1.0,
         nt=5000,
         save_interval=1000,
+        init_type="standard",
     )
-    sim.run(init_type="standard", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 
@@ -32,8 +33,9 @@ def test_multiphase_simulation():
         rho_l=1.0,
         rho_v=0.001,
         interface_width=10,
+        init_type="multiphase_droplet",
     )
-    sim.run(init_type="multiphase_droplet", verbose=True)
+    sim.run(verbose=True)
     return sim
 
 

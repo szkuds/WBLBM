@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import os
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
@@ -218,3 +219,59 @@ class Initialise:
 
         # Return equilibrium distribution
         return self.equilibrium(rho, u)
+
+    def init_from_npz(self, npz_path: str):
+        """
+        Initialise the simulation from a saved state containing only macroscopic
+        fields (rho, u) stored in a compressed NumPy ``.npz`` file.
+
+        Parameters
+        ----------
+        npz_path : str
+            Absolute or relative path to the ``.npz`` file.
+
+        Returns
+        -------
+        jnp.ndarray
+            The initialised 4-D distribution function ``f`` created using the
+            equilibrium populations for the given rho and u.
+
+        Raises
+        ------
+        AssertionError
+            If the array dimensions do not match the current grid.
+        FileNotFoundError
+            If *npz_path* does not exist.
+        ValueError
+            If the file does not contain both 'rho' and 'u' keys.
+        """
+        if not os.path.isfile(npz_path):
+            raise FileNotFoundError(f"Could not locate file: {npz_path}")
+        data = np.load(npz_path)
+
+        if not {"rho", "u"}.issubset(data.files):
+            raise ValueError(
+                "Missing required keys in restart file: both 'rho' and 'u' must be present. "
+                f"Available keys: {list(data.files)}"
+            )
+
+        rho = data["rho"]
+        u = data["u"]
+
+        # Shape checks (customise if your grid or file dimensions differ)
+        assert rho.shape == (
+            self.nx,
+            self.ny,
+            1,
+            1,
+        ), f"rho shape mismatch – expected ({self.nx}, {self.ny}, 1, 1) but got {rho.shape}"
+        assert u.shape == (
+            self.nx,
+            self.ny,
+            1,
+            2,
+        ), f"u shape mismatch – expected ({self.nx}, {self.ny}, 1, 2) but got {u.shape}"
+
+        rho_jax = jnp.array(rho)
+        u_jax = jnp.array(u)
+        return self.equilibrium(rho_jax, u_jax)
