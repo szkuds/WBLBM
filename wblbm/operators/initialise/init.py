@@ -73,6 +73,39 @@ class Initialise:
         # Return the equilibrium distribution
         return self.equilibrium(rho, u)
 
+    def initialise_multiphase_droplet_top(
+        self, rho_l: float, rho_v: float, interface_width: int
+    ):
+        """
+        Initialises a multiphase simulation with a low-density bubble in the center.
+
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase (bubble) density.
+
+        Returns:
+            jnp.ndarray: Initialised population distribution f.
+        """
+        # Create a density field with a bubble in the center
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+        center_x, center_y = self.nx // 2, 5 * self.ny // 6
+        radius = min(self.nx, self.ny) // 8
+
+        # Use tanh for a smooth, stable interface
+        distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+        rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+            (distance - radius) / interface_width
+        )
+
+        # Reshape to 4D
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+
+        # Initialise with zero velocity
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+        # Return the equilibrium distribution
+        return self.equilibrium(rho, u)
+
     def initialise_multiphase_bubble(
         self, rho_l: float, rho_v: float, interface_width: int
     ):

@@ -1353,7 +1353,7 @@ wblbm/
                     self.equilibrium = Equilibrium(self.grid, self.lattice)
             
                 def initialise_standard(
-                    self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])
+                        self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])
                 ):
                     """
                     Initialises a standard simulation with uniform density and velocity.
@@ -1376,7 +1376,7 @@ wblbm/
                     return self.equilibrium(rho, u)
             
                 def initialise_multiphase_droplet(
-                    self, rho_l: float, rho_v: float, interface_width: int
+                        self, rho_l: float, rho_v: float, interface_width: int
                 ):
                     """
                     Initialises a multiphase simulation with a low-density bubble in the center.
@@ -1408,8 +1408,41 @@ wblbm/
                     # Return the equilibrium distribution
                     return self.equilibrium(rho, u)
             
+                def initialise_multiphase_droplet_top(
+                        self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialises a multiphase simulation with a low-density bubble in the center.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase (bubble) density.
+            
+                    Returns:
+                        jnp.ndarray: Initialised population distribution f.
+                    """
+                    # Create a density field with a bubble in the center
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+                    center_x, center_y = self.nx // 2, 5 * self.ny // 6
+                    radius = min(self.nx, self.ny) // 8
+            
+                    # Use tanh for a smooth, stable interface
+                    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+                        (distance - radius) / interface_width
+                    )
+            
+                    # Reshape to 4D
+                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+            
+                    # Initialise with zero velocity
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+            
+                    # Return the equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
                 def initialise_multiphase_bubble(
-                    self, rho_l: float, rho_v: float, interface_width: int
+                        self, rho_l: float, rho_v: float, interface_width: int
                 ):
                     """
                     Initialises a multiphase simulation with a low-density bubble in the center.
@@ -1442,7 +1475,7 @@ wblbm/
                     return self.equilibrium(rho, u)
             
                 def initialise_wetting_chemical_step(
-                    self, rho_l: float, rho_v: float, interface_width: int
+                        self, rho_l: float, rho_v: float, interface_width: int
                 ):
                     """
                     Initialize the simulation with a droplet wetting a solid surface.
@@ -2685,22 +2718,15 @@ wblbm/
                     Returns:
                         jnp.ndarray: Post-collision distribution function.
                     """
+                    K = jnp.diag(self.K)
+                    I = jnp.eye(len(K))
                     # Transform to moment space
-                    m = jnp.einsum("ij,xyj->xyi", M, f[..., 0])
-                    m_eq = jnp.einsum("ij,xyj->xyi", M, feq[..., 0])
-                    if source is None:
-                        S = 0.0
-                    else:
-                        S = jnp.einsum("ij,xyj->xyi", M, source[..., 0])
-                    # Relaxation in moment space
-                    m_post = (
-                        m
-                        - self.K[jnp.newaxis, jnp.newaxis, ...] * (m - m_eq)
-                        + (1 - 0.5 * self.K[jnp.newaxis, jnp.newaxis, ...]) * S
-                    )
-                    # Transform back to distribution space
-                    f_post = jnp.einsum("ji,xyi->xyj", M_INV, m_post)[..., None]
-                    return f_post
+                    mat_f_neq = M_INV @ K @ M
+                    mat_source = M_INV @ (I - K / 2) @ M
+                    f_neq_post = jnp.einsum("ij,xyj->xyi", mat_f_neq, (feq - f)[..., 0])
+                    source_post = jnp.einsum("ij,xyj->xyi", mat_source, source[..., 0])
+                    f_post = f[..., 0] + f_neq_post + source_post
+                    return f_post[..., None]
             --- End of collision_MRT.py ---
 
             collision_BGK.py
@@ -3592,6 +3618,10 @@ wblbm/
                     return self.initialiser.initialise_multiphase_bubble(
                         self.rho_l, self.rho_v, self.interface_width
                     )
+                elif init_type == "multiphase_droplet_top":
+                    return self.initialiser.initialise_multiphase_droplet_top(
+                        self.rho_l, self.rho_v, self.interface_width
+                    )
                 else:
                     return self.initialiser.initialise_standard()
         
@@ -4407,11 +4437,11 @@ example/
             print("\n=== Multiphase LBM Simulation with Gravity Test ===")
         
             grid_shape = (200, 800)
-            nt = 20000
+            nt = 15000
             save_interval = 1000
             kappa = 0.04
             rho_l = 1.0
-            rho_v = 0.001
+            rho_v = 0.01
             interface_width = 12
             tau = 0.9
         
@@ -4597,7 +4627,7 @@ example/
                 print("\n=== Multiphase LBM Simulation with Gravity Test ===")
             
                 grid_shape = (200, 200)
-                nt = 40000
+                nt = 10000
                 save_interval = 1000
                 kappa = 0.04
                 rho_l = 1.0
@@ -4634,7 +4664,7 @@ example/
                     force_enabled=True,
                     force_obj=gravity,
                     collision=collision,
-                    tau=tau
+                    tau=tau,
                 )
                 sim.run(init_type="multiphase_droplet", verbose=True)
                 return sim
@@ -4654,8 +4684,8 @@ example/
                 print("\nTest completed!")
             --- End of BGK_static_test.py ---
 
-            MRT_static_static.py
-            --- Code in MRT_static_static.py ---
+            MRT_forced_test.py
+            --- Code in MRT_forced_test.py ---
             from wblbm.run import Run
             from wblbm.operators.force import GravityForceMultiphaseDroplet
             from wblbm.utils.plotting import visualise
@@ -4669,13 +4699,84 @@ example/
                 """Test a multiphase LBM simulation with gravity and a central droplet."""
                 print("\n=== Multiphase LBM Simulation with Gravity Test ===")
             
-                grid_shape = (200, 200)
-                nt = 40000
-                save_interval = 1000
+                grid_shape = (101, 2001)
+                nt = 50000
+                save_interval = 2000
                 kappa = 0.04
                 rho_l = 1.0
                 rho_v = 0.001
-                interface_width = 12
+                interface_width = 8
+            
+                force_g = 0.000001
+                inclination_angle = 0
+                gravity = GravityForceMultiphaseDroplet(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.2,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    collision=collision,
+                )
+                sim.run(init_type="multiphase_droplet_top", verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = test_multiphase_gravity_simulation()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of MRT_forced_test.py ---
+
+            MRT_static_test.py
+            --- Code in MRT_static_test.py ---
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseDroplet
+            from wblbm.utils.plotting import visualise
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def test_multiphase_gravity_simulation():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation with Gravity Test ===")
+            
+                grid_shape = (201, 201)
+                nt = 200000
+                save_interval = 20000
+                kappa = 0.02
+                rho_l = 1.0
+                rho_v = 0.001
+                interface_width = 18
             
                 force_g = 0.00000
                 inclination_angle = 0
@@ -4686,11 +4787,11 @@ example/
                 # Specify MRT collision operator and its rates
                 collision = {
                     "collision_scheme": "mrt",
-                    "kv": 1 / 0.9,
-                    "kb": 1.2,
+                    "kv": 1.2,
+                    "kb": 1.0,
                     "k0": 0.0,
-                    "k2": 1.2,
-                    "k4": 1.1,
+                    "k2": 1.0,
+                    "k4": 0.9,
                 }
             
                 sim = Run(
@@ -4723,570 +4824,1654 @@ example/
                 visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
             
                 print("\nTest completed!")
-            --- End of MRT_static_static.py ---
+            --- End of MRT_static_test.py ---
 
+            results/
+                2025-07-24/
+                    15-33-11/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_14999.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_6000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_14999.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_6000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    22-53-09/
+                        config.json
+                        data/
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_0.npz
+                            timestep_10000.npz
+                    15-28-50/
+                        config.json
+                        data/
+                            timestep_1000.npz
+                            timestep_0.npz
+                    17-50-39/
+                        config.json
+                        data/
+                            timestep_120000.npz
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_175000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_130000.npz
+                            timestep_50000.npz
+                            timestep_165000.npz
+                            timestep_180000.npz
+                            timestep_70000.npz
+                            timestep_110000.npz
+                            timestep_145000.npz
+                            timestep_25000.npz
+                            timestep_199999.npz
+                            timestep_60000.npz
+                            timestep_100000.npz
+                            timestep_155000.npz
+                            timestep_35000.npz
+                            timestep_190000.npz
+                            timestep_0.npz
+                            timestep_195000.npz
+                            timestep_105000.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_150000.npz
+                            timestep_115000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_140000.npz
+                            timestep_185000.npz
+                            timestep_55000.npz
+                            timestep_135000.npz
+                            timestep_160000.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_125000.npz
+                            timestep_170000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_120000.png
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_175000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_130000.png
+                            timestep_50000.png
+                            timestep_165000.png
+                            timestep_180000.png
+                            timestep_70000.png
+                            timestep_110000.png
+                            timestep_145000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_199999.png
+                            timestep_100000.png
+                            timestep_155000.png
+                            timestep_35000.png
+                            timestep_190000.png
+                            timestep_0.png
+                            timestep_195000.png
+                            timestep_105000.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_150000.png
+                            timestep_115000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_140000.png
+                            timestep_185000.png
+                            timestep_55000.png
+                            timestep_135000.png
+                            timestep_160000.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_125000.png
+                            timestep_170000.png
+                            timestep_10000.png
+                    22-55-28/
+                        config.json
+                        data/
+                            timestep_3500.npz
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_11500.npz
+                            timestep_19000.npz
+                            timestep_1500.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13500.npz
+                            timestep_13000.npz
+                            timestep_17500.npz
+                            timestep_9500.npz
+                            timestep_5500.npz
+                            timestep_1000.npz
+                            timestep_19500.npz
+                            timestep_11000.npz
+                            timestep_15500.npz
+                            timestep_7500.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_10500.npz
+                            timestep_18000.npz
+                            timestep_2500.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_12500.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_8500.npz
+                            timestep_4500.npz
+                            timestep_500.npz
+                            timestep_12000.npz
+                            timestep_16500.npz
+                            timestep_19999.npz
+                            timestep_6500.npz
+                            timestep_2000.npz
+                            timestep_18500.npz
+                            timestep_10000.npz
+                            timestep_14500.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_3500.png
+                            timestep_11500.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_1500.png
+                            timestep_9000.png
+                            timestep_13500.png
+                            timestep_17000.png
+                            timestep_17500.png
+                            timestep_13000.png
+                            timestep_9500.png
+                            timestep_1000.png
+                            timestep_5500.png
+                            timestep_19500.png
+                            timestep_15500.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_7500.png
+                            timestep_0.png
+                            timestep_10500.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_2500.png
+                            timestep_12500.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_8500.png
+                            timestep_4500.png
+                            timestep_500.png
+                            timestep_16500.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_6500.png
+                            timestep_18500.png
+                            timestep_14500.png
+                            timestep_10000.png
+                    16-59-18/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_50000.npz
+                            timestep_70000.npz
+                            timestep_25000.npz
+                            timestep_60000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_55000.npz
+                            timestep_99999.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_50000.png
+                            timestep_70000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_55000.png
+                            timestep_99999.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_10000.png
+                    23-15-58/
+                        config.json
+                        data/
+                            timestep_31000.npz
+                            timestep_7000.npz
+                            timestep_23000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_21000.npz
+                            timestep_9000.npz
+                            timestep_33000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_29000.npz
+                            timestep_37000.npz
+                            timestep_1000.npz
+                            timestep_25000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_27000.npz
+                            timestep_39000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_39999.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_31000.png
+                            timestep_7000.png
+                            timestep_23000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_21000.png
+                            timestep_33000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_37000.png
+                            timestep_29000.png
+                            timestep_1000.png
+                            timestep_25000.png
+                            timestep_11000.png
+                            timestep_39000.png
+                            timestep_3000.png
+                            timestep_27000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_39999.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    16-04-49/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_50000.npz
+                            timestep_70000.npz
+                            timestep_25000.npz
+                            timestep_60000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_55000.npz
+                            timestep_99999.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_50000.png
+                            timestep_70000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_55000.png
+                            timestep_99999.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_10000.png
+                    17-35-36/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_50000.npz
+                            timestep_70000.npz
+                            timestep_25000.npz
+                            timestep_60000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_55000.npz
+                            timestep_99999.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_50000.png
+                            timestep_70000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_55000.png
+                            timestep_99999.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_10000.png
+                    14-33-03/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_14999.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_6000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_14999.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_6000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    23-29-37/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_49999.npz
+                            timestep_42000.npz
+                            timestep_46000.npz
+                            timestep_44000.npz
+                            timestep_48000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_49999.png
+                            timestep_42000.png
+                            timestep_46000.png
+                            timestep_44000.png
+                            timestep_48000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    18-49-08/
+                        config.json
+                        data/
+                            timestep_120000.npz
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_175000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_130000.npz
+                            timestep_50000.npz
+                            timestep_165000.npz
+                            timestep_180000.npz
+                            timestep_70000.npz
+                            timestep_110000.npz
+                            timestep_145000.npz
+                            timestep_25000.npz
+                            timestep_199999.npz
+                            timestep_60000.npz
+                            timestep_100000.npz
+                            timestep_155000.npz
+                            timestep_35000.npz
+                            timestep_190000.npz
+                            timestep_0.npz
+                            timestep_195000.npz
+                            timestep_105000.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_150000.npz
+                            timestep_115000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_140000.npz
+                            timestep_185000.npz
+                            timestep_55000.npz
+                            timestep_135000.npz
+                            timestep_160000.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_125000.npz
+                            timestep_170000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_120000.png
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_175000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_130000.png
+                            timestep_50000.png
+                            timestep_165000.png
+                            timestep_180000.png
+                            timestep_70000.png
+                            timestep_110000.png
+                            timestep_145000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_199999.png
+                            timestep_100000.png
+                            timestep_155000.png
+                            timestep_35000.png
+                            timestep_190000.png
+                            timestep_0.png
+                            timestep_195000.png
+                            timestep_105000.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_150000.png
+                            timestep_115000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_140000.png
+                            timestep_185000.png
+                            timestep_55000.png
+                            timestep_135000.png
+                            timestep_160000.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_125000.png
+                            timestep_170000.png
+                            timestep_10000.png
+                    23-01-45/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_23000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_21000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_29000.npz
+                            timestep_1000.npz
+                            timestep_25000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_27000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_29999.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_23000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_21000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_29000.png
+                            timestep_1000.png
+                            timestep_25000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_27000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_29999.png
+                            timestep_28000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    22-59-54/
+                        config.json
+                        data/
+                            timestep_3500.npz
+                            timestep_1100.npz
+                            timestep_1300.npz
+                            timestep_3700.npz
+                            timestep_3300.npz
+                            timestep_1700.npz
+                            timestep_1500.npz
+                            timestep_2800.npz
+                            timestep_900.npz
+                            timestep_3100.npz
+                            timestep_1200.npz
+                            timestep_3600.npz
+                            timestep_3400.npz
+                            timestep_1000.npz
+                            timestep_2900.npz
+                            timestep_800.npz
+                            timestep_1400.npz
+                            timestep_3000.npz
+                            timestep_3200.npz
+                            timestep_1600.npz
+                            timestep_600.npz
+                            timestep_2700.npz
+                            timestep_0.npz
+                            timestep_3999.npz
+                            timestep_1800.npz
+                            timestep_2500.npz
+                            timestep_400.npz
+                            timestep_2100.npz
+                            timestep_3800.npz
+                            timestep_2300.npz
+                            timestep_200.npz
+                            timestep_2400.npz
+                            timestep_500.npz
+                            timestep_1900.npz
+                            timestep_700.npz
+                            timestep_2600.npz
+                            timestep_2200.npz
+                            timestep_300.npz
+                            timestep_100.npz
+                            timestep_2000.npz
+                            timestep_3900.npz
+                        plots/
+                            timestep_3500.png
+                            timestep_1100.png
+                            timestep_1300.png
+                            timestep_3700.png
+                            timestep_3300.png
+                            timestep_1700.png
+                            timestep_1500.png
+                            timestep_900.png
+                            timestep_2800.png
+                            timestep_3100.png
+                            timestep_1200.png
+                            timestep_3600.png
+                            timestep_3400.png
+                            timestep_1000.png
+                            timestep_800.png
+                            timestep_2900.png
+                            timestep_1400.png
+                            timestep_3000.png
+                            timestep_3200.png
+                            timestep_1600.png
+                            timestep_2700.png
+                            timestep_600.png
+                            timestep_0.png
+                            timestep_3999.png
+                            timestep_1800.png
+                            timestep_400.png
+                            timestep_2500.png
+                            timestep_2100.png
+                            timestep_3800.png
+                            timestep_200.png
+                            timestep_2300.png
+                            timestep_500.png
+                            timestep_2400.png
+                            timestep_1900.png
+                            timestep_2600.png
+                            timestep_700.png
+                            timestep_300.png
+                            timestep_2200.png
+                            timestep_2000.png
+                            timestep_100.png
+                            timestep_3900.png
+                    17-16-58/
+                        config.json
+                        data/
+                            timestep_0.npz
+                    20-44-34/
+                        config.json
+                        data/
+                            timestep_120000.npz
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_175000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_130000.npz
+                            timestep_50000.npz
+                            timestep_165000.npz
+                            timestep_180000.npz
+                            timestep_70000.npz
+                            timestep_110000.npz
+                            timestep_145000.npz
+                            timestep_25000.npz
+                            timestep_199999.npz
+                            timestep_60000.npz
+                            timestep_100000.npz
+                            timestep_155000.npz
+                            timestep_35000.npz
+                            timestep_190000.npz
+                            timestep_0.npz
+                            timestep_195000.npz
+                            timestep_105000.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_150000.npz
+                            timestep_115000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_140000.npz
+                            timestep_185000.npz
+                            timestep_55000.npz
+                            timestep_135000.npz
+                            timestep_160000.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_125000.npz
+                            timestep_170000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_120000.png
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_175000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_130000.png
+                            timestep_50000.png
+                            timestep_165000.png
+                            timestep_180000.png
+                            timestep_70000.png
+                            timestep_110000.png
+                            timestep_145000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_199999.png
+                            timestep_100000.png
+                            timestep_155000.png
+                            timestep_35000.png
+                            timestep_190000.png
+                            timestep_0.png
+                            timestep_195000.png
+                            timestep_105000.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_150000.png
+                            timestep_115000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_140000.png
+                            timestep_185000.png
+                            timestep_55000.png
+                            timestep_135000.png
+                            timestep_160000.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_125000.png
+                            timestep_170000.png
+                            timestep_10000.png
+                    14-32-21/
+                        config.json
+                        data/
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_0.npz
+                            timestep_10000.npz
+                    15-30-40/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_14999.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_6000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_14999.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_6000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    15-29-07/
+                        config.json
+                        data/
+                            timestep_5000.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_4000.npz
+                            timestep_2000.npz
+                    21-26-45/
+                        config.json
+                        data/
+                            timestep_120000.npz
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_175000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_130000.npz
+                            timestep_50000.npz
+                            timestep_165000.npz
+                            timestep_180000.npz
+                            timestep_70000.npz
+                            timestep_110000.npz
+                            timestep_145000.npz
+                            timestep_25000.npz
+                            timestep_199999.npz
+                            timestep_60000.npz
+                            timestep_100000.npz
+                            timestep_155000.npz
+                            timestep_35000.npz
+                            timestep_190000.npz
+                            timestep_0.npz
+                            timestep_195000.npz
+                            timestep_105000.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_150000.npz
+                            timestep_115000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_140000.npz
+                            timestep_185000.npz
+                            timestep_55000.npz
+                            timestep_135000.npz
+                            timestep_160000.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_125000.npz
+                            timestep_170000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_120000.png
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_175000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_130000.png
+                            timestep_50000.png
+                            timestep_165000.png
+                            timestep_180000.png
+                            timestep_70000.png
+                            timestep_110000.png
+                            timestep_145000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_199999.png
+                            timestep_100000.png
+                            timestep_155000.png
+                            timestep_35000.png
+                            timestep_190000.png
+                            timestep_0.png
+                            timestep_195000.png
+                            timestep_105000.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_150000.png
+                            timestep_115000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_140000.png
+                            timestep_185000.png
+                            timestep_55000.png
+                            timestep_135000.png
+                            timestep_160000.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_125000.png
+                            timestep_170000.png
+                            timestep_10000.png
+                    23-22-02/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_42000.npz
+                            timestep_50000.npz
+                            timestep_46000.npz
+                            timestep_44000.npz
+                            timestep_48000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                    17-19-15/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_50000.npz
+                            timestep_70000.npz
+                            timestep_25000.npz
+                            timestep_60000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_55000.npz
+                            timestep_99999.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_50000.png
+                            timestep_70000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_55000.png
+                            timestep_99999.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_10000.png
+                    15-35-29/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_19999.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    15-48-46/
+                        config.json
+                        data/
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_4000.npz
+                            timestep_2000.npz
+                    17-16-30/
+                        config.json
+                        data/
+                            timestep_0.npz
+                    22-59-03/
+                        config.json
+                        data/
+                            timestep_3500.npz
+                            timestep_1500.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_2500.npz
+                            timestep_4000.npz
+                            timestep_500.npz
+                            timestep_2000.npz
+                    15-41-26/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_19999.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    14-36-47/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_14999.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_6000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_14999.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_6000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    16-01-56/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_19999.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    16-32-41/
+                        config.json
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_85000.npz
+                            timestep_95000.npz
+                            timestep_5000.npz
+                            timestep_50000.npz
+                            timestep_70000.npz
+                            timestep_25000.npz
+                            timestep_60000.npz
+                            timestep_35000.npz
+                            timestep_0.npz
+                            timestep_65000.npz
+                            timestep_30000.npz
+                            timestep_75000.npz
+                            timestep_20000.npz
+                            timestep_55000.npz
+                            timestep_99999.npz
+                            timestep_90000.npz
+                            timestep_80000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_85000.png
+                            timestep_95000.png
+                            timestep_5000.png
+                            timestep_50000.png
+                            timestep_70000.png
+                            timestep_25000.png
+                            timestep_60000.png
+                            timestep_35000.png
+                            timestep_0.png
+                            timestep_65000.png
+                            timestep_30000.png
+                            timestep_75000.png
+                            timestep_20000.png
+                            timestep_55000.png
+                            timestep_99999.png
+                            timestep_90000.png
+                            timestep_80000.png
+                            timestep_45000.png
+                            timestep_10000.png
+                    15-46-08/
+                        config.json
+                        data/
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_4000.npz
+                            timestep_2000.npz
+                    15-38-23/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_19999.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_10000.png
+                    15-34-11/
+                        config.json
+                        data/
+                            timestep_7000.npz
+                            timestep_15000.npz
+                            timestep_19000.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_17000.npz
+                            timestep_13000.npz
+                            timestep_1000.npz
+                            timestep_11000.npz
+                            timestep_3000.npz
+                            timestep_0.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_12000.npz
+                            timestep_19999.npz
+                            timestep_2000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_15000.png
+                            timestep_19000.png
+                            timestep_5000.png
+                            timestep_9000.png
+                            timestep_17000.png
+                            timestep_13000.png
+                            timestep_1000.png
+                            timestep_11000.png
+                            timestep_3000.png
+                            timestep_0.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_12000.png
+                            timestep_19999.png
+                            timestep_2000.png
+                            timestep_10000.png
         results/
             2025-07-24/
-                10-23-32/
+                16-54-49/
                     config.json
                     data/
                         timestep_40000.npz
-                        timestep_0.npz
-                        timestep_20000.npz
-                11-35-55/
-                    config.json
-                    data/
-                10-18-20/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                10-04-47/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                11-35-07/
-                    config.json
-                    data/
-                        timestep_0.npz
-                11-01-09/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_200.npz
-                        timestep_100.npz
-                12-07-32/
-                    config.json
-                    data/
-                10-22-33/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                12-32-32/
-                    config.json
-                    data/
-                        timestep_31000.npz
-                        timestep_7000.npz
-                        timestep_23000.npz
                         timestep_15000.npz
-                        timestep_19000.npz
+                        timestep_85000.npz
+                        timestep_95000.npz
                         timestep_5000.npz
-                        timestep_21000.npz
-                        timestep_9000.npz
-                        timestep_33000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
-                        timestep_29000.npz
-                        timestep_37000.npz
-                        timestep_1000.npz
-                        timestep_25000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_27000.npz
-                        timestep_39000.npz
-                        timestep_35000.npz
-                        timestep_0.npz
-                        timestep_39999.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_30000.npz
-                        timestep_22000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_32000.npz
-                        timestep_8000.npz
-                        timestep_36000.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                        timestep_38000.npz
-                        timestep_26000.npz
-                        timestep_2000.npz
-                        timestep_34000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_31000.png
-                        timestep_7000.png
-                        timestep_23000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_21000.png
-                        timestep_33000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_37000.png
-                        timestep_29000.png
-                        timestep_1000.png
-                        timestep_25000.png
-                        timestep_11000.png
-                        timestep_39000.png
-                        timestep_3000.png
-                        timestep_27000.png
-                        timestep_35000.png
-                        timestep_0.png
-                        timestep_39999.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_30000.png
-                        timestep_22000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_32000.png
-                        timestep_28000.png
-                        timestep_36000.png
-                        timestep_24000.png
-                        timestep_12000.png
-                        timestep_26000.png
-                        timestep_2000.png
-                        timestep_38000.png
-                        timestep_34000.png
-                        timestep_10000.png
-                10-40-12/
-                    config.json
-                    data/
-                10-43-34/
-                    config.json
-                    data/
-                        timestep_4999.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_4000.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_4999.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_4000.png
-                        timestep_2000.png
-                12-06-33/
-                    config.json
-                    data/
-                12-12-32/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_15000.npz
-                        timestep_19000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
-                        timestep_1000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_12000.npz
-                        timestep_19999.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_1000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_12000.png
-                        timestep_19999.png
-                        timestep_2000.png
-                        timestep_10000.png
-                10-44-46/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_39999.npz
-                        timestep_16000.npz
-                        timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_32000.npz
-                        timestep_8000.npz
-                        timestep_36000.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_39999.png
-                        timestep_16000.png
-                        timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_32000.png
-                        timestep_28000.png
-                        timestep_36000.png
-                        timestep_24000.png
-                        timestep_12000.png
-                11-45-00/
-                    config.json
-                    data/
-                        timestep_40000.npz
                         timestep_50000.npz
                         timestep_70000.npz
+                        timestep_25000.npz
                         timestep_60000.npz
+                        timestep_35000.npz
                         timestep_0.npz
+                        timestep_65000.npz
                         timestep_30000.npz
+                        timestep_75000.npz
                         timestep_20000.npz
+                        timestep_55000.npz
                         timestep_99999.npz
                         timestep_90000.npz
                         timestep_80000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_40000.png
-                        timestep_50000.png
-                        timestep_70000.png
-                        timestep_60000.png
-                        timestep_0.png
-                        timestep_30000.png
-                        timestep_20000.png
-                        timestep_99999.png
-                        timestep_90000.png
-                        timestep_80000.png
-                        timestep_10000.png
-                11-08-19/
-                    config.json
-                    data/
-                        timestep_900.npz
-                        timestep_999.npz
-                        timestep_800.npz
-                        timestep_600.npz
-                        timestep_0.npz
-                        timestep_400.npz
-                        timestep_200.npz
-                        timestep_500.npz
-                        timestep_700.npz
-                        timestep_300.npz
-                        timestep_100.npz
-                    plots/
-                        timestep_900.png
-                        timestep_999.png
-                        timestep_800.png
-                        timestep_600.png
-                        timestep_0.png
-                        timestep_400.png
-                        timestep_200.png
-                        timestep_500.png
-                        timestep_700.png
-                        timestep_300.png
-                        timestep_100.png
-                10-25-00/
-                    config.json
-                    data/
-                        timestep_40000.npz
-                        timestep_0.npz
-                        timestep_20000.npz
-                11-07-59/
-                    config.json
-                    data/
-                        timestep_40000.npz
-                        timestep_50000.npz
-                        timestep_70000.npz
-                        timestep_60000.npz
-                        timestep_0.npz
-                        timestep_30000.npz
-                        timestep_20000.npz
-                        timestep_99999.npz
-                        timestep_90000.npz
-                        timestep_80000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_40000.png
-                        timestep_50000.png
-                        timestep_70000.png
-                        timestep_60000.png
-                        timestep_0.png
-                        timestep_30000.png
-                        timestep_20000.png
-                        timestep_99999.png
-                        timestep_90000.png
-                        timestep_80000.png
-                        timestep_10000.png
-                10-30-31/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_13999.npz
-                        timestep_12000.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_13999.png
-                        timestep_12000.png
-                        timestep_2000.png
-                        timestep_10000.png
-                10-34-30/
-                    config.json
-                    data/
-                        timestep_40000.npz
-                        timestep_15000.npz
-                        timestep_49999.npz
-                        timestep_5000.npz
-                        timestep_25000.npz
-                        timestep_35000.npz
-                        timestep_0.npz
-                        timestep_30000.npz
-                        timestep_20000.npz
                         timestep_45000.npz
                         timestep_10000.npz
                     plots/
                         timestep_40000.png
                         timestep_15000.png
-                        timestep_49999.png
+                        timestep_85000.png
+                        timestep_95000.png
                         timestep_5000.png
+                        timestep_50000.png
+                        timestep_70000.png
                         timestep_25000.png
+                        timestep_60000.png
                         timestep_35000.png
                         timestep_0.png
+                        timestep_65000.png
                         timestep_30000.png
+                        timestep_75000.png
                         timestep_20000.png
+                        timestep_55000.png
+                        timestep_99999.png
+                        timestep_90000.png
+                        timestep_80000.png
                         timestep_45000.png
                         timestep_10000.png
-                11-01-22/
+                15-55-00/
                     config.json
                     data/
-                10-28-32/
-                    config.json
-                    data/
+                        timestep_1100.npz
+                        timestep_2999.npz
+                        timestep_1300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
+                        timestep_2800.npz
+                        timestep_900.npz
+                        timestep_1200.npz
+                        timestep_1000.npz
+                        timestep_2900.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_2700.npz
                         timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
+                        timestep_1800.npz
+                        timestep_2500.npz
+                        timestep_400.npz
+                        timestep_2100.npz
+                        timestep_2300.npz
+                        timestep_200.npz
+                        timestep_2400.npz
+                        timestep_500.npz
+                        timestep_1900.npz
+                        timestep_700.npz
+                        timestep_2600.npz
+                        timestep_2200.npz
+                        timestep_300.npz
+                        timestep_100.npz
                         timestep_2000.npz
                     plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                12-08-04/
-                    config.json
-                    data/
-                12-10-30/
-                    config.json
-                    data/
-                        timestep_1000.npz
-                        timestep_0.npz
-                12-04-54/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
+                        timestep_1100.png
+                        timestep_2999.png
+                        timestep_1300.png
+                        timestep_1700.png
+                        timestep_1500.png
+                        timestep_900.png
+                        timestep_2800.png
+                        timestep_1200.png
                         timestep_1000.png
-                        timestep_3000.png
+                        timestep_800.png
+                        timestep_2900.png
+                        timestep_1400.png
+                        timestep_1600.png
+                        timestep_2700.png
+                        timestep_600.png
                         timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_2500.png
+                        timestep_2100.png
+                        timestep_200.png
+                        timestep_2300.png
+                        timestep_500.png
+                        timestep_2400.png
+                        timestep_1900.png
+                        timestep_2600.png
+                        timestep_700.png
+                        timestep_300.png
+                        timestep_2200.png
                         timestep_2000.png
-                12-34-37/
+                        timestep_100.png
+                15-53-20/
                     config.json
                     data/
-                        timestep_31000.npz
+                        timestep_15000.npz
+                        timestep_5000.npz
+                        timestep_25000.npz
+                        timestep_0.npz
+                        timestep_30000.npz
+                        timestep_20000.npz
+                        timestep_10000.npz
+                16-45-41/
+                    config.json
+                    data/
+                        timestep_5000.npz
+                        timestep_0.npz
+                        timestep_10000.npz
+                23-44-04/
+                    config.json
+                    data/
                         timestep_7000.npz
-                        timestep_23000.npz
                         timestep_15000.npz
                         timestep_19000.npz
                         timestep_5000.npz
-                        timestep_21000.npz
                         timestep_9000.npz
-                        timestep_33000.npz
                         timestep_17000.npz
                         timestep_13000.npz
-                        timestep_29000.npz
-                        timestep_37000.npz
                         timestep_1000.npz
-                        timestep_25000.npz
                         timestep_11000.npz
                         timestep_3000.npz
-                        timestep_27000.npz
-                        timestep_39000.npz
+                        timestep_0.npz
+                        timestep_14000.npz
+                        timestep_18000.npz
+                        timestep_6000.npz
+                        timestep_16000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_12000.npz
+                        timestep_19999.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_15000.png
+                        timestep_19000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_17000.png
+                        timestep_13000.png
+                        timestep_1000.png
+                        timestep_11000.png
+                        timestep_3000.png
+                        timestep_0.png
+                        timestep_14000.png
+                        timestep_18000.png
+                        timestep_6000.png
+                        timestep_16000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_12000.png
+                        timestep_19999.png
+                        timestep_2000.png
+                        timestep_10000.png
+                15-58-57/
+                    config.json
+                    data/
+                        timestep_40000.npz
+                        timestep_15000.npz
+                        timestep_85000.npz
+                        timestep_95000.npz
+                        timestep_5000.npz
+                        timestep_50000.npz
+                        timestep_70000.npz
+                        timestep_25000.npz
+                        timestep_60000.npz
                         timestep_35000.npz
                         timestep_0.npz
-                        timestep_39999.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
+                        timestep_65000.npz
                         timestep_30000.npz
-                        timestep_22000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
+                        timestep_75000.npz
                         timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_32000.npz
-                        timestep_8000.npz
-                        timestep_36000.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                        timestep_38000.npz
-                        timestep_26000.npz
-                        timestep_2000.npz
-                        timestep_34000.npz
+                        timestep_55000.npz
+                        timestep_99999.npz
+                        timestep_90000.npz
+                        timestep_80000.npz
+                        timestep_45000.npz
                         timestep_10000.npz
                     plots/
-                        timestep_31000.png
-                        timestep_7000.png
-                        timestep_23000.png
+                        timestep_40000.png
                         timestep_15000.png
-                        timestep_19000.png
+                        timestep_85000.png
+                        timestep_95000.png
                         timestep_5000.png
-                        timestep_21000.png
-                        timestep_33000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_37000.png
-                        timestep_29000.png
-                        timestep_1000.png
+                        timestep_50000.png
+                        timestep_70000.png
                         timestep_25000.png
-                        timestep_11000.png
-                        timestep_39000.png
-                        timestep_3000.png
-                        timestep_27000.png
+                        timestep_60000.png
                         timestep_35000.png
                         timestep_0.png
-                        timestep_39999.png
-                        timestep_14000.png
-                        timestep_18000.png
+                        timestep_65000.png
                         timestep_30000.png
-                        timestep_22000.png
-                        timestep_6000.png
-                        timestep_16000.png
+                        timestep_75000.png
                         timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_32000.png
-                        timestep_28000.png
-                        timestep_36000.png
-                        timestep_24000.png
-                        timestep_12000.png
-                        timestep_26000.png
-                        timestep_2000.png
-                        timestep_38000.png
-                        timestep_34000.png
+                        timestep_55000.png
+                        timestep_99999.png
+                        timestep_90000.png
+                        timestep_80000.png
+                        timestep_45000.png
                         timestep_10000.png
-                11-19-28/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_30000.npz
-                        timestep_20000.npz
-                        timestep_10000.npz
-                11-35-34/
-                    config.json
-                    data/
-                        timestep_0.npz
-                10-20-44/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                11-31-58/
-                    config.json
-                    data/
-                11-06-22/
+                23-53-09/
                     config.json
                     data/
                         timestep_7000.npz
@@ -5312,248 +6497,14 @@ example/
                         timestep_8000.png
                         timestep_9999.png
                         timestep_2000.png
-                12-26-01/
-                    config.json
-                    data/
-                        timestep_0.npz
-                10-29-23/
-                    config.json
-                    data/
-                        timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_13999.npz
-                        timestep_12000.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_13999.png
-                        timestep_12000.png
-                        timestep_2000.png
-                        timestep_10000.png
-                11-18-06/
-                    config.json
-                    data/
-                        timestep_0.npz
-                11-34-32/
-                    config.json
-                    data/
-                        timestep_1000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_2000.npz
-                12-15-21/
+                15-57-56/
                     config.json
                     data/
                         timestep_7000.npz
-                        timestep_15000.npz
-                        timestep_19000.npz
                         timestep_5000.npz
                         timestep_9000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
                         timestep_1000.npz
-                        timestep_11000.npz
                         timestep_3000.npz
-                        timestep_0.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_12000.npz
-                        timestep_19999.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_1000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_12000.png
-                        timestep_19999.png
-                        timestep_2000.png
-                        timestep_10000.png
-                12-29-39/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_15000.npz
-                        timestep_19000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
-                        timestep_1000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_12000.npz
-                        timestep_19999.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_1000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_12000.png
-                        timestep_19999.png
-                        timestep_2000.png
-                        timestep_10000.png
-                12-16-12/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_15000.npz
-                        timestep_19000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
-                        timestep_1000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_0.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_12000.npz
-                        timestep_19999.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_1000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_12000.png
-                        timestep_19999.png
-                        timestep_2000.png
-                        timestep_10000.png
-                11-23-01/
-                    config.json
-                    data/
-                        timestep_7000.npz
-                        timestep_23000.npz
-                        timestep_15000.npz
-                        timestep_19000.npz
-                        timestep_5000.npz
-                        timestep_21000.npz
-                        timestep_9000.npz
-                        timestep_17000.npz
-                        timestep_13000.npz
-                        timestep_29000.npz
-                        timestep_1000.npz
-                        timestep_25000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_27000.npz
-                        timestep_0.npz
-                        timestep_14000.npz
-                        timestep_18000.npz
-                        timestep_22000.npz
-                        timestep_6000.npz
-                        timestep_16000.npz
-                        timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_29999.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                        timestep_26000.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_23000.png
-                        timestep_15000.png
-                        timestep_19000.png
-                        timestep_5000.png
-                        timestep_21000.png
-                        timestep_9000.png
-                        timestep_17000.png
-                        timestep_13000.png
-                        timestep_29000.png
-                        timestep_1000.png
-                        timestep_25000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_27000.png
-                        timestep_0.png
-                        timestep_14000.png
-                        timestep_18000.png
-                        timestep_22000.png
-                        timestep_6000.png
-                        timestep_16000.png
-                        timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_29999.png
-                        timestep_28000.png
-                        timestep_24000.png
-                        timestep_12000.png
-                        timestep_26000.png
-                        timestep_2000.png
-                        timestep_10000.png
-                10-19-30/
-                    config.json
-                    data/
                         timestep_0.npz
                         timestep_6000.npz
                         timestep_4000.npz
@@ -5561,134 +6512,339 @@ example/
                         timestep_9999.npz
                         timestep_2000.npz
                     plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_1000.png
+                        timestep_3000.png
                         timestep_0.png
                         timestep_6000.png
                         timestep_4000.png
                         timestep_8000.png
                         timestep_9999.png
                         timestep_2000.png
-                12-04-04/
+                15-54-47/
                     config.json
                     data/
-                        timestep_0.npz
-                11-05-17/
-                    config.json
-                    data/
+                        timestep_1100.npz
+                        timestep_1300.npz
+                        timestep_1700.npz
+                        timestep_1500.npz
                         timestep_900.npz
-                        timestep_999.npz
+                        timestep_1200.npz
+                        timestep_1000.npz
                         timestep_800.npz
+                        timestep_1400.npz
+                        timestep_1600.npz
                         timestep_600.npz
                         timestep_0.npz
+                        timestep_1800.npz
                         timestep_400.npz
                         timestep_200.npz
+                        timestep_1999.npz
                         timestep_500.npz
+                        timestep_1900.npz
                         timestep_700.npz
                         timestep_300.npz
                         timestep_100.npz
                     plots/
+                        timestep_1100.png
+                        timestep_1300.png
+                        timestep_1700.png
+                        timestep_1500.png
                         timestep_900.png
-                        timestep_999.png
+                        timestep_1200.png
+                        timestep_1000.png
                         timestep_800.png
+                        timestep_1400.png
+                        timestep_1600.png
                         timestep_600.png
                         timestep_0.png
+                        timestep_1800.png
                         timestep_400.png
                         timestep_200.png
+                        timestep_1999.png
                         timestep_500.png
+                        timestep_1900.png
                         timestep_700.png
                         timestep_300.png
                         timestep_100.png
-                11-19-25/
+                16-50-31/
                     config.json
                     data/
+                        timestep_40000.npz
+                        timestep_15000.npz
+                        timestep_85000.npz
+                        timestep_95000.npz
+                        timestep_5000.npz
+                        timestep_50000.npz
+                        timestep_70000.npz
+                        timestep_25000.npz
+                        timestep_60000.npz
+                        timestep_35000.npz
                         timestep_0.npz
-                        timestep_100.npz
-                12-10-51/
+                        timestep_65000.npz
+                        timestep_30000.npz
+                        timestep_75000.npz
+                        timestep_20000.npz
+                        timestep_55000.npz
+                        timestep_99999.npz
+                        timestep_90000.npz
+                        timestep_80000.npz
+                        timestep_45000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_40000.png
+                        timestep_15000.png
+                        timestep_85000.png
+                        timestep_95000.png
+                        timestep_5000.png
+                        timestep_50000.png
+                        timestep_70000.png
+                        timestep_25000.png
+                        timestep_60000.png
+                        timestep_35000.png
+                        timestep_0.png
+                        timestep_65000.png
+                        timestep_30000.png
+                        timestep_75000.png
+                        timestep_20000.png
+                        timestep_55000.png
+                        timestep_99999.png
+                        timestep_90000.png
+                        timestep_80000.png
+                        timestep_45000.png
+                        timestep_10000.png
+                15-56-34/
+                    config.json
+                    data/
+                        timestep_2800.npz
+                        timestep_1200.npz
+                        timestep_1000.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_0.npz
+                        timestep_1800.npz
+                        timestep_400.npz
+                        timestep_200.npz
+                        timestep_2400.npz
+                        timestep_2600.npz
+                        timestep_2200.npz
+                        timestep_2000.npz
+                15-51-58/
+                    config.json
+                    data/
+                        timestep_5000.npz
+                        timestep_0.npz
+                15-57-14/
+                    config.json
+                    data/
+                        timestep_2800.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_400.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_200.npz
+                        timestep_2400.npz
+                        timestep_2600.npz
+                        timestep_2200.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_2800.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2400.png
+                        timestep_2600.png
+                        timestep_2200.png
+                        timestep_2000.png
+                16-45-20/
+                    config.json
+                    data/
+                        timestep_5000.npz
+                        timestep_0.npz
+                18-24-36/
+                    config.json
+                    data/
+                        timestep_120000.npz
+                        timestep_40000.npz
+                        timestep_180000.npz
+                        timestep_199999.npz
+                        timestep_60000.npz
+                        timestep_100000.npz
+                        timestep_0.npz
+                        timestep_20000.npz
+                        timestep_140000.npz
+                        timestep_160000.npz
+                        timestep_80000.npz
+                    plots/
+                        timestep_120000.png
+                        timestep_40000.png
+                        timestep_180000.png
+                        timestep_60000.png
+                        timestep_199999.png
+                        timestep_100000.png
+                        timestep_0.png
+                        timestep_20000.png
+                        timestep_140000.png
+                        timestep_160000.png
+                        timestep_80000.png
+                16-49-00/
+                    config.json
+                    data/
+                        timestep_15000.npz
+                        timestep_5000.npz
+                        timestep_25000.npz
+                        timestep_0.npz
+                        timestep_30000.npz
+                        timestep_20000.npz
+                        timestep_10000.npz
+                15-52-53/
+                    config.json
+                    data/
+                        timestep_5000.npz
+                        timestep_0.npz
+                        timestep_10000.npz
+                15-55-17/
+                    config.json
+                    data/
+                        timestep_2800.npz
+                        timestep_1200.npz
+                        timestep_4999.npz
+                        timestep_3600.npz
+                        timestep_3400.npz
+                        timestep_1000.npz
+                        timestep_800.npz
+                        timestep_1400.npz
+                        timestep_3000.npz
+                        timestep_4800.npz
+                        timestep_3200.npz
+                        timestep_1600.npz
+                        timestep_600.npz
+                        timestep_0.npz
+                        timestep_4600.npz
+                        timestep_4400.npz
+                        timestep_1800.npz
+                        timestep_400.npz
+                        timestep_4000.npz
+                        timestep_3800.npz
+                        timestep_4200.npz
+                        timestep_200.npz
+                        timestep_2400.npz
+                        timestep_2600.npz
+                        timestep_2200.npz
+                        timestep_2000.npz
+                    plots/
+                        timestep_2800.png
+                        timestep_1200.png
+                        timestep_4999.png
+                        timestep_3600.png
+                        timestep_3400.png
+                        timestep_1000.png
+                        timestep_800.png
+                        timestep_1400.png
+                        timestep_3000.png
+                        timestep_4800.png
+                        timestep_3200.png
+                        timestep_1600.png
+                        timestep_600.png
+                        timestep_0.png
+                        timestep_4600.png
+                        timestep_4400.png
+                        timestep_1800.png
+                        timestep_400.png
+                        timestep_4000.png
+                        timestep_3800.png
+                        timestep_4200.png
+                        timestep_200.png
+                        timestep_2400.png
+                        timestep_2600.png
+                        timestep_2200.png
+                        timestep_2000.png
+                23-49-28/
                     config.json
                     data/
                         timestep_7000.npz
                         timestep_5000.npz
                         timestep_9000.npz
+                        timestep_13000.npz
                         timestep_1000.npz
+                        timestep_11000.npz
                         timestep_3000.npz
+                        timestep_14999.npz
                         timestep_0.npz
+                        timestep_14000.npz
                         timestep_6000.npz
                         timestep_4000.npz
                         timestep_8000.npz
-                        timestep_9999.npz
+                        timestep_12000.npz
                         timestep_2000.npz
+                        timestep_10000.npz
                     plots/
                         timestep_7000.png
                         timestep_5000.png
                         timestep_9000.png
+                        timestep_13000.png
                         timestep_1000.png
+                        timestep_11000.png
                         timestep_3000.png
+                        timestep_14999.png
                         timestep_0.png
+                        timestep_14000.png
                         timestep_6000.png
                         timestep_4000.png
                         timestep_8000.png
-                        timestep_9999.png
+                        timestep_12000.png
                         timestep_2000.png
-                12-08-31/
+                        timestep_10000.png
+                16-44-57/
                     config.json
                     data/
-                        timestep_7000.npz
                         timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
                         timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                10-07-22/
+                        timestep_10000.npz
+                16-48-36/
                     config.json
                     data/
-                        timestep_7000.npz
                         timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_1000.npz
-                        timestep_3000.npz
                         timestep_0.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_9999.npz
-                        timestep_2000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_1000.png
-                        timestep_3000.png
-                        timestep_0.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_9999.png
-                        timestep_2000.png
-                12-07-41/
-                    config.json
-                    data/
-                        timestep_1000.npz
-                        timestep_0.npz
-                        timestep_2000.npz
-                10-42-48/
-                    config.json
-                    data/
+                        timestep_10000.npz
             2025-07-10/
                 14-28-58/
                     config.json

@@ -39,10 +39,11 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             final_rho = data["rho"]
             final_u = data["u"]
             final_force = data.get("force", None)
+            final_force_ext = data.get("force_ext", None)
 
             fig, axes = plt.subplots(
                 1,
-                2 if final_force is None else 3,
+                2 if final_force is None else 4,
                 figsize=(12 if final_force is None else 18, 5),
             )
 
@@ -100,6 +101,27 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                 U_force = final_force[:, :, 0, 0]
                 V_force = final_force[:, :, 0, 1]
                 axes[2].quiver(
+                    X[::skip, ::skip],
+                    Y[::skip, ::skip],
+                    U_force.T[::skip, ::skip],
+                    V_force.T[::skip, ::skip],
+                    color="white",
+                    scale=None,
+                    scale_units="xy",
+                    angles="xy",
+                )
+
+            if final_force_ext is not None:
+                # Plot force magnitude and vectors
+                force_mag = np.sqrt(
+                    final_force_ext[:, :, 0, 0] ** 2 + final_force_ext[:, :, 0, 1] ** 2
+                )
+                im3 = axes[3].imshow(force_mag.T, origin="lower", cmap="cividis")
+                axes[3].set_title("Force Magnitude & Vectors")
+                plt.colorbar(im3, ax=axes[3], label="Force Magnitude")
+                U_force = final_force_ext[:, :, 0, 0]
+                V_force = final_force_ext[:, :, 0, 1]
+                axes[3].quiver(
                     X[::skip, ::skip],
                     Y[::skip, ::skip],
                     U_force.T[::skip, ::skip],

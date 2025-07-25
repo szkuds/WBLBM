@@ -78,6 +78,7 @@ class Run:
                         "rho": np.array(rho),
                         "u": np.array(u),
                         "force": np.array(force),
+                        "force_ext": np.array(force_ext),
                     }
                 else:
                     rho, u = result
