@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 from datetime import datetime
 import os
+import logging
+import sys
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -43,8 +45,54 @@ class SimulationIO:
         self.data_dir = os.path.join(self.run_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
 
+        self._setup_logging()
+
         if config:
             self.save_config(config)
+
+    def _setup_logging(self) -> None:
+        """
+        Configure root logger so everything printed to the console is
+        also written to <run_dir>/simulation.log. Existing handlers are
+        cleared to avoid duplicate lines when multiple simulations run
+        in the same Python interpreter (e.g. test suites).
+        """
+        log_file = os.path.join(self.run_dir, "simulation.log")
+
+        # 1. Build handlers
+        fmt = logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        file_handler = logging.FileHandler(log_file, mode="a")
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(fmt)
+
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(fmt)
+
+        # 2. Reset & attach
+        root = logging.getLogger()
+        for h in root.handlers[:]:
+            root.removeHandler(h)  # stale handlers from previous runs
+        root.setLevel(logging.INFO)
+        root.addHandler(file_handler)
+        root.addHandler(console_handler)
+
+        # 3. Mirror *all* prints to the same log file
+        class _Tee(object):
+            def __init__(self, *streams):
+                self._streams = streams
+
+            def write(self, msg):
+                [s.write(msg) for s in self._streams]
+
+            def flush(self):
+                [s.flush() for s in self._streams]
+
+        logfile_stream = open(log_file, "a", buffering=1)  # line-buffered
+        sys.stdout = _Tee(sys.__stdout__, logfile_stream)
+        sys.stderr = _Tee(sys.__stderr__, logfile_stream)  # capture tracebacks too
 
     def _create_timestamped_directory(self) -> str:
         """Creates a unique, timestamped directory for a single simulation run."""
