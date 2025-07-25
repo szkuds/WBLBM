@@ -104,14 +104,7 @@ class Run:
             data_to_save = {"f": np.array(fprev)}
         self.io_handler.save_data_step(it, data_to_save)
 
-    def run(self, *, verbose=True, init_type=None, init_dir=None):
-        # Backward compatibility: warn if user passes init_type/init_dir to run()
-        if init_type is not None or init_dir is not None:
-            if (init_type != self.init_type) or (init_dir != self.init_dir):
-                print(
-                    "Warning: init_type/init_dir passed to run() are ignored; "
-                    "specify them in Run(...) instead."
-                )
+    def run(self, *, verbose=True):
         fprev = self.simulation.initialize_fields(
             self.init_type, init_dir=self.init_dir
         )
@@ -125,6 +118,7 @@ class Run:
             fprev = self.simulation.run_timestep(fprev, it)
             if jnp.isnan(fprev).any():
                 print(f"NaN encountered at timestep {it}. Stopping simulation.")
+                break
             # skip initial transients then save every `save_interval`
             if (it > self.skip_interval) and (
                 it % self.save_interval == 0 or it == nt - 1
