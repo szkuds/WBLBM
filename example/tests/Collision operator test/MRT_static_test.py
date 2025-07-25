@@ -12,12 +12,12 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (201, 201)
-    nt = 100000
-    save_interval = 5000
-    kappa = 0.04
+    nt = 200000
+    save_interval = 20000
+    kappa = 0.02
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 12
+    interface_width = 18
 
     force_g = 0.00000
     inclination_angle = 0
@@ -32,7 +32,7 @@ def test_multiphase_gravity_simulation():
         "kb": 1.0,
         "k0": 0.0,
         "k2": 1.0,
-        "k4": 1.2,
+        "k4": 0.9,
     }
 
     sim = Run(

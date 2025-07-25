@@ -53,18 +53,16 @@ class MacroscopicMultiphase(Macroscopic):
                 u_eq (jnp.ndarray): Force-corrected velocity for equilibrium, shape (nx, ny, 1, 2)
                 force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
         """
-        # Get raw macroscopic variables (no force correction)
         rho, u = super().__call__(f, force=None)  # Pass None to avoid any correction
 
         # Calculate interaction force
         force_int = self.force_int(rho)
-        # Total force for equilibrium calculation
+        # Total force calculation
         if force is not None:
             force_total = force + force_int
         else:
             force_total = force_int
 
-        # Correct velocity ONLY for equilibrium calculation
         u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
 
         return rho, u_eq, force_total

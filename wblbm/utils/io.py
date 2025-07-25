@@ -18,12 +18,6 @@ class CustomJSONEncoder(json.JSONEncoder):
                 "__class__": obj.__class__.__name__,
                 "__module__": obj.__class__.__module__,
             }
-            for key, value in obj.__dict__.items():
-                try:
-                    json.dumps(value, cls=CustomJSONEncoder)
-                    result[key] = value
-                except (TypeError, ValueError):
-                    result[key] = str(value)
             return result
         # Handle other numpy arrays if present
         if hasattr(obj, "tolist"):
