@@ -1,4 +1,5 @@
 /example/tests/results/
 /example/profiler_output/
 /example/tests/Collision_operator_test/results/
-/example/tests/Bubble_rise/results/
+/example/tests/Bubble_rise_low_density_ratio/results/
+/example/tests/Bubble_rise_high_density_ratio/results/

@@ -4,6 +4,8 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/example/tests/results" />
+      <excludeFolder url="file://$MODULE_DIR$/example/tests/Bubble_rise/results" />
+      <excludeFolder url="file://$MODULE_DIR$/example/tests/Collision_operator_test/results" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

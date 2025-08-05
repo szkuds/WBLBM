@@ -1,30 +1,29 @@
-import numpy as np
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseBubble
-from wblbm import visualise
+from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
 
 
-def rising_bubble_mrt():
+def test_mrt_static():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
-    print("\n=== Multiphase LBM Simulation of a rising bubble ===")
+    print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 40000
-    save_interval = 1000
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise/results/2025-07-25/14-44-10/data/timestep_49999.npz"
-
-    kappa = 0.04
+    nt = 50000
+    save_interval = 5000
+    skip_interval = 0
+    kappa = 0.01
     rho_l = 1.0
-    rho_v = 0.001
+    rho_v = 0.1
     interface_width = 5
+    tau = 0.9
 
-    force_g = 0.000002
+    force_g = 0.00000
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble(
+    gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
@@ -55,12 +54,13 @@ def rising_bubble_mrt():
         rho_v=rho_v,
         interface_width=interface_width,
         save_interval=save_interval,
+        skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
-        init_type="init_from_file",
-        init_dir=init_file,
         collision=collision,
-        # bc_config=bc_config,
+        init_type="multiphase_bubble_bot",
+        tau=tau,
+        #bc_config=bc_config,
     )
     sim.run(verbose=True)
     return sim
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = rising_bubble_mrt()
+    sim_multiphase_gravity = test_mrt_static()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
