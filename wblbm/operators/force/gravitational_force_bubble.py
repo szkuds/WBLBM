@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 from wblbm.operators.force.force import Force
-
+#TODO I really think that this is where the problem of the bubble not rising is originating. Need to figure out why!
 
 class GravityForceMultiphaseBubble(Force):
     """
