@@ -13,26 +13,26 @@ def rising_bubble_mrt():
     print("\n=== Multiphase LBM Simulation of a rising bubble ===")
 
     grid_shape = (401, 401)
-    nt = 2500
-    save_interval = 100
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_49999.npz"
+    nt = 5000
+    save_interval = 500
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
 
-    kappa = 0.04
-    rho_l = 1.0
-    rho_v = 0.001
+    kappa = 0.01
+    rho_l = 1
+    rho_v = .001
     interface_width = 5
 
-    force_g = 0.0000002
+    force_g = 0.000002
     inclination_angle = 0
     gravity = GravityForceMultiphaseBubble(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "periodic",
+        "right": "periodic",
     }
 
     # Specify MRT collision operator and its rates
@@ -60,7 +60,7 @@ def rising_bubble_mrt():
         init_type="init_from_file",
         init_dir=init_file,
         collision=collision,
-        # bc_config=bc_config,
+        bc_config=bc_config,
     )
     sim.run(verbose=True)
     return sim
