@@ -16,7 +16,7 @@ def test_mrt_static():
     save_interval = 5000
     skip_interval = 0
     kappa = 0.01
-    rho_l = 1.0
+    rho_l = 1
     rho_v = 0.001
     interface_width = 5
     tau = 0.9
