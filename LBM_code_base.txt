@@ -1,9 +1,8 @@
-/
     overview.py
     --- Code in overview.py ---
     import os
-    
-    
+
+
     def document_project(root_dir, output_file):
         with open(output_file, "w", encoding="utf-8") as doc:
             for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -24,8 +23,8 @@
                             for line in code_file:
                                 doc.write(f"{subindent}{line}")
                         doc.write(f"{subindent}--- End of {f} ---\n\n")
-    
-    
+
+
     # Usage
     document_project("./", "./LBM_code_base.txt")
     --- End of overview.py ---
@@ -78,24 +77,24 @@ wblbm/
             import jax.numpy as jnp
             from wblbm.lattice.lattice import Lattice
             from .abstract_wetting import AbstractWetting
-            
-            
+
+
             class GradientWetting(AbstractWetting):
                 """
                 Calculates gradients for wetting boundary conditions.
                 """
-            
+
                 def __init__(
                     self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1
                 ):
                     super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
                     self.c = lattice.c
-            
+
                 def _compute_gradient(self, neighbors: dict, nx: int, ny: int) -> jnp.ndarray:
                     grad_ = jnp.zeros((2, nx, ny))
                     w = self.w
                     c = self.c
-            
+
                     grad_ = grad_.at[0, :, :].set(
                         3
                         * (
@@ -107,7 +106,7 @@ wblbm/
                             + w[8] * c[0, 8] * neighbors["ipos1_jneg1"]
                         )
                     )
-            
+
                     grad_ = grad_.at[1, :, :].set(
                         3
                         * (
@@ -119,7 +118,8 @@ wblbm/
                             + w[8] * c[1, 8] * neighbors["ipos1_jneg1"]
                         )
                     )
-            
+
+/
                     # Convert to 4D format: (nx, ny, 1, d)
                     grad_4d = jnp.zeros((nx, ny, 1, 2))
                     grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
