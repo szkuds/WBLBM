@@ -87,6 +87,14 @@ class MultiphaseSimulation(BaseSimulation):
             return self.initialiser.initialise_multiphase_bubble_bot(
                 self.rho_l, self.rho_v, self.interface_width
             )
+        elif init_type == "multiphase_bubble_bubble":
+            return self.initialiser.initialise_multiphase_bubble_bubble(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type =="multiphase_lateral_bubble_configuration":
+            return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
+                self.rho_l, self.rho_v, self.interface_width
+            )
         else:
             return self.initialiser.initialise_standard()
 
