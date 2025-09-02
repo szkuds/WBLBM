@@ -1,0 +1,31 @@
+Configuration saved to results\2025-08-29/14-28-34\config.json
+Starting LBM simulation with 40000 time steps...
+Config -> Grid: (401, 401), Multiphase: True, Wetting: False, Force: True
+Step 2000/40000: avg_rho=0.8685, max_u=0.002077
+Step 4000/40000: avg_rho=0.8685, max_u=0.001503
+Step 6000/40000: avg_rho=0.8685, max_u=0.002178
+Step 8000/40000: avg_rho=0.8685, max_u=0.001931
+Step 10000/40000: avg_rho=0.8685, max_u=0.002388
+Step 12000/40000: avg_rho=0.8685, max_u=0.002244
+Step 14000/40000: avg_rho=0.8685, max_u=0.002549
+Step 16000/40000: avg_rho=0.8685, max_u=0.002478
+Step 18000/40000: avg_rho=0.8685, max_u=0.002657
+Step 20000/40000: avg_rho=0.8685, max_u=0.002643
+Step 22000/40000: avg_rho=0.8685, max_u=0.002738
+Step 24000/40000: avg_rho=0.8685, max_u=0.014251
+Step 26000/40000: avg_rho=0.8685, max_u=0.008182
+Step 28000/40000: avg_rho=0.8685, max_u=0.006557
+Step 30000/40000: avg_rho=0.8685, max_u=0.006303
+Step 32000/40000: avg_rho=0.8685, max_u=0.006583
+Step 34000/40000: avg_rho=0.8685, max_u=0.005996
+Step 36000/40000: avg_rho=0.8685, max_u=0.005382
+Step 38000/40000: avg_rho=0.8685, max_u=0.004209
+Step 39999/40000: avg_rho=0.8685, max_u=0.003493
+Simulation completed!
+Results saved in: results\2025-08-29/14-28-34
+
+=== Visualizing Results ===
+Saving plots to: results\2025-08-29/14-28-34\plots
+Finished generating plots for all 20 timesteps.
+
+Test completed!
