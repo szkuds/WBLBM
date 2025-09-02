@@ -1259,7 +1259,9 @@ wblbm/
                     elif self.force_enabled:
                         rho, u, force_tot = self.macroscopic(f, force=force)
                     else:
-                        rho, u, force_tot = self.macroscopic(f)  # In this case the total force is only the interaction force
+                        rho, u, force_tot = self.macroscopic(
+                            f
+                        )  # In this case the total force is only the interaction force
                     feq = self.equilibrium(rho, u)
                     source = self.source_term(rho, u, force_tot)
                     fcol = self.collision(f, feq, source)
@@ -1998,6 +2000,7 @@ wblbm/
             --- Code in gravitational_force_bubble.py ---
             import jax.numpy as jnp
             from wblbm.operators.force.force import Force
+            #TODO I really think that this is where the problem of the bubble not rising is originating. Need to figure out why!
             
             class GravityForceMultiphaseBubble(Force):
                 """
@@ -2013,7 +2016,7 @@ wblbm/
                         raise ValueError("Currently supports 2D (d=2) only")
             
                     force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
-                    force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
+                    force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
             
                     force_array = jnp.zeros((nx, ny, 1, d))
                     force_array = force_array.at[:, :, 0, 0].set(force_x)
@@ -2028,8 +2031,7 @@ wblbm/
                     Returns the constant gravitational force field.
                     Ignores rho as gravity is density-independent.
                     """
-                    mask = rho < 0.95 * rho_v + 0.05 * rho_l
-                    return self.force * rho * mask
+                    return self.force * (rho - rho_l)*rho_v
             --- End of gravitational_force_bubble.py ---
 
             __pycache__/
@@ -4156,7 +4158,7 @@ example/
         
             grid_shape = (200, 800)
             tau = 0.9
-            nt = 400000
+            nt = 40000
             save_interval = 4000
             kappa = 0.04
             rho_l = 1.0
@@ -4841,9 +4843,9 @@ example/
                 print("\n=== Multiphase LBM Simulation of a rising bubble ===")
             
                 grid_shape = (401, 401)
-                nt = 40000
+                nt = 20000
                 save_interval = 2000
-                init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_low_density_ratio/results/2025-08-05/16-07-12/data/timestep_49999.npz"
+                init_file = "/example/tests/Bubble_rise_low_density_ratio/results/2025-08-05/16-07-12/data/timestep_49999.npz"
             
                 kappa = 0.04
                 rho_l = 1.0
@@ -4887,8 +4889,7 @@ example/
                     force_obj=gravity,
                     init_type="init_from_file",
                     init_dir=init_file,
-                    tau = 0.9
-                   # collision=collision,
+                    collision=collision,
                     # bc_config=bc_config,
                 )
                 sim.run(verbose=True)
@@ -5155,196 +5156,6 @@ example/
                             timestep_8000.png
                             timestep_9999.png
                             timestep_2000.png
-                2025-08-26/
-                    14-32-02/
-                        config.json
-                        simulation.log
-                        data/
-                    13-31-36/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_39999.npz
-                            timestep_14000.npz
-                            timestep_18000.npz
-                            timestep_30000.npz
-                            timestep_22000.npz
-                            timestep_6000.npz
-                            timestep_16000.npz
-                            timestep_20000.npz
-                            timestep_4000.npz
-                            timestep_32000.npz
-                            timestep_8000.npz
-                            timestep_36000.npz
-                            timestep_28000.npz
-                            timestep_24000.npz
-                            timestep_12000.npz
-                            timestep_38000.npz
-                            timestep_26000.npz
-                            timestep_2000.npz
-                            timestep_34000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_39999.png
-                            timestep_14000.png
-                            timestep_18000.png
-                            timestep_30000.png
-                            timestep_22000.png
-                            timestep_6000.png
-                            timestep_16000.png
-                            timestep_20000.png
-                            timestep_4000.png
-                            timestep_8000.png
-                            timestep_32000.png
-                            timestep_28000.png
-                            timestep_36000.png
-                            timestep_24000.png
-                            timestep_12000.png
-                            timestep_26000.png
-                            timestep_2000.png
-                            timestep_38000.png
-                            timestep_34000.png
-                            timestep_10000.png
-                    13-23-11/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_39999.npz
-                            timestep_14000.npz
-                            timestep_18000.npz
-                            timestep_30000.npz
-                            timestep_22000.npz
-                            timestep_6000.npz
-                            timestep_16000.npz
-                            timestep_20000.npz
-                            timestep_4000.npz
-                            timestep_32000.npz
-                            timestep_8000.npz
-                            timestep_36000.npz
-                            timestep_28000.npz
-                            timestep_24000.npz
-                            timestep_12000.npz
-                            timestep_38000.npz
-                            timestep_26000.npz
-                            timestep_2000.npz
-                            timestep_34000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_39999.png
-                            timestep_14000.png
-                            timestep_18000.png
-                            timestep_30000.png
-                            timestep_22000.png
-                            timestep_6000.png
-                            timestep_16000.png
-                            timestep_20000.png
-                            timestep_4000.png
-                            timestep_8000.png
-                            timestep_32000.png
-                            timestep_28000.png
-                            timestep_36000.png
-                            timestep_24000.png
-                            timestep_12000.png
-                            timestep_26000.png
-                            timestep_2000.png
-                            timestep_38000.png
-                            timestep_34000.png
-                            timestep_10000.png
-                    14-10-22/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_39999.npz
-                            timestep_14000.npz
-                            timestep_18000.npz
-                            timestep_30000.npz
-                            timestep_22000.npz
-                            timestep_6000.npz
-                            timestep_16000.npz
-                            timestep_20000.npz
-                            timestep_4000.npz
-                            timestep_32000.npz
-                            timestep_8000.npz
-                            timestep_36000.npz
-                            timestep_28000.npz
-                            timestep_24000.npz
-                            timestep_12000.npz
-                            timestep_38000.npz
-                            timestep_26000.npz
-                            timestep_2000.npz
-                            timestep_34000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_39999.png
-                            timestep_14000.png
-                            timestep_18000.png
-                            timestep_30000.png
-                            timestep_22000.png
-                            timestep_6000.png
-                            timestep_16000.png
-                            timestep_20000.png
-                            timestep_4000.png
-                            timestep_8000.png
-                            timestep_32000.png
-                            timestep_28000.png
-                            timestep_36000.png
-                            timestep_24000.png
-                            timestep_12000.png
-                            timestep_26000.png
-                            timestep_2000.png
-                            timestep_38000.png
-                            timestep_34000.png
-                            timestep_10000.png
-                    13-02-53/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_39999.npz
-                            timestep_14000.npz
-                            timestep_18000.npz
-                            timestep_30000.npz
-                            timestep_22000.npz
-                            timestep_6000.npz
-                            timestep_16000.npz
-                            timestep_20000.npz
-                            timestep_4000.npz
-                            timestep_32000.npz
-                            timestep_8000.npz
-                            timestep_36000.npz
-                            timestep_28000.npz
-                            timestep_24000.npz
-                            timestep_12000.npz
-                            timestep_38000.npz
-                            timestep_26000.npz
-                            timestep_2000.npz
-                            timestep_34000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_39999.png
-                            timestep_14000.png
-                            timestep_18000.png
-                            timestep_30000.png
-                            timestep_22000.png
-                            timestep_6000.png
-                            timestep_16000.png
-                            timestep_20000.png
-                            timestep_4000.png
-                            timestep_8000.png
-                            timestep_32000.png
-                            timestep_28000.png
-                            timestep_36000.png
-                            timestep_24000.png
-                            timestep_12000.png
-                            timestep_26000.png
-                            timestep_2000.png
-                            timestep_38000.png
-                            timestep_34000.png
-                            timestep_10000.png
-                    14-31-02/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_2000.npz
         results/
             2025-07-10/
                 14-28-58/
@@ -6353,101 +6164,6 @@ example/
                         timestep_162000.png
                         timestep_484000.png
                         timestep_73000.png
-            2025-08-27/
-                15-19-18/
-                    config.json
-                    simulation.log
-                    data/
-                        timestep_7000.npz
-                        timestep_5000.npz
-                        timestep_9000.npz
-                        timestep_13000.npz
-                        timestep_1000.npz
-                        timestep_11000.npz
-                        timestep_3000.npz
-                        timestep_14999.npz
-                        timestep_14000.npz
-                        timestep_6000.npz
-                        timestep_4000.npz
-                        timestep_8000.npz
-                        timestep_12000.npz
-                        timestep_2000.npz
-                        timestep_10000.npz
-                    plots/
-                        timestep_7000.png
-                        timestep_5000.png
-                        timestep_9000.png
-                        timestep_13000.png
-                        timestep_1000.png
-                        timestep_11000.png
-                        timestep_3000.png
-                        timestep_14999.png
-                        timestep_14000.png
-                        timestep_6000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_12000.png
-                        timestep_2000.png
-                        timestep_10000.png
-                15-24-48/
-                    config.json
-                    simulation.log
-                    data/
-                        timestep_39999.npz
-                        timestep_16000.npz
-                        timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_32000.npz
-                        timestep_8000.npz
-                        timestep_36000.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                    plots/
-                        timestep_39999.png
-                        timestep_16000.png
-                        timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_32000.png
-                        timestep_28000.png
-                        timestep_36000.png
-                        timestep_24000.png
-                        timestep_12000.png
-                15-24-32/
-                    config.json
-                    simulation.log
-                    data/
-                    plots/
-                15-36-54/
-                    config.json
-                    simulation.log
-                    data/
-                        timestep_40000.npz
-                        timestep_44000.npz
-                        timestep_48000.npz
-                        timestep_16000.npz
-                        timestep_20000.npz
-                        timestep_4000.npz
-                        timestep_32000.npz
-                        timestep_8000.npz
-                        timestep_36000.npz
-                        timestep_28000.npz
-                        timestep_24000.npz
-                        timestep_12000.npz
-                    plots/
-                        timestep_40000.png
-                        timestep_44000.png
-                        timestep_48000.png
-                        timestep_16000.png
-                        timestep_20000.png
-                        timestep_4000.png
-                        timestep_8000.png
-                        timestep_32000.png
-                        timestep_28000.png
-                        timestep_36000.png
-                        timestep_24000.png
-                        timestep_12000.png
         Bubble_rise_high_density_ratio/
             Bubble_rise_MRT.py
             --- Code in Bubble_rise_MRT.py ---
@@ -6466,8 +6182,8 @@ example/
                 print("\n=== Multiphase LBM Simulation of a rising bubble ===")
             
                 grid_shape = (401, 401)
-                nt = 50000
-                save_interval = 5000
+                nt = 5000
+                save_interval = 500
                 init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
             
                 kappa = 0.01
@@ -6510,11 +6226,10 @@ example/
                     save_interval=save_interval,
                     force_enabled=True,
                     force_obj=gravity,
-                    init_type="multiphase_bubble",
+                    init_type="init_from_file",
                     init_dir=init_file,
-                    #tau=.9,
                     collision=collision,
-                    #bc_config=bc_config,
+                    bc_config=bc_config,
                 )
                 sim.run(verbose=True)
                 return sim
@@ -6668,259 +6383,6 @@ example/
                             timestep_700.png
                             timestep_300.png
                             timestep_100.png
-                2025-08-26/
-                    14-11-49/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_3500.npz
-                            timestep_1500.npz
-                            timestep_4999.npz
-                            timestep_1000.npz
-                            timestep_3000.npz
-                            timestep_2500.npz
-                            timestep_4000.npz
-                            timestep_4500.npz
-                            timestep_500.npz
-                            timestep_2000.npz
-                        plots/
-                            timestep_3500.png
-                            timestep_1500.png
-                            timestep_4999.png
-                            timestep_1000.png
-                            timestep_3000.png
-                            timestep_2500.png
-                            timestep_4000.png
-                            timestep_4500.png
-                            timestep_500.png
-                            timestep_2000.png
-                    14-32-35/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_15000.npz
-                            timestep_5000.npz
-                            timestep_25000.npz
-                            timestep_35000.npz
-                            timestep_30000.npz
-                            timestep_20000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_15000.png
-                            timestep_5000.png
-                            timestep_25000.png
-                            timestep_35000.png
-                            timestep_30000.png
-                            timestep_20000.png
-                            timestep_10000.png
-                    13-43-29/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_150.npz
-                            timestep_50.npz
-                            timestep_200.npz
-                            timestep_100.npz
-                        plots/
-                            timestep_150.png
-                            timestep_50.png
-                            timestep_200.png
-                            timestep_100.png
-                    14-13-32/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_3500.npz
-                            timestep_7000.npz
-                            timestep_1500.npz
-                            timestep_5000.npz
-                            timestep_9000.npz
-                            timestep_9500.npz
-                            timestep_5500.npz
-                            timestep_1000.npz
-                            timestep_7500.npz
-                            timestep_3000.npz
-                            timestep_2500.npz
-                            timestep_6000.npz
-                            timestep_4000.npz
-                            timestep_8000.npz
-                            timestep_8500.npz
-                            timestep_4500.npz
-                            timestep_500.npz
-                            timestep_9999.npz
-                            timestep_6500.npz
-                            timestep_2000.npz
-                        plots/
-                            timestep_7000.png
-                            timestep_3500.png
-                            timestep_5000.png
-                            timestep_1500.png
-                            timestep_9000.png
-                            timestep_9500.png
-                            timestep_1000.png
-                            timestep_5500.png
-                            timestep_3000.png
-                            timestep_7500.png
-                            timestep_6000.png
-                            timestep_2500.png
-                            timestep_4000.png
-                            timestep_8000.png
-                            timestep_8500.png
-                            timestep_4500.png
-                            timestep_500.png
-                            timestep_9999.png
-                            timestep_2000.png
-                            timestep_6500.png
-                    14-11-06/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_250.npz
-                            timestep_450.npz
-                            timestep_350.npz
-                            timestep_150.npz
-                            timestep_50.npz
-                            timestep_400.npz
-                            timestep_200.npz
-                            timestep_499.npz
-                            timestep_300.npz
-                            timestep_100.npz
-                        plots/
-                            timestep_250.png
-                            timestep_450.png
-                            timestep_350.png
-                            timestep_150.png
-                            timestep_50.png
-                            timestep_400.png
-                            timestep_200.png
-                            timestep_300.png
-                            timestep_499.png
-                            timestep_100.png
-                    12-45-52/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_250.npz
-                            timestep_450.npz
-                            timestep_350.npz
-                            timestep_150.npz
-                            timestep_50.npz
-                            timestep_400.npz
-                            timestep_200.npz
-                            timestep_499.npz
-                            timestep_300.npz
-                            timestep_100.npz
-                        plots/
-                            timestep_250.png
-                            timestep_450.png
-                            timestep_350.png
-                            timestep_150.png
-                            timestep_50.png
-                            timestep_400.png
-                            timestep_200.png
-                            timestep_300.png
-                            timestep_499.png
-                            timestep_100.png
-                    13-41-51/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_150.npz
-                            timestep_50.npz
-                            timestep_200.npz
-                            timestep_100.npz
-                        plots/
-                            timestep_150.png
-                            timestep_50.png
-                            timestep_200.png
-                            timestep_100.png
-                    14-18-22/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_40000.npz
-                            timestep_15000.npz
-                            timestep_5000.npz
-                            timestep_25000.npz
-                            timestep_35000.npz
-                            timestep_30000.npz
-                            timestep_20000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_40000.png
-                            timestep_15000.png
-                            timestep_5000.png
-                            timestep_25000.png
-                            timestep_35000.png
-                            timestep_30000.png
-                            timestep_20000.png
-                            timestep_10000.png
-                    14-16-46/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_3500.npz
-                            timestep_1500.npz
-                            timestep_1000.npz
-                            timestep_3000.npz
-                            timestep_2500.npz
-                            timestep_500.npz
-                            timestep_2000.npz
-                        plots/
-                            timestep_3500.png
-                            timestep_1500.png
-                            timestep_1000.png
-                            timestep_3000.png
-                            timestep_2500.png
-                            timestep_500.png
-                            timestep_2000.png
-                    14-32-25/
-                        config.json
-                        simulation.log
-                        data/
-                2025-08-27/
-                    15-15-25/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_40000.npz
-                            timestep_15000.npz
-                            timestep_5000.npz
-                            timestep_25000.npz
-                            timestep_35000.npz
-                            timestep_30000.npz
-                            timestep_20000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_40000.png
-                            timestep_15000.png
-                            timestep_5000.png
-                            timestep_25000.png
-                            timestep_35000.png
-                            timestep_30000.png
-                            timestep_20000.png
-                            timestep_10000.png
-                    15-22-49/
-                        config.json
-                        simulation.log
-                        data/
-                            timestep_40000.npz
-                            timestep_15000.npz
-                            timestep_5000.npz
-                            timestep_25000.npz
-                            timestep_35000.npz
-                            timestep_30000.npz
-                            timestep_20000.npz
-                            timestep_10000.npz
-                        plots/
-                            timestep_40000.png
-                            timestep_15000.png
-                            timestep_5000.png
-                            timestep_25000.png
-                            timestep_35000.png
-                            timestep_30000.png
-                            timestep_20000.png
-                            timestep_10000.png
                 2025-08-11/
                     18-02-25/
                         config.json

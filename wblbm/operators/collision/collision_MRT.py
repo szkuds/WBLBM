@@ -39,12 +39,12 @@ class CollisionMRT(CollisionBase):
         if k_diag is None:
             k_diag = jnp.array(
                 [
-                    kwargs.get("k0", 1.0),
+                    kwargs.get("k0", 0.0),
                     kwargs.get("kb", 1.0),
                     kwargs.get("k2", 1.0),
-                    kwargs.get("k0", 1.0),
+                    kwargs.get("k0", 0.0),
                     kwargs.get("k4", 1.0),
-                    kwargs.get("k0", 1.0),
+                    kwargs.get("k0", 0.0),
                     kwargs.get("k4", 1.0),
                     kwargs.get("kv", 0.8),
                     kwargs.get("kv", 0.8),
