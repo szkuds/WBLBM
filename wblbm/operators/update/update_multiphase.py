@@ -58,7 +58,9 @@ class UpdateMultiphase(Update):
         elif self.force_enabled:
             rho, u, force_tot = self.macroscopic(f, force=force)
         else:
-            rho, u, force_tot = self.macroscopic(f)  # In this case the total force is only the interaction force
+            rho, u, force_tot = self.macroscopic(
+                f
+            )  # In this case the total force is only the interaction force
         feq = self.equilibrium(rho, u)
         source = self.source_term(rho, u, force_tot)
         fcol = self.collision(f, feq, source)

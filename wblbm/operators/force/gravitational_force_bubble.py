@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 from wblbm.operators.force.force import Force
+#TODO I really think that this is where the problem of the bubble not rising is originating. Need to figure out why!
 
 class GravityForceMultiphaseBubble(Force):
     """
@@ -15,7 +16,7 @@ class GravityForceMultiphaseBubble(Force):
             raise ValueError("Currently supports 2D (d=2) only")
 
         force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
-        force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
+        force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
 
         force_array = jnp.zeros((nx, ny, 1, d))
         force_array = force_array.at[:, :, 0, 0].set(force_x)
@@ -30,5 +31,4 @@ class GravityForceMultiphaseBubble(Force):
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.
         """
-        mask = rho < 0.95 * rho_v + 0.05 * rho_l
-        return self.force * rho * mask
+        return self.force * (rho - rho_l)*rho_v
