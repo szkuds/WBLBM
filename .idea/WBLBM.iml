@@ -7,6 +7,7 @@
       <excludeFolder url="file://$MODULE_DIR$/example/tests/Collision_operator_test/results" />
       <excludeFolder url="file://$MODULE_DIR$/example/tests/Bubble_rise_high_density_ratio/results" />
       <excludeFolder url="file://$MODULE_DIR$/example/tests/Bubble_rise_low_density_ratio/results" />
+      <excludeFolder url="file://$MODULE_DIR$/results" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.12" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

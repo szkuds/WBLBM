@@ -17,7 +17,7 @@ def rising_bubble_mrt():
 
     grid_shape = (401, 401)
     nt = 40000
-    save_interval = 4000
+    save_interval = 2000
     init_file = "/example/tests/Bubble_rise_low_density_ratio/results/2025-08-05/16-07-12/data/timestep_49999.npz"
 
     kappa = 0.04
