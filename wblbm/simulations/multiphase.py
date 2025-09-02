@@ -94,6 +94,12 @@ class MultiphaseSimulation(BaseSimulation):
         force_ext = None
         if self.force_enabled and self.force_obj:
             rho = jnp.sum(fprev, axis=2, keepdims=True)
+            #TODO: This is where the external force is added,
+            # since this will also be how I want to implement the electric force
+            # I will need to look at how I can best extend this.
+            # At the moment I think the creation of a composite force class will be best
+            # As it will allow for multiple force to be dealt with in a similar manner.
+            # https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
         fnext = (
             self.update(fprev, force=force_ext)
