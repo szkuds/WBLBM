@@ -39,7 +39,7 @@ def test_mrt_static():
         "collision_scheme": "mrt",
         "kv": 1.05,
         "kb": 1.0,
-        "k0": 1.0,
+        "k0": 0.0,
         "k2": 1.0,
         "k4": 0.9,
     }
