@@ -22,6 +22,9 @@ class SinglePhaseSimulation(BaseSimulation):
         super().__init__(grid_shape, lattice_type, tau, nt)
 
         # Set simulation type flags
+        self.macroscopic = None
+        self.initialiser = None
+        self.update = None
         self.multiphase = False
         self.wetting_enabled = False
 
@@ -45,6 +48,7 @@ class SinglePhaseSimulation(BaseSimulation):
             kvec=self.k_diag,
             **self.kwargs
         )
+        self.macroscopic = self.update.macroscopic
         if self.bc_config:
             from wblbm.operators.boundary_condition.boundary_condition import (
                 BoundaryCondition,
