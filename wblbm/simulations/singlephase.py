@@ -45,9 +45,6 @@ class SinglePhaseSimulation(BaseSimulation):
             kvec=self.k_diag,
             **self.kwargs
         )
-        self.macroscopic = Macroscopic(
-            self.grid, self.lattice, force_enabled=self.force_enabled
-        )
         if self.bc_config:
             from wblbm.operators.boundary_condition.boundary_condition import (
                 BoundaryCondition,

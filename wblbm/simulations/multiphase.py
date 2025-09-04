@@ -1,6 +1,6 @@
 from .base import BaseSimulation
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
-from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.initialise.init import Initialise
 import jax.numpy as jnp
 
@@ -52,15 +52,6 @@ class MultiphaseSimulation(BaseSimulation):
             collision_scheme=self.collision_scheme,
             kvec=self.k_diag,
             **self.kwargs  # Pass additional keyword arguments
-        )
-        self.macroscopic = MacroscopicMultiphase(
-            self.grid,
-            self.lattice,
-            self.kappa,
-            self.interface_width,
-            self.rho_l,
-            self.rho_v,
-            self.force_enabled,
         )
 
     def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
