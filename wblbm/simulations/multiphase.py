@@ -24,6 +24,9 @@ class MultiphaseSimulation(BaseSimulation):
         **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
+        self.update = None
+        self.initialiser = None
+        self.macroscopic = None
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
@@ -53,6 +56,7 @@ class MultiphaseSimulation(BaseSimulation):
             kvec=self.k_diag,
             **self.kwargs  # Pass additional keyword arguments
         )
+        self.macroscopic = self.update.macroscopic
 
     def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
         if init_type == "init_from_file":
