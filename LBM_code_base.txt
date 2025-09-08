@@ -1,8 +1,9 @@
+/
     overview.py
     --- Code in overview.py ---
     import os
-
-
+    
+    
     def document_project(root_dir, output_file):
         with open(output_file, "w", encoding="utf-8") as doc:
             for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -23,8 +24,8 @@
                             for line in code_file:
                                 doc.write(f"{subindent}{line}")
                         doc.write(f"{subindent}--- End of {f} ---\n\n")
-
-
+    
+    
     # Usage
     document_project("./", "./LBM_code_base.txt")
     --- End of overview.py ---
@@ -39,7 +40,7 @@ wblbm/
     from wblbm.operators.initialise import Initialise
     from wblbm.operators.equilibrium import Equilibrium
     from wblbm.operators.stream import Streaming
-    from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphase
+    from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphaseDW
     from wblbm.operators.differential import (
         Gradient,
         Laplacian,
@@ -77,24 +78,24 @@ wblbm/
             import jax.numpy as jnp
             from wblbm.lattice.lattice import Lattice
             from .abstract_wetting import AbstractWetting
-
-
+            
+            
             class GradientWetting(AbstractWetting):
                 """
                 Calculates gradients for wetting boundary conditions.
                 """
-
+            
                 def __init__(
                     self, lattice: Lattice, rho_l=None, rho_v=None, interface_width: int = 1
                 ):
                     super().__init__(lattice, rho_l, rho_v, interface_width=interface_width)
                     self.c = lattice.c
-
+            
                 def _compute_gradient(self, neighbors: dict, nx: int, ny: int) -> jnp.ndarray:
                     grad_ = jnp.zeros((2, nx, ny))
                     w = self.w
                     c = self.c
-
+            
                     grad_ = grad_.at[0, :, :].set(
                         3
                         * (
@@ -106,7 +107,7 @@ wblbm/
                             + w[8] * c[0, 8] * neighbors["ipos1_jneg1"]
                         )
                     )
-
+            
                     grad_ = grad_.at[1, :, :].set(
                         3
                         * (
@@ -118,8 +119,7 @@ wblbm/
                             + w[8] * c[1, 8] * neighbors["ipos1_jneg1"]
                         )
                     )
-
-/
+            
                     # Convert to 4D format: (nx, ny, 1, d)
                     grad_4d = jnp.zeros((nx, ny, 1, 2))
                     grad_4d = grad_4d.at[:, :, 0, 0].set(grad_[0, :, :])
@@ -691,13 +691,222 @@ wblbm/
             --- End of laplacian_wetting.py ---
 
             __pycache__/
+                abstract_wetting.cpython-311.pyc
                 abstract_wetting.cpython-312.pyc
                 gradient_wetting.cpython-312.pyc
+                gradient_wetting.cpython-311.pyc
                 laplacian_wetting.cpython-312.pyc
+                laplacian_wetting.cpython-311.pyc
+                laplacian.cpython-311.pyc
                 laplacian.cpython-312.pyc
                 gradient.cpython-312.pyc
                 __init__.cpython-312.pyc
+                gradient.cpython-311.pyc
+                __init__.cpython-311.pyc
         macroscopic/
+            macroscopic_multiphase_cs.py
+            --- Code in macroscopic_multiphase_cs.py ---
+            from functools import partial
+            
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
+            from wblbm.operators.differential.gradient import Gradient
+            from wblbm.operators.differential.laplacian import Laplacian
+            from wblbm.lattice.lattice import Lattice
+            
+            
+            class MacroscopicMultiphaseCS(MacroscopicMultiphaseDW):
+                """
+                Calculates macroscopic variables for multiphase simulations.
+                Inherits from MacroscopicMultiphaseDW and overrides EOS for Carnahan-Starling.
+                """
+            
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    a_eos: float,
+                    b_eos: float,
+                    r_eos: float,
+                    t_eos: float,
+            
+                    force_enabled: bool = False,
+                ):
+                    super().__init__(
+                        grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+                    )
+                    self.a_eos = a_eos
+                    self.b_eos = b_eos
+                    self.R_eos = r_eos
+                    self.T_eos = t_eos
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self, f: jnp.ndarray, force: jnp.ndarray = None
+                ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+                    """
+                    Calculate the macroscopic density and velocity fields from the population distribution.
+            
+                    Args:
+                        f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
+                        force (jnp.ndarray, optional): External force field, shape (nx, ny, 1, 2)
+            
+                    Returns:
+                        tuple: (rho, u_eq, force_total)
+                            rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
+                            u_eq (jnp.ndarray): Force-corrected velocity for equilibrium, shape (nx, ny, 1, 2)
+                            force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
+                    """
+                    rho, u, force_int = super().__call__(f, force=None)  # Pass None to avoid any correction
+            
+                    # Total force calculation
+                    if force is not None:
+                        force_total = force + force_int
+                    else:
+                        force_total = force_int
+            
+                    u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
+            
+                    return rho, u_eq, force_total
+            
+                @partial(jit, static_argnums=(0,))
+                def eos(self, rho):
+                    """
+                    Carnahan-Starling EOS.
+                    """
+                    rho_2d = rho[:, :, 0, 0]
+                    eos_2d = (
+                        -(2 * self.a_eos) * rho_2d
+                        + self.R_eos * self.T_eos * (1 + jnp.log(rho_2d))
+                        + ((16 * self.R_eos * self.T_eos * (self.b_eos * rho_2d - 12))
+                           / jnp.power((-4 + self.b_eos * rho_2d), 3))
+                    )
+                    #convert back to 4D format
+                    eos_4d = jnp.zeros_like(rho)
+                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+                    return eos_4d
+            --- End of macroscopic_multiphase_cs.py ---
+
+            macroscopic_multiphase_dw.py
+            --- Code in macroscopic_multiphase_dw.py ---
+            from functools import partial
+            
+            import jax.numpy as jnp
+            from jax import jit
+            
+            from wblbm.grid import Grid
+            from wblbm.operators.macroscopic.macroscopic import Macroscopic
+            from wblbm.operators.differential.gradient import Gradient
+            from wblbm.operators.differential.laplacian import Laplacian
+            from wblbm.lattice.lattice import Lattice
+            
+            
+            class MacroscopicMultiphaseDW(Macroscopic):
+                """
+                Calculates macroscopic variables for multiphase simulations.
+                Inherits from Macroscopic and adds multiphase-specific methods.
+                This is the double well implementation.
+                """
+            
+                def __init__(
+                    self,
+                    grid: Grid,
+                    lattice: Lattice,
+                    kappa: float,
+                    interface_width: int,
+                    rho_l: float,
+                    rho_v: float,
+                    force_enabled: bool = False,
+                ):
+                    super().__init__(
+                        grid, lattice, force_enabled=force_enabled
+                    )
+                    self.kappa = kappa
+                    self.rho_l = rho_l
+                    self.rho_v = rho_v
+                    self.gradient = Gradient(lattice)
+                    self.laplacian = Laplacian(lattice)
+                    self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
+            
+                @partial(jit, static_argnums=(0,))
+                def __call__(
+                    self, f: jnp.ndarray, force: jnp.ndarray = None
+                ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+                    """
+                    Calculate the macroscopic density and velocity fields from the population distribution.
+            
+                    Args:
+                        f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
+                        force (jnp.ndarray, optional): External force field, shape (nx, ny, 1, 2)
+            
+                    Returns:
+                        tuple: (rho, u_eq, force_total)
+                            rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
+                            u_eq (jnp.ndarray): Force-corrected velocity for equilibrium, shape (nx, ny, 1, 2)
+                            force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
+                    """
+                    rho, u = super().__call__(f, force=None)  # Pass None to avoid any correction
+            
+                    # Calculate interaction force
+                    force_int = self.force_int(rho)
+                    # Total force calculation
+                    if force is not None:
+                        force_total = force + force_int
+                    else:
+                        force_total = force_int
+            
+                    u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
+            
+                    return rho, u_eq, force_total
+            
+                @partial(jit, static_argnums=(0,))
+                def eos(self, rho):
+                    """
+                    Default: Double Well EOS.
+                    """
+                    rho_2d = rho[:, :, 0, 0]
+                    eos_2d = (
+                        2 * self.beta
+                        * (rho_2d - self.rho_l)
+                        * (rho_2d - self.rho_v)
+                        * (2 * rho_2d - self.rho_l - self.rho_v)
+                    )
+                    eos_4d = jnp.zeros_like(rho)
+                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
+                    return eos_4d
+            
+                @partial(jit, static_argnums=(0,))
+                def chem_pot(self, rho):
+                    """
+                    Calculate the chemical potential.
+                    """
+                    mu_0 = self.eos(rho)
+                    chem_pot__ = mu_0 - self.kappa * self.laplacian(rho)
+                    return chem_pot__
+            
+                @partial(jit, static_argnums=(0,))
+                def force_int(self, rho):
+                    """
+                    Calculate the interaction force.
+                    """
+                    grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
+                    return -rho * grad_chem_pot
+            
+                @partial(jit, static_argnums=(0,))
+                def u_new(self, u, force):
+                    """
+                    Update velocity with interaction force.
+                    """
+                    return u + force / 2
+            --- End of macroscopic_multiphase_dw.py ---
+
             macroscopic.py
             --- Code in macroscopic.py ---
             from functools import partial
@@ -767,123 +976,8 @@ wblbm/
             __init__.py
             --- Code in __init__.py ---
             from .macroscopic import Macroscopic
-            from .macroscopic_multiphase import MacroscopicMultiphase
+            from .macroscopic_multiphase_dw import MacroscopicMultiphaseDW
             --- End of __init__.py ---
-
-            macroscopic_multiphase.py
-            --- Code in macroscopic_multiphase.py ---
-            from functools import partial
-            
-            import jax.numpy as jnp
-            from jax import jit
-            
-            from wblbm.grid import Grid
-            from wblbm.operators.macroscopic.macroscopic import Macroscopic
-            from wblbm.operators.differential.gradient import Gradient
-            from wblbm.operators.differential.laplacian import Laplacian
-            from wblbm.lattice.lattice import Lattice
-            
-            
-            class MacroscopicMultiphase(Macroscopic):
-                """
-                Calculates macroscopic variables for multiphase simulations.
-                Inherits from Macroscopic and adds multiphase-specific methods.
-                """
-            
-                def __init__(
-                    self,
-                    grid: Grid,
-                    lattice: Lattice,
-                    kappa: float,
-                    interface_width: int,
-                    rho_l: float,
-                    rho_v: float,
-                    force_enabled: bool = False,
-                ):
-                    super().__init__(
-                        grid, lattice, force_enabled=force_enabled
-                    )  # Pass force_enabled to parent
-                    self.kappa = kappa
-                    self.rho_l = rho_l
-                    self.rho_v = rho_v
-                    self.gradient = Gradient(lattice)
-                    self.laplacian = Laplacian(lattice)
-                    self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
-            
-                @partial(jit, static_argnums=(0,))
-                def __call__(
-                    self, f: jnp.ndarray, force: jnp.ndarray = None
-                ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-                    """
-                    Calculate the macroscopic density and velocity fields from the population distribution.
-            
-                    Args:
-                        f (jnp.ndarray): Population distribution, shape (nx, ny, q, 1)
-                        force (jnp.ndarray, optional): External force field, shape (nx, ny, 1, 2)
-            
-                    Returns:
-                        tuple: (rho, u_eq, force_total)
-                            rho (jnp.ndarray): Density field, shape (nx, ny, 1, 1)
-                            u_eq (jnp.ndarray): Force-corrected velocity for equilibrium, shape (nx, ny, 1, 2)
-                            force_total (jnp.ndarray): Total force (interaction + external), shape (nx, ny, 1, 2)
-                    """
-                    rho, u = super().__call__(f, force=None)  # Pass None to avoid any correction
-            
-                    # Calculate interaction force
-                    force_int = self.force_int(rho)
-                    # Total force calculation
-                    if force is not None:
-                        force_total = force + force_int
-                    else:
-                        force_total = force_int
-            
-                    u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
-            
-                    return rho, u_eq, force_total
-            
-                @partial(jit, static_argnums=(0,))
-                def eos(self, rho):
-                    """Equation of state - extract 2D data for computation"""
-                    rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
-                    eos_2d = (
-                        2
-                        * self.beta
-                        * (rho_2d - self.rho_l)
-                        * (rho_2d - self.rho_v)
-                        * (2 * rho_2d - self.rho_l - self.rho_v)
-                    )
-            
-                    # Convert back to 4D format
-                    eos_4d = jnp.zeros_like(rho)
-                    eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
-                    return eos_4d
-            
-                @partial(jit, static_argnums=(0,))
-                def chem_pot(self, rho):
-                    """
-                    Calculate the chemical potential.
-                    """
-                    mu_0 = self.eos(rho)
-                    chem_pot__ = mu_0 - self.kappa * self.laplacian(rho)
-                    return chem_pot__
-            
-                @partial(jit, static_argnums=(0,))
-                def force_int(self, rho):
-                    """
-                    Calculate the interaction force.
-                    """
-                    grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
-                    # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
-                    return -rho * grad_chem_pot
-            
-                @partial(jit, static_argnums=(0,))
-                def u_new(self, u, force):
-                    """
-                    Update velocity with interaction force.
-                    """
-                    # Both u and force have shape (nx, ny, 1, 2)
-                    return u + force / 2
-            --- End of macroscopic_multiphase.py ---
 
             macroscopic_multiphase_wetting.py
             --- Code in macroscopic_multiphase_wetting.py ---
@@ -1017,10 +1111,13 @@ wblbm/
             --- End of macroscopic_multiphase_wetting.py ---
 
             __pycache__/
-                macroscopic_multiphase.cpython-312.pyc
                 macroscopic_multiphase_wetting.cpython-312.pyc
+                macroscopic_multiphase_dw.cpython-312.pyc
+                macroscopic_multiphase_cs.cpython-312.pyc
                 __init__.cpython-312.pyc
                 macroscopic.cpython-312.pyc
+                __init__.cpython-311.pyc
+                macroscopic.cpython-311.pyc
         update/
             update.py
             --- Code in update.py ---
@@ -1209,7 +1306,8 @@ wblbm/
             from wblbm.operators.collision.collision_BGK import CollisionBGK
             from wblbm.operators.collision.collision_MRT import CollisionMRT
             from wblbm.operators.update.update import Update
-            from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+            from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
+            from wblbm.operators.macroscopic.macroscopic_multiphase_cs import MacroscopicMultiphaseCS
             from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
             
             
@@ -1226,6 +1324,7 @@ wblbm/
                     bc_config: dict = None,
                     force_enabled: bool = False,
                     collision_scheme: str = "bgk",
+                    eos: str = "double-well",
                     kvec=None,
                     **kwargs
                 ):
@@ -1239,15 +1338,18 @@ wblbm/
                         kvec=kvec,
                         **kwargs
                     )
-                    self.macroscopic = MacroscopicMultiphase(
-                        grid,
-                        lattice,
-                        kappa,
-                        interface_width,
-                        rho_l,
-                        rho_v,
-                        force_enabled=force_enabled,
-                    )
+                    if eos == "double-well":
+                        self.macroscopic = MacroscopicMultiphaseDW(
+                            grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+                        )
+                    elif eos == "carnahan-starling":
+                        self.macroscopic = MacroscopicMultiphaseCS(
+                            grid, lattice, kappa, interface_width, rho_l, rho_v,
+                            force_enabled=force_enabled,
+                            **kwargs  # forward additional EOS parameters
+                        )
+                    else:
+                        raise ValueError(f"Unknown EOS: {eos}")
             
                 @partial(jit, static_argnums=(0,))
                 def __call__(self, f: jnp.array, force: jnp.ndarray = None):
@@ -1274,10 +1376,13 @@ wblbm/
             --- End of update_multiphase.py ---
 
             __pycache__/
+                update_multiphase.cpython-311.pyc
                 update_multiphase.cpython-312.pyc
                 update.cpython-312.pyc
+                update.cpython-311.pyc
                 update_multiphase_wetting.cpython-312.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
         stream/
             __init__.py
             --- Code in __init__.py ---
@@ -1322,7 +1427,9 @@ wblbm/
 
             __pycache__/
                 stream.cpython-312.pyc
+                stream.cpython-311.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
         initialise/
             __init__.py
             --- Code in __init__.py ---
@@ -1372,39 +1479,6 @@ wblbm/
                     )
             
                     # Return the equilibrium distribution for this state
-                    return self.equilibrium(rho, u)
-            
-                def initialise_multiphase_droplet(
-                    self, rho_l: float, rho_v: float, interface_width: int
-                ):
-                    """
-                    Initialises a multiphase simulation with a low-density bubble in the center.
-            
-                    Args:
-                        rho_l (float): Liquid phase density.
-                        rho_v (float): Vapour phase (bubble) density.
-            
-                    Returns:
-                        jnp.ndarray: Initialised population distribution f.
-                    """
-                    # Create a density field with a bubble in the center
-                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
-                    center_x, center_y = self.nx // 2, self.ny // 2
-                    radius = min(self.nx, self.ny) // 4
-            
-                    # Use tanh for a smooth, stable interface
-                    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
-                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
-                        (distance - radius) / interface_width
-                    )
-            
-                    # Reshape to 4D
-                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
-            
-                    # Initialise with zero velocity
-                    u = jnp.zeros((self.nx, self.ny, 1, 2))
-            
-                    # Return the equilibrium distribution
                     return self.equilibrium(rho, u)
             
                 def initialise_multiphase_droplet_top(
@@ -1461,6 +1535,105 @@ wblbm/
                     # Use tanh for a smooth, stable interface
                     distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
                     rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        (distance - radius) / interface_width
+                    )
+            
+                    # Reshape to 4D
+                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+            
+                    # Initialise with zero velocity
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+            
+                    # Return the equilibrium distribution
+                    return self.equilibrium(rho, u)
+            
+                def initialise_multiphase_bubble_bubble(
+                        self,rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialises a multiphase simulation with two low-density bubbles
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase (bubble) density.
+                    returns
+                        jnp.ndarray: Initialised population distribution f.
+                    """
+                    #create a density field with two bubbles placed side-by-side
+                    x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
+                    left_bubble_center_x, left_bubble_center_y = self.nx // 4, self.ny // 2
+                    right_bubble_center_x, right_bubble_center_y = self.nx*2.4 // 4, self.ny // 2
+                    radius = min(self.nx, self.ny) // 5
+            
+                    #use tanh for a smooth, stable interface
+                    distance_to_left_bubble = jnp.sqrt((x - left_bubble_center_x) ** 2 + (y - left_bubble_center_y) ** 2)
+                    distance_to_right_bubble = jnp.sqrt((x - right_bubble_center_x) ** 2 + (y - right_bubble_center_y) ** 2)
+                    minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble*1.5)
+                    rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        (minimum_distance - radius) / interface_width
+                    )
+                    # Reshape to 4D
+                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+            
+                    #initialize with zero velocity
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+            
+                    #Return the f_eq
+                    return self.equilibrium(rho, u)
+            
+                def initialise_multiphase_lateral_bubble_configuration(
+                        self,rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialises a multiphase simulation with two low-density bubbles
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase (bubble) density.
+                    returns
+                        jnp.ndarray: Initialised population distribution f.
+                    """
+                    #create a density field with two bubbles placed side-by-side
+                    x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
+                    left_bubble_center_x, left_bubble_center_y = self.nx // 2, self.ny*2 // 6
+                    right_bubble_center_x, right_bubble_center_y = self.nx // 2, self.ny*4 // 6
+                    radius = min(self.nx, self.ny) // 6.5
+            
+                    #use tanh for a smooth, stable interface
+                    distance_to_left_bubble = jnp.sqrt((x - left_bubble_center_x) ** 2 + (y - left_bubble_center_y) ** 2)
+                    distance_to_right_bubble = jnp.sqrt((x - right_bubble_center_x) ** 2 + (y - right_bubble_center_y) ** 2)
+                    minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble)
+                    rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+                        (minimum_distance - radius) / interface_width
+                    )
+                    # Reshape to 4D
+                    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+            
+                    #initialize with zero velocity
+                    u = jnp.zeros((self.nx, self.ny, 1, 2))
+            
+                    #Return the f_eq
+                    return self.equilibrium(rho, u)
+            
+                def initialise_multiphase_droplet(
+                    self, rho_l: float, rho_v: float, interface_width: int
+                ):
+                    """
+                    Initialises a multiphase simulation with a low-density bubble in the center.
+            
+                    Args:
+                        rho_l (float): Liquid phase density.
+                        rho_v (float): Vapour phase (bubble) density.
+            
+                    Returns:
+                        jnp.ndarray: Initialised population distribution f.
+                    """
+                    # Create a density field with a bubble in the center
+                    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+                    center_x, center_y = self.nx // 2, self.ny // 2
+                    radius = min(self.nx, self.ny) // 4
+            
+                    # Use tanh for a smooth, stable interface
+                    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+                    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
                         (distance - radius) / interface_width
                     )
             
@@ -1644,10 +1817,13 @@ wblbm/
             --- End of init.py ---
 
             __pycache__/
+                init.cpython-311.pyc
                 init.cpython-312.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
         __pycache__/
             __init__.cpython-312.pyc
+            __init__.cpython-311.pyc
         boundary_condition/
             boundary_condition.py
             --- Code in boundary_condition.py ---
@@ -1813,7 +1989,9 @@ wblbm/
 
             __pycache__/
                 boundary_condition.cpython-312.pyc
+                boundary_condition.cpython-311.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
         equilibrium/
             equilibrium.py
             --- Code in equilibrium.py ---
@@ -1889,7 +2067,9 @@ wblbm/
 
             __pycache__/
                 equilibrium.cpython-312.pyc
+                equilibrium.cpython-311.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
         force/
             gravitational_force_multiphase.py
             --- Code in gravitational_force_multiphase.py ---
@@ -1961,6 +2141,52 @@ wblbm/
             from .gravitational_force_single_phase import GravityForceSinglephase
             from .gravitational_force_multiphase import GravityForceMultiphaseDroplet
             --- End of __init__.py ---
+
+            gravitational_force_multiphase_WithModifiedMask.py
+            --- Code in gravitational_force_multiphase_WithModifiedMask.py ---
+            import jax.numpy as jnp
+            from wblbm.operators.force.force import Force
+            
+            
+            class GravityForceMultiphaseDropletWithModifiedMask(Force):
+                """
+                Subclass for gravitational force, constant across the grid.
+                """
+            
+                def __init__(
+                    self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float
+                ):
+                    if d != 2:
+                        raise ValueError("Currently supports 2D (d=2) only")
+            
+                    force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
+                    force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+            
+                    force_array = jnp.zeros((nx, ny, 1, d))
+                    force_array = force_array.at[:, :, 0, 0].set(force_x)
+                    force_array = force_array.at[:, :, 0, 1].set(force_y)
+            
+                    super().__init__(force_array)
+            
+                def compute_force(
+                    self, rho: jnp.ndarray, rho_l: float, rho_v: float
+                ) -> jnp.ndarray:
+                    """
+                    Returns the constant gravitational force field.
+                    Ignores rho as gravity is density-independent.
+                    """
+                    mask = rho < 0.95 * rho_v + 0.05 * rho_l
+            
+                    a,b,c,d  = rho.shape
+                    x = jnp.linspace(0, 1.0, a)  # domain width normalized to [0, 1]
+                    _, X = jnp.meshgrid(x, x)  # assuming square domain
+            
+                    right_half_mask = X > 0.5  # mask for right side
+            
+                    combined_mask = mask * right_half_mask[:,:,jnp.newaxis,jnp.newaxis]
+            
+                    return self.force * rho * combined_mask
+            --- End of gravitational_force_multiphase_WithModifiedMask.py ---
 
             gravitational_force_single_phase.py
             --- Code in gravitational_force_single_phase.py ---
@@ -2037,8 +2263,15 @@ wblbm/
             __pycache__/
                 force.cpython-312.pyc
                 gravitational_force_single_phase.cpython-312.pyc
+                force.cpython-311.pyc
+                gravitational_force_single_phase.cpython-311.pyc
+                gravitational_force_multiphase_WithModifiedMask.cpython-311.pyc
+                gravitational_force_multiphase_WithModifiedMask.cpython-312.pyc
                 gravitational_force_multiphase.cpython-312.pyc
+                gravitational_force_multiphase.cpython-311.pyc
                 __init__.cpython-312.pyc
+                gravitational_force_bubble.cpython-311.pyc
+                __init__.cpython-311.pyc
                 gravitational_force_bubble.cpython-312.pyc
         wetting/
             __init__.py
@@ -3012,13 +3245,18 @@ wblbm/
             --- End of base.py ---
 
             __pycache__/
+                base.cpython-311.pyc
                 base.cpython-312.pyc
                 collision_MRT.cpython-312.pyc
                 collision.cpython-312.pyc
+                collision_MRT.cpython-311.pyc
                 collision_BGK.cpython-312.pyc
+                source.cpython-311.pyc
+                collision_BGK.cpython-311.pyc
                 collision_multiphase.cpython-312.pyc
                 source.cpython-312.pyc
                 __init__.cpython-312.pyc
+                __init__.cpython-311.pyc
     utils/
         plotting.py
         --- Code in plotting.py ---
@@ -3383,14 +3621,291 @@ wblbm/
                     print("2. Or upload the .pb files to https://ui.perfetto.dev/")
         --- End of profiler.py ---
 
+        maxwellreconstruction/
+            maxwell_reconstruction.py
+            --- Code in maxwell_reconstruction.py ---
+            import os
+            import numpy as np
+            import matplotlib.pyplot as plt
+            from scipy.optimize import brentq
+            import pandas as pd
+            
+            # Maxwell construction for Carnahan-Starling EOS
+            rho_c = 3.5
+            p_c = 0.001
+            Tr = 0.61
+            
+            # Calculate EOS parameters
+            b_eos = 0.5218 / rho_c
+            a_eos = ((b_eos ** 2) * p_c) / ((0.3773 ** 2) * 0.4963)
+            R_eos = 1.0
+            Tc = (0.3773 * a_eos) / (b_eos * R_eos)
+            T_eos = Tr * Tc
+            
+            
+            def pressure_function(x):
+                """Calculate pressure using Carnahan-Starling EOS"""
+                return (R_eos * T_eos * (1 / x) *
+                        ((1 + (b_eos / (x * 4)) + ((b_eos / (x * 4)) ** 2) - ((b_eos / (x * 4)) ** 3)) /
+                         ((1 - (b_eos / (x * 4))) ** 3)) - a_eos * (1 / (x ** 2)))
+            
+            
+            def pressure_derivative(x):
+                """Calculate derivative of pressure with respect to volume"""
+                return (R_eos * T_eos * ((b_eos * (1 / x)) ** 4 - 16 * ((b_eos * (1 / x)) ** 3) +
+                                         64 * ((b_eos * (1 / x)) ** 2) + 256 * b_eos * (1 / x) + 256) /
+                        ((4 - b_eos * (1 / x)) ** 4) - 2 * a_eos * (1 / x))
+            
+            
+            def find_extrema(a_int, b_int):
+                """Find the maximum and minimum points of the pressure function.
+            
+                This part of the code detects sign changes in the derivative of the pressure function
+                over a range of test points. When a sign change is found between two consecutive points,
+                it uses Brent's method (brentq) to accurately find the root (where the derivative crosses zero),
+                which corresponds to an extremum (maximum or minimum) of the pressure function.
+                All found extrema are collected and returned in the extrema list. This is useful for
+                identifying phase transition points in the Maxwell construction.
+                """
+            
+                def derivative_zero(x):
+                    return pressure_derivative(x)
+            
+                extrema = []
+            
+                # Sample points to find sign changes
+                test_points = np.linspace(a_int, b_int, 1000)
+                derivative_values = [pressure_derivative(x) for x in test_points]
+            
+                for i in range(len(test_points) - 1):
+                    if derivative_values[i] * derivative_values[i + 1] < 0:
+                        try:
+                            root = brentq(derivative_zero, test_points[i], test_points[i + 1])
+                            extrema.append(root)
+                        except:
+                            continue
+            
+                return extrema
+            
+            
+            def riemann_integration(a, b, n, f):
+                """Riemann integration approximation"""
+                delta = (b - a) / n
+                xs = np.linspace(a, b - delta, n)
+                fx = np.array([f(x) for x in xs])
+                integral = np.sum(fx) * delta
+                return integral
+            
+            
+            def maxwell_construction(max_min, a_int, b_int, max_iterations=40, tolerance=1e-7):
+                """
+                Perform Maxwell construction to find coexistence densities
+                """
+                if len(max_min) < 2:
+                    print("Insufficient extrema for Maxwell construction")
+                    return None, None, None, None, None
+            
+                guess = 0.01
+            
+                # Initial guesses for the coexistence points
+                a_ = max_min[0] + guess * (max_min[1] - max_min[0])
+                b = max_min[1] + guess * (max_min[0] - max_min[1])
+            
+                g = (a_ + b) / 2
+            
+                # Check if Maxwell construction is feasible
+                p_at_extrema = [pressure_function(x) for x in max_min]
+                print(f"Pressures at extrema: {p_at_extrema}")
+            
+                # If pressure doesn't change sign significantly, Maxwell construction may not be meaningful
+                if all(p >= 0 for p in p_at_extrema) and (max(p_at_extrema) - min(p_at_extrema)) < 1e-6:
+                    print("Pressure variation too small for meaningful Maxwell construction")
+                    # Return approximate coexistence points
+                    return (max_min[0] * 0.9, max_min[1] * 1.1), 0, 0, max_min[0], max_min[1]
+            
+                # Handle negative pressure case
+                if pressure_function(max_min[0]) < 0:
+                    try:
+                        zero_pressure = brentq(pressure_function, max_min[0], max_min[1])
+                        a_ = zero_pressure * (1 + guess)
+                    except:
+                        pass
+            
+                print(f"Initial guesses: a = {a_}, b = {b}")
+                print(f"Pressure at a = {pressure_function(a_)}")
+            
+                # Variables to track integration results
+                integd_, integc_ = 0, 0
+            
+                for iteration in range(max_iterations):
+                    print(f"Iteration {iteration + 1}")
+            
+                    c, d = pressure_function(a_), pressure_function(b)
+            
+                    # Handle negative pressure
+                    while c < 0:
+                        g = (a_ + b) / 2
+                        a_ = g
+                        c = pressure_function(a_)
+            
+                    # Define pressure difference functions
+                    def pc_function(x):
+                        return pressure_function(x) - c
+            
+                    def pd_function(x):
+                        return pressure_function(x) - d
+            
+                    # Find intersection points with better error handling
+                    try:
+                        i1 = brentq(pc_function, a_int, max_min[0])
+                        i3 = brentq(pc_function, max_min[1], b_int)
+                        integc_ = riemann_integration(i1, i3, 100000, pc_function)
+                        print(f"Integral c: {integc_}")
+                    except Exception as e:
+                        print(f"Could not find intersection for pressure c: {e}")
+                        # Try to continue with a fallback approach
+                        integc_ = 0
+            
+                    try:
+                        j1 = brentq(pd_function, a_int, max_min[0])
+                        j3 = brentq(pd_function, max_min[1], b_int)
+                        integd_ = riemann_integration(j1, j3, 100000, pd_function)
+                        print(f"Integral d: {integd_}")
+                    except Exception as e:
+                        print(f"Could not find intersection for pressure d: {e}")
+                        # Try to continue with a fallback approach
+                        integd_ = 0
+            
+                    # Bisection step
+                    g = (a_ + b) / 2
+                    e = pressure_function(g)
+            
+                    def pe_function(x):
+                        return pressure_function(x) - e
+            
+                    try:
+                        m1 = brentq(pe_function, a_int, max_min[0])
+                        m3 = brentq(pe_function, max_min[1], b_int)
+                        intege = riemann_integration(m1, m3, 100000, pe_function)
+            
+                        # Update based on integral sign
+                        if intege > 0:
+                            a_ = g
+                        else:
+                            b = g
+            
+                    except Exception as e:
+                        print(f"Could not find intersection for pressure e: {e}")
+                        # If we can't proceed, break with current values
+                        break
+            
+                    # Check convergence
+                    if abs(intege) < tolerance:
+                        print(f"Converged after {iteration + 1} iterations")
+                        break
+            
+                # Final calculation - g should be defined by now
+                try:
+                    e = pressure_function(g)
+            
+                    def pf_function(x):
+                        return pressure_function(x) - e
+            
+                    k1 = brentq(pf_function, a_int, max_min[0])
+                    k3 = brentq(pf_function, max_min[1], b_int)
+                    k = (k1, k3)
+                    print(f"Final coexistence points: {k}")
+            
+                    return k, integd_, integc_, a_, b
+                except Exception as e:
+                    print(f"Could not find final intersection points: {e}")
+                    # Return approximate values based on extrema
+                    return (max_min[0], max_min[1]), integd_, integc_, a_, b
+            
+            
+            # Main execution
+            if __name__ == "__main__":
+                # Define integration bounds
+                a_int, b_int = 0.09, 50
+            
+                # Generate volume array and calculate pressure and derivative
+                rho_w = np.arange(a_int, b_int, 0.01)
+                p_bulk = np.array([pressure_function(rho) for rho in rho_w])
+                p_dash_bulk = np.array([pressure_derivative(rho) for rho in rho_w])
+            
+                # Find extrema and perform Maxwell construction
+                max_min = find_extrema(a_int, b_int)
+                print(f"Extrema found at: {max_min}")
+            
+                k = None
+                if len(max_min) >= 2:
+                    k, integd, integc, a, b = maxwell_construction(max_min, a_int, b_int)
+            
+                    if k is not None:
+                        maxwell_pressure = pressure_function((k[0] + k[1]) / 2)
+                        print(f"Maxwell construction coexistence pressure: {maxwell_pressure}")
+                        print(f"Coexistence volumes: {k[0]:.6f}, {k[1]:.6f}")
+                        print(f"Coexistence denisties: {1 / k[0]:.6f}, {1 / k[1]:.6f}")
+                else:
+                    print("Could not find sufficient extrema for Maxwell construction")
+            
+                # Create and save results
+                results_df = pd.DataFrame({
+                    'Volume': rho_w,
+                    'Pressure': p_bulk,
+                    'Pressure_Derivative': p_dash_bulk
+                })
+            
+                results_df.to_csv('carnahan_starling_results.csv', index=False)
+                print("Results saved to carnahan_starling_results.csv")
+            
+                # Plot results
+                plt.figure(figsize=(10, 6))
+                plt.plot(rho_w, p_bulk, label='Carnahan-Starling EOS', linewidth=2)
+            
+                if k is not None:
+                    maxwell_pressure = pressure_function((k[0] + k[1]) / 2)
+                    plt.axhline(y=maxwell_pressure, color='red', linestyle='--',
+                                label=f'Maxwell Construction (P = {maxwell_pressure:.6f})')
+                    plt.axvline(x=k[0], color='green', linestyle=':', alpha=0.7,
+                                label=f'Liquid volume = {k[0]:.3f}')
+                    plt.axvline(x=k[1], color='blue', linestyle=':', alpha=0.7,
+                                label=f'Vapor volume = {k[1]:.3f}')
+            
+                plt.xlabel('Volume, V')
+                plt.ylabel('Pressure, P')
+                plt.title('Carnahan-Starling EOS with Maxwell Construction')
+                plt.legend()
+                plt.grid(True, alpha=0.3)
+                plt.xlim(0, 10)  # Focus on relevant range
+            
+                # Save the plot to the specified directory with a timestamp to avoid overwriting
+                import datetime
+                save_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/maxwell_reconstruction"
+                os.makedirs(save_dir, exist_ok=True)
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+                save_path = os.path.join(save_dir, f"carnahan_starling_maxwell_{timestamp}.png")
+                plt.savefig(save_path, dpi=200)
+                print(f"Figure saved to {save_path}")
+            
+                print("\nCalculation completed successfully!")
+            --- End of maxwell_reconstruction.py ---
+
+            carnahan_starling_results.csv
         __pycache__/
             io.cpython-312.pyc
+            io.cpython-311.pyc
+            timing.cpython-311.pyc
             profiler.cpython-312.pyc
             timing.cpython-312.pyc
+            profiler.cpython-311.pyc
             __init__.cpython-312.pyc
+            plotting.cpython-311.pyc
+            __init__.cpython-311.pyc
             plotting.cpython-312.pyc
     __pycache__/
         __init__.cpython-312.pyc
+        __init__.cpython-311.pyc
     lattice/
         __init__.py
         --- Code in __init__.py ---
@@ -3521,7 +4036,9 @@ wblbm/
 
         __pycache__/
             lattice.cpython-312.pyc
+            lattice.cpython-311.pyc
             __init__.cpython-312.pyc
+            __init__.cpython-311.pyc
     simulations/
         singlephase.py
         --- Code in singlephase.py ---
@@ -3549,6 +4066,9 @@ wblbm/
                 super().__init__(grid_shape, lattice_type, tau, nt)
         
                 # Set simulation type flags
+                self.macroscopic = None
+                self.initialiser = None
+                self.update = None
                 self.multiphase = False
                 self.wetting_enabled = False
         
@@ -3572,9 +4092,7 @@ wblbm/
                     kvec=self.k_diag,
                     **self.kwargs
                 )
-                self.macroscopic = Macroscopic(
-                    self.grid, self.lattice, force_enabled=self.force_enabled
-                )
+                self.macroscopic = self.update.macroscopic
                 if self.bc_config:
                     from wblbm.operators.boundary_condition.boundary_condition import (
                         BoundaryCondition,
@@ -3725,7 +4243,7 @@ wblbm/
         --- Code in multiphase.py ---
         from .base import BaseSimulation
         from wblbm.operators.update.update_multiphase import UpdateMultiphase
-        from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+        from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
         from wblbm.operators.initialise.init import Initialise
         import jax.numpy as jnp
         
@@ -3746,9 +4264,14 @@ wblbm/
                 bc_config=None,
                 collision_scheme="bgk",
                 k_diag=None,
+                eos="double-well",
                 **kwargs
             ):
                 super().__init__(grid_shape, lattice_type, tau, nt)
+                self.update = None
+                self.initialiser = None
+                self.macroscopic = None
+                self.eos = eos
                 self.kappa = kappa
                 self.rho_l = rho_l
                 self.rho_v = rho_v
@@ -3775,18 +4298,11 @@ wblbm/
                     self.bc_config,
                     self.force_enabled,
                     collision_scheme=self.collision_scheme,
+                    eos=self.eos,
                     kvec=self.k_diag,
                     **self.kwargs  # Pass additional keyword arguments
                 )
-                self.macroscopic = MacroscopicMultiphase(
-                    self.grid,
-                    self.lattice,
-                    self.kappa,
-                    self.interface_width,
-                    self.rho_l,
-                    self.rho_v,
-                    self.force_enabled,
-                )
+                self.macroscopic = self.update.macroscopic
         
             def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
                 if init_type == "init_from_file":
@@ -3812,11 +4328,25 @@ wblbm/
                     return self.initialiser.initialise_multiphase_bubble_bot(
                         self.rho_l, self.rho_v, self.interface_width
                     )
+                elif init_type == "multiphase_bubble_bubble":
+                    return self.initialiser.initialise_multiphase_bubble_bubble(
+                        self.rho_l, self.rho_v, self.interface_width
+                    )
+                elif init_type =="multiphase_lateral_bubble_configuration":
+                    return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
+                        self.rho_l, self.rho_v, self.interface_width
+                    )
                 else:
                     return self.initialiser.initialise_standard()
         
             def run_timestep(self, fprev, it):
                 force_ext = None
+                # TODO: This is where the external force is added,
+                # since this will also be how I want to implement the electric force
+                # I will need to look at how I can best extend this.
+                # At the moment I think the creation of a composite force class will be best
+                # As it will allow for multiple force to be dealt with in a similar manner.
+                # https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
                 if self.force_enabled and self.force_obj:
                     rho = jnp.sum(fprev, axis=2, keepdims=True)
                     force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
@@ -3872,11 +4402,14 @@ wblbm/
         --- End of base.py ---
 
         __pycache__/
+            base.cpython-311.pyc
             base.cpython-312.pyc
             singlephase.cpython-312.pyc
+            multiphase.cpython-311.pyc
             multiphase.cpython-312.pyc
             wetting.cpython-312.pyc
             __init__.cpython-312.pyc
+            __init__.cpython-311.pyc
     run/
         run.py
         --- Code in run.py ---
@@ -4027,7 +4560,9 @@ wblbm/
 
         __pycache__/
             run.cpython-312.pyc
+            run.cpython-311.pyc
             __init__.cpython-312.pyc
+            __init__.cpython-311.pyc
     grid/
         grid.py
         --- Code in grid.py ---
@@ -4077,8 +4612,10 @@ wblbm/
         --- End of __init__.py ---
 
         __pycache__/
+            grid.cpython-311.pyc
             grid.cpython-312.pyc
             __init__.cpython-312.pyc
+            __init__.cpython-311.pyc
 example/
     tests/
         single_phase_gravity_test.py
@@ -4825,6 +5362,176 @@ example/
             print("\nTest completed!")
         --- End of test_droplet_periodic_top_bot_bc.py ---
 
+        Bubble_rise_high_density_ratio_CS/
+            Static_bubble_MRT_CS.py
+            --- Code in Static_bubble_MRT_CS.py ---
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseDroplet
+            from wblbm.utils.plotting import visualise
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def test_mrt_static_cs():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation of a static bubble ===")
+            
+                grid_shape = (401, 401)
+                nt = 50000
+                save_interval = 5000
+                skip_interval = 0
+                kappa = 0.01
+                rho_l = 1
+                rho_v = 0.001
+                interface_width = 5
+                tau = 0.9
+            
+                force_g = 0.00000
+                inclination_angle = 0
+                gravity = GravityForceMultiphaseDroplet(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                bc_config = {
+                    "top": "periodic",
+                    "bottom": "periodic",
+                    "left": "bounce-back",
+                    "right": "bounce-back",
+                }
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.05,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    skip_interval=skip_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    collision="bgk",
+                    init_type="multiphase_bubble_bot",
+                    tau=tau,
+                    #bc_config=bc_config,
+                )
+                sim.run(verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = test_mrt_static_cs()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of Static_bubble_MRT_CS.py ---
+
+            Rising_bubble_MRT_CS.py
+            --- Code in Rising_bubble_MRT_CS.py ---
+            import numpy as np
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseBubble
+            from wblbm import visualise
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def rising_bubble_mrt():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation of a rising bubble ===")
+            
+                grid_shape = (401, 401)
+                nt = 5000
+                save_interval = 500
+                init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
+            
+                kappa = 0.01
+                rho_l = 1
+                rho_v = .001
+                interface_width = 5
+            
+                force_g = 0.000002
+                inclination_angle = 0
+                gravity = GravityForceMultiphaseBubble(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                bc_config = {
+                    "top": "bounce-back",
+                    "bottom": "bounce-back",
+                    "left": "periodic",
+                    "right": "periodic",
+                }
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.05,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    init_type="init_from_file",
+                    init_dir=init_file,
+                    collision=collision,
+                    bc_config=bc_config,
+                    eos="carnahan-starling"
+                )
+                sim.run(verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = rising_bubble_mrt()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of Rising_bubble_MRT_CS.py ---
+
         Bubble_rise_low_density_ratio/
             Bubble_rise_MRT.py
             --- Code in Bubble_rise_MRT.py ---
@@ -5156,7 +5863,233 @@ example/
                             timestep_8000.png
                             timestep_9999.png
                             timestep_2000.png
+                2025-08-26/
+                    14-32-02/
+                        config.json
+                        simulation.log
+                        data/
+                    13-31-36/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_39999.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_39999.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    13-23-11/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_39999.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_39999.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    14-10-22/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_39999.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_39999.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    13-02-53/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_39999.npz
+                            timestep_14000.npz
+                            timestep_18000.npz
+                            timestep_30000.npz
+                            timestep_22000.npz
+                            timestep_6000.npz
+                            timestep_16000.npz
+                            timestep_20000.npz
+                            timestep_4000.npz
+                            timestep_32000.npz
+                            timestep_8000.npz
+                            timestep_36000.npz
+                            timestep_28000.npz
+                            timestep_24000.npz
+                            timestep_12000.npz
+                            timestep_38000.npz
+                            timestep_26000.npz
+                            timestep_2000.npz
+                            timestep_34000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_39999.png
+                            timestep_14000.png
+                            timestep_18000.png
+                            timestep_30000.png
+                            timestep_22000.png
+                            timestep_6000.png
+                            timestep_16000.png
+                            timestep_20000.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_32000.png
+                            timestep_28000.png
+                            timestep_36000.png
+                            timestep_24000.png
+                            timestep_12000.png
+                            timestep_26000.png
+                            timestep_2000.png
+                            timestep_38000.png
+                            timestep_34000.png
+                            timestep_10000.png
+                    14-31-02/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_2000.npz
         results/
+            2025-09-01/
+                16-49-31/
+                    config.json
+                    simulation.log
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_13000.npz
+                        timestep_1000.npz
+                        timestep_11000.npz
+                        timestep_3000.npz
+                        timestep_14999.npz
+                        timestep_14000.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_12000.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_13000.png
+                        timestep_1000.png
+                        timestep_11000.png
+                        timestep_3000.png
+                        timestep_14999.png
+                        timestep_14000.png
+                        timestep_6000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_12000.png
+                        timestep_2000.png
+                        timestep_10000.png
             2025-07-10/
                 14-28-58/
                     config.json
@@ -6164,6 +7097,127 @@ example/
                         timestep_162000.png
                         timestep_484000.png
                         timestep_73000.png
+            2025-09-02/
+                14-41-09/
+                    config.json
+                    simulation.log
+                    data/
+                        timestep_900.npz
+                        timestep_999.npz
+                        timestep_800.npz
+                        timestep_600.npz
+                        timestep_400.npz
+                        timestep_200.npz
+                        timestep_500.npz
+                        timestep_700.npz
+                        timestep_300.npz
+                        timestep_100.npz
+                    plots/
+                        timestep_900.png
+                        timestep_999.png
+                        timestep_800.png
+                        timestep_600.png
+                        timestep_400.png
+                        timestep_200.png
+                        timestep_500.png
+                        timestep_700.png
+                        timestep_300.png
+                        timestep_100.png
+            2025-08-27/
+                15-19-18/
+                    config.json
+                    simulation.log
+                    data/
+                        timestep_7000.npz
+                        timestep_5000.npz
+                        timestep_9000.npz
+                        timestep_13000.npz
+                        timestep_1000.npz
+                        timestep_11000.npz
+                        timestep_3000.npz
+                        timestep_14999.npz
+                        timestep_14000.npz
+                        timestep_6000.npz
+                        timestep_4000.npz
+                        timestep_8000.npz
+                        timestep_12000.npz
+                        timestep_2000.npz
+                        timestep_10000.npz
+                    plots/
+                        timestep_7000.png
+                        timestep_5000.png
+                        timestep_9000.png
+                        timestep_13000.png
+                        timestep_1000.png
+                        timestep_11000.png
+                        timestep_3000.png
+                        timestep_14999.png
+                        timestep_14000.png
+                        timestep_6000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_12000.png
+                        timestep_2000.png
+                        timestep_10000.png
+                15-24-48/
+                    config.json
+                    simulation.log
+                    data/
+                        timestep_39999.npz
+                        timestep_16000.npz
+                        timestep_20000.npz
+                        timestep_4000.npz
+                        timestep_32000.npz
+                        timestep_8000.npz
+                        timestep_36000.npz
+                        timestep_28000.npz
+                        timestep_24000.npz
+                        timestep_12000.npz
+                    plots/
+                        timestep_39999.png
+                        timestep_16000.png
+                        timestep_20000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_32000.png
+                        timestep_28000.png
+                        timestep_36000.png
+                        timestep_24000.png
+                        timestep_12000.png
+                15-24-32/
+                    config.json
+                    simulation.log
+                    data/
+                    plots/
+                15-36-54/
+                    config.json
+                    simulation.log
+                    data/
+                        timestep_40000.npz
+                        timestep_44000.npz
+                        timestep_48000.npz
+                        timestep_16000.npz
+                        timestep_20000.npz
+                        timestep_4000.npz
+                        timestep_32000.npz
+                        timestep_8000.npz
+                        timestep_36000.npz
+                        timestep_28000.npz
+                        timestep_24000.npz
+                        timestep_12000.npz
+                    plots/
+                        timestep_40000.png
+                        timestep_44000.png
+                        timestep_48000.png
+                        timestep_16000.png
+                        timestep_20000.png
+                        timestep_4000.png
+                        timestep_8000.png
+                        timestep_32000.png
+                        timestep_28000.png
+                        timestep_36000.png
+                        timestep_24000.png
+                        timestep_12000.png
         Bubble_rise_high_density_ratio/
             Bubble_rise_MRT.py
             --- Code in Bubble_rise_MRT.py ---
@@ -6265,8 +7319,8 @@ example/
                 print("\n=== Multiphase LBM Simulation of a static bubble ===")
             
                 grid_shape = (401, 401)
-                nt = 50000
-                save_interval = 5000
+                nt = 5000
+                save_interval = 1000
                 skip_interval = 0
                 kappa = 0.01
                 rho_l = 1
@@ -6334,6 +7388,32 @@ example/
             --- End of Static_bubble_MRT.py ---
 
             results/
+                2025-09-01/
+                    11-40-46/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_49999.npz
+                            timestep_5000.npz
+                            timestep_25000.npz
+                            timestep_35000.npz
+                            timestep_30000.npz
+                            timestep_20000.npz
+                            timestep_45000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_49999.png
+                            timestep_5000.png
+                            timestep_25000.png
+                            timestep_35000.png
+                            timestep_30000.png
+                            timestep_20000.png
+                            timestep_45000.png
+                            timestep_10000.png
                 2025-08-05/
                     16-24-37/
                         config.json
@@ -6383,6 +7463,340 @@ example/
                             timestep_700.png
                             timestep_300.png
                             timestep_100.png
+                2025-09-04/
+                    10-33-43/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_4999.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_4000.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_4999.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_4000.png
+                            timestep_2000.png
+                    14-12-53/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_1000.npz
+                    10-35-59/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_4999.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_4000.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_4999.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_4000.png
+                            timestep_2000.png
+                2025-09-03/
+                    14-36-08/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_3500.npz
+                            timestep_1500.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_2500.npz
+                            timestep_4000.npz
+                            timestep_500.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_3500.png
+                            timestep_1500.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_2500.png
+                            timestep_4000.png
+                            timestep_500.png
+                            timestep_2000.png
+                    14-38-22/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_3500.npz
+                            timestep_1500.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_2500.npz
+                            timestep_4000.npz
+                            timestep_4500.npz
+                            timestep_500.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_3500.png
+                            timestep_1500.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_2500.png
+                            timestep_4000.png
+                            timestep_4500.png
+                            timestep_500.png
+                            timestep_2000.png
+                2025-08-26/
+                    14-11-49/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_3500.npz
+                            timestep_1500.npz
+                            timestep_4999.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_2500.npz
+                            timestep_4000.npz
+                            timestep_4500.npz
+                            timestep_500.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_3500.png
+                            timestep_1500.png
+                            timestep_4999.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_2500.png
+                            timestep_4000.png
+                            timestep_4500.png
+                            timestep_500.png
+                            timestep_2000.png
+                    14-32-35/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_25000.npz
+                            timestep_35000.npz
+                            timestep_30000.npz
+                            timestep_20000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_15000.png
+                            timestep_5000.png
+                            timestep_25000.png
+                            timestep_35000.png
+                            timestep_30000.png
+                            timestep_20000.png
+                            timestep_10000.png
+                    13-43-29/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_150.npz
+                            timestep_50.npz
+                            timestep_200.npz
+                            timestep_100.npz
+                        plots/
+                            timestep_150.png
+                            timestep_50.png
+                            timestep_200.png
+                            timestep_100.png
+                    14-13-32/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_3500.npz
+                            timestep_7000.npz
+                            timestep_1500.npz
+                            timestep_5000.npz
+                            timestep_9000.npz
+                            timestep_9500.npz
+                            timestep_5500.npz
+                            timestep_1000.npz
+                            timestep_7500.npz
+                            timestep_3000.npz
+                            timestep_2500.npz
+                            timestep_6000.npz
+                            timestep_4000.npz
+                            timestep_8000.npz
+                            timestep_8500.npz
+                            timestep_4500.npz
+                            timestep_500.npz
+                            timestep_9999.npz
+                            timestep_6500.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_7000.png
+                            timestep_3500.png
+                            timestep_5000.png
+                            timestep_1500.png
+                            timestep_9000.png
+                            timestep_9500.png
+                            timestep_1000.png
+                            timestep_5500.png
+                            timestep_3000.png
+                            timestep_7500.png
+                            timestep_6000.png
+                            timestep_2500.png
+                            timestep_4000.png
+                            timestep_8000.png
+                            timestep_8500.png
+                            timestep_4500.png
+                            timestep_500.png
+                            timestep_9999.png
+                            timestep_2000.png
+                            timestep_6500.png
+                    14-11-06/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_250.npz
+                            timestep_450.npz
+                            timestep_350.npz
+                            timestep_150.npz
+                            timestep_50.npz
+                            timestep_400.npz
+                            timestep_200.npz
+                            timestep_499.npz
+                            timestep_300.npz
+                            timestep_100.npz
+                        plots/
+                            timestep_250.png
+                            timestep_450.png
+                            timestep_350.png
+                            timestep_150.png
+                            timestep_50.png
+                            timestep_400.png
+                            timestep_200.png
+                            timestep_300.png
+                            timestep_499.png
+                            timestep_100.png
+                    12-45-52/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_250.npz
+                            timestep_450.npz
+                            timestep_350.npz
+                            timestep_150.npz
+                            timestep_50.npz
+                            timestep_400.npz
+                            timestep_200.npz
+                            timestep_499.npz
+                            timestep_300.npz
+                            timestep_100.npz
+                        plots/
+                            timestep_250.png
+                            timestep_450.png
+                            timestep_350.png
+                            timestep_150.png
+                            timestep_50.png
+                            timestep_400.png
+                            timestep_200.png
+                            timestep_300.png
+                            timestep_499.png
+                            timestep_100.png
+                    13-41-51/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_150.npz
+                            timestep_50.npz
+                            timestep_200.npz
+                            timestep_100.npz
+                        plots/
+                            timestep_150.png
+                            timestep_50.png
+                            timestep_200.png
+                            timestep_100.png
+                    14-18-22/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_25000.npz
+                            timestep_35000.npz
+                            timestep_30000.npz
+                            timestep_20000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_5000.png
+                            timestep_25000.png
+                            timestep_35000.png
+                            timestep_30000.png
+                            timestep_20000.png
+                            timestep_10000.png
+                    14-16-46/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_3500.npz
+                            timestep_1500.npz
+                            timestep_1000.npz
+                            timestep_3000.npz
+                            timestep_2500.npz
+                            timestep_500.npz
+                            timestep_2000.npz
+                        plots/
+                            timestep_3500.png
+                            timestep_1500.png
+                            timestep_1000.png
+                            timestep_3000.png
+                            timestep_2500.png
+                            timestep_500.png
+                            timestep_2000.png
+                    14-32-25/
+                        config.json
+                        simulation.log
+                        data/
+                2025-08-27/
+                    15-15-25/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_25000.npz
+                            timestep_35000.npz
+                            timestep_30000.npz
+                            timestep_20000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_5000.png
+                            timestep_25000.png
+                            timestep_35000.png
+                            timestep_30000.png
+                            timestep_20000.png
+                            timestep_10000.png
+                    15-22-49/
+                        config.json
+                        simulation.log
+                        data/
+                            timestep_40000.npz
+                            timestep_15000.npz
+                            timestep_5000.npz
+                            timestep_25000.npz
+                            timestep_35000.npz
+                            timestep_30000.npz
+                            timestep_20000.npz
+                            timestep_10000.npz
+                        plots/
+                            timestep_40000.png
+                            timestep_15000.png
+                            timestep_5000.png
+                            timestep_25000.png
+                            timestep_35000.png
+                            timestep_30000.png
+                            timestep_20000.png
+                            timestep_10000.png
                 2025-08-11/
                     18-02-25/
                         config.json
@@ -6679,6 +8093,9 @@ example/
                             timestep_30.png
                             timestep_20.png
                             timestep_100.png
+        maxwell_reconstruction/
+            carnahan_starling_maxwell.png
+            carnahan_starling_maxwell_2025-09-03_16-33.png
         Collision_operator_test/
             BGK_static_test.py
             --- Code in BGK_static_test.py ---
@@ -7319,3 +8736,306 @@ example/
                             timestep_26000.png
                             timestep_2000.png
                             timestep_10000.png
+        Hsi/
+            Bubble_lateral_force.py
+            --- Code in Bubble_lateral_force.py ---
+            import numpy as np
+            
+            from wblbm.operators.force.gravitational_force_multiphase_WithModifiedMask import \
+                GravityForceMultiphaseDropletWithModifiedMask
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseBubble
+            from wblbm import visualise, GravityForceMultiphaseDroplet
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def rising_bubble_mrt():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation of a rising bubble ===")
+            
+                grid_shape = (401, 401)
+                nt = 40000
+                save_interval = 2000
+                init_file = "/example/tests/Bubble_rise_low_density_ratio/results/2025-08-05/16-07-12/data/timestep_49999.npz"
+            
+                kappa = 0.04
+                rho_l = 1.0
+                rho_v = 0.1
+                interface_width = 5
+            
+                force_g = 0.000002*1
+                inclination_angle = -90
+                gravity = GravityForceMultiphaseDropletWithModifiedMask(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                bc_config = {
+                    "top": "bounce-back",
+                    "bottom": "bounce-back",
+                    "left": "periodic",
+                    "right": "periodic",
+                }
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.05,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    init_type="multiphase_lateral_bubble_configuration",
+                    init_dir=init_file,
+                    collision=collision,
+                    # bc_config=bc_config,
+                )
+                sim.run(verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = rising_bubble_mrt()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of Bubble_lateral_force.py ---
+
+            Bubble_Bubble_rise_MRT.py
+            --- Code in Bubble_Bubble_rise_MRT.py ---
+            import numpy as np
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseBubble
+            from wblbm import visualise
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def rising_bubble_mrt():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation of a rising bubble ===")
+            
+                grid_shape = (401, 401)
+                nt = 20000
+                save_interval = 2000
+                init_file = "/example/tests/Bubble_rise_low_density_ratio/results/2025-08-05/16-07-12/data/timestep_49999.npz"
+            
+                kappa = 0.04
+                rho_l = 1.0
+                rho_v = 0.1
+                interface_width = 5
+            
+                force_g = 0.000002
+                inclination_angle = 0
+                gravity = GravityForceMultiphaseBubble(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                bc_config = {
+                    "top": "periodic",
+                    "bottom": "periodic",
+                    "left": "bounce-back",
+                    "right": "bounce-back",
+                }
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.05,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    init_type="multiphase_bubble_bubble",
+                    init_dir=init_file,
+                    collision=collision,
+                    # bc_config=bc_config,
+                )
+                sim.run(verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = rising_bubble_mrt()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of Bubble_Bubble_rise_MRT.py ---
+
+            MRT_static_bubble_bubble.py
+            --- Code in MRT_static_bubble_bubble.py ---
+            from wblbm.run import Run
+            from wblbm.operators.force import GravityForceMultiphaseDroplet
+            from wblbm.utils.plotting import visualise
+            import jax
+            
+            # this line is added for debugging
+            # jax.config.update("jax_disable_jit", True)
+            
+            
+            def test_mrt_static():
+                """Test a multiphase LBM simulation with gravity and a central droplet."""
+                print("\n=== Multiphase LBM Simulation of a static bubble ===")
+            
+                grid_shape = (401, 401)
+                nt = 50000
+                save_interval = 5000
+                skip_interval = 0
+                kappa = 0.01
+                rho_l = 1.0
+                rho_v = 0.1
+                interface_width = 5
+                tau = 0.9
+            
+                force_g = 0.00000
+                inclination_angle = 0
+                gravity = GravityForceMultiphaseDroplet(
+                    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+                )
+            
+                bc_config = {
+                    "top": "periodic",
+                    "bottom": "periodic",
+                    "left": "bounce-back",
+                    "right": "bounce-back",
+                }
+            
+                # Specify MRT collision operator and its rates
+                collision = {
+                    "collision_scheme": "mrt",
+                    "kv": 1.05,
+                    "kb": 1.0,
+                    "k0": 0.0,
+                    "k2": 1.0,
+                    "k4": 0.9,
+                }
+            
+                sim = Run(
+                    simulation_type="multiphase",
+                    grid_shape=grid_shape,
+                    lattice_type="D2Q9",
+                    nt=nt,
+                    kappa=kappa,
+                    rho_l=rho_l,
+                    rho_v=rho_v,
+                    interface_width=interface_width,
+                    save_interval=save_interval,
+                    skip_interval=skip_interval,
+                    force_enabled=True,
+                    force_obj=gravity,
+                    collision=collision,
+                    init_type="multiphase_bubble_bubble",
+                    tau=tau,
+                    #bc_config=bc_config,
+                )
+                sim.run(verbose=True)
+                return sim
+            
+            
+            if __name__ == "__main__":
+                print("Testing Multiphase LBM Codebase with Gravity")
+                print("=" * 60)
+            
+                # Run simulation
+                sim_multiphase_gravity = test_mrt_static()
+            
+                # Visualize results
+                print("\n=== Visualizing Results ===")
+                visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+            
+                print("\nTest completed!")
+            --- End of MRT_static_bubble_bubble.py ---
+
+results/
+    2025-08-29/
+        lateral_bubble_collision/
+            config.json
+            simulation.log
+            data/
+                timestep_39999.npz
+                timestep_14000.npz
+                timestep_18000.npz
+                timestep_30000.npz
+                timestep_22000.npz
+                timestep_6000.npz
+                timestep_16000.npz
+                timestep_20000.npz
+                timestep_4000.npz
+                timestep_32000.npz
+                timestep_8000.npz
+                timestep_36000.npz
+                timestep_28000.npz
+                timestep_24000.npz
+                timestep_12000.npz
+                timestep_38000.npz
+                timestep_26000.npz
+                timestep_2000.npz
+                timestep_34000.npz
+                timestep_10000.npz
+            plots/
+                timestep_39999.png
+                timestep_14000.png
+                timestep_18000.png
+                timestep_30000.png
+                timestep_22000.png
+                timestep_6000.png
+                timestep_16000.png
+                timestep_20000.png
+                timestep_4000.png
+                timestep_8000.png
+                timestep_32000.png
+                timestep_28000.png
+                timestep_36000.png
+                timestep_24000.png
+                timestep_12000.png
+                timestep_26000.png
+                timestep_2000.png
+                timestep_38000.png
+                timestep_34000.png
+                timestep_10000.png

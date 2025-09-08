@@ -4,3 +4,6 @@
 /example/tests/Bubble_rise_low_density_ratio/results/
 /example/tests/Bubble_rise_high_density_ratio/results/
 /results/
+/example/tests/maxwell_reconstruction/
+/example/tests/Bubble_rise_high_density_ratio_CS/results/
+# TODO: need to make sure that new result folder are added to the gitignore file.

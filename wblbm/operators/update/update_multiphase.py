@@ -8,7 +8,8 @@ from wblbm.lattice import Lattice
 from wblbm.operators.collision.collision_BGK import CollisionBGK
 from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
-from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
+from wblbm.operators.macroscopic.macroscopic_multiphase_cs import MacroscopicMultiphaseCS
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
 
 
@@ -25,6 +26,7 @@ class UpdateMultiphase(Update):
         bc_config: dict = None,
         force_enabled: bool = False,
         collision_scheme: str = "bgk",
+        eos: str = "double-well",
         kvec=None,
         **kwargs
     ):
@@ -38,15 +40,19 @@ class UpdateMultiphase(Update):
             kvec=kvec,
             **kwargs
         )
-        self.macroscopic = MacroscopicMultiphase(
-            grid,
-            lattice,
-            kappa,
-            interface_width,
-            rho_l,
-            rho_v,
-            force_enabled=force_enabled,
-        )
+        if eos == "double-well":
+            self.macroscopic = MacroscopicMultiphaseDW(
+                grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+            )
+        #TODO: Need to make sure that the maxwell contruction is done to get the correct starting values.
+        elif eos == "carnahan-starling":
+            self.macroscopic = MacroscopicMultiphaseCS(
+                grid, lattice, kappa, interface_width, rho_l, rho_v,
+                force_enabled=force_enabled,
+                **kwargs  # forward additional EOS parameters
+            )
+        else:
+            raise ValueError(f"Unknown EOS: {eos}")
 
     @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.array, force: jnp.ndarray = None):

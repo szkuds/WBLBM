@@ -10,10 +10,11 @@ from wblbm.operators.differential.laplacian import Laplacian
 from wblbm.lattice.lattice import Lattice
 
 
-class MacroscopicMultiphase(Macroscopic):
+class MacroscopicMultiphaseDW(Macroscopic):
     """
     Calculates macroscopic variables for multiphase simulations.
     Inherits from Macroscopic and adds multiphase-specific methods.
+    This is the double well implementation.
     """
 
     def __init__(
@@ -28,7 +29,7 @@ class MacroscopicMultiphase(Macroscopic):
     ):
         super().__init__(
             grid, lattice, force_enabled=force_enabled
-        )  # Pass force_enabled to parent
+        )
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
@@ -69,17 +70,16 @@ class MacroscopicMultiphase(Macroscopic):
 
     @partial(jit, static_argnums=(0,))
     def eos(self, rho):
-        """Equation of state - extract 2D data for computation"""
-        rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+        """
+        Default: Double Well EOS.
+        """
+        rho_2d = rho[:, :, 0, 0]
         eos_2d = (
-            2
-            * self.beta
+            2 * self.beta
             * (rho_2d - self.rho_l)
             * (rho_2d - self.rho_v)
             * (2 * rho_2d - self.rho_l - self.rho_v)
         )
-
-        # Convert back to 4D format
         eos_4d = jnp.zeros_like(rho)
         eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
         return eos_4d
@@ -99,7 +99,6 @@ class MacroscopicMultiphase(Macroscopic):
         Calculate the interaction force.
         """
         grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
-        # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))
@@ -107,5 +106,4 @@ class MacroscopicMultiphase(Macroscopic):
         """
         Update velocity with interaction force.
         """
-        # Both u and force have shape (nx, ny, 1, 2)
         return u + force / 2
