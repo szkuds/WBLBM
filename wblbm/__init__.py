@@ -4,7 +4,7 @@ from wblbm.operators.update import Update, UpdateMultiphase
 from wblbm.operators.initialise import Initialise
 from wblbm.operators.equilibrium import Equilibrium
 from wblbm.operators.stream import Streaming
-from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphase
+from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphaseDW
 from wblbm.operators.differential import (
     Gradient,
     Laplacian,

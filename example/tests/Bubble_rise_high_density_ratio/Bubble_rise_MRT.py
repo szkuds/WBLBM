@@ -60,7 +60,7 @@ def rising_bubble_mrt():
         init_type="init_from_file",
         init_dir=init_file,
         collision=collision,
-        bc_config=bc_config,
+        #bc_config=bc_config,
     )
     sim.run(verbose=True)
     return sim

@@ -35,11 +35,20 @@ class Run:
         init_type="standard",
         init_dir=None,
         skip_interval=0,
+        collision=None,  # Accept collision as a kwarg
         **kwargs,
     ):
-        # Allow collision config as a dict or CLI/JSON entry and pass it untouched
-        collision_cfg = kwargs.pop("collision", None)
-        if collision_cfg is not None:
+        # Accept either a string or a dict for collision
+        collision_cfg = None
+        if collision is not None:
+            if isinstance(collision, str):
+                collision_cfg = {"collision_scheme": collision}
+            elif isinstance(collision, dict):
+                collision_cfg = collision.copy()
+            else:
+                raise ValueError(
+                    "collision must be either a string (for BGK) or dict (for MRT config)."
+                )
             kwargs.update(collision_cfg)
         self.simulation = SimulationFactory.create_simulation(simulation_type, **kwargs)
         self.save_interval = save_interval

@@ -1,2 +1,2 @@
 from .macroscopic import Macroscopic
-from .macroscopic_multiphase import MacroscopicMultiphase
+from .macroscopic_multiphase_dw import MacroscopicMultiphaseDW

@@ -21,12 +21,14 @@ class MultiphaseSimulation(BaseSimulation):
         bc_config=None,
         collision_scheme="bgk",
         k_diag=None,
+        eos="double-well",
         **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
         self.update = None
         self.initialiser = None
         self.macroscopic = None
+        self.eos = eos
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
@@ -53,6 +55,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.bc_config,
             self.force_enabled,
             collision_scheme=self.collision_scheme,
+            eos=self.eos,
             kvec=self.k_diag,
             **self.kwargs  # Pass additional keyword arguments
         )
