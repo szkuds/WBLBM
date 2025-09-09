@@ -7,16 +7,10 @@ class SimulationFactory:
     def create_simulation(simulation_type, **kwargs):
         if simulation_type == "singlephase":
             from wblbm.simulations.singlephase import SinglePhaseSimulation
-
             return SinglePhaseSimulation(**kwargs)
         elif simulation_type == "multiphase":
             from wblbm.simulations.multiphase import MultiphaseSimulation
-
             return MultiphaseSimulation(**kwargs)
-        elif simulation_type == "wetting":
-            from wblbm.simulations.wetting import WettingSimulation
-
-            return WettingSimulation(**kwargs)
         else:
             raise ValueError(f"Unknown simulation type: {simulation_type}")
 
@@ -73,6 +67,7 @@ class Run:
         # Simple config builder for demonstration; extend as needed
         return dict(**kwargs)
 
+    #TODO: need to double check that data is saved properly
     def _save_data(self, it, fprev):
         # Save data using the simulation's macroscopic operator
         force_ext = None

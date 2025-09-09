@@ -42,13 +42,13 @@ class UpdateMultiphase(Update):
         )
         if eos == "double-well":
             self.macroscopic = MacroscopicMultiphaseDW(
-                grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+                grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled, bc_config=bc_config
             )
         #TODO: Need to make sure that the maxwell contruction is done to get the correct starting values.
         elif eos == "carnahan-starling":
             self.macroscopic = MacroscopicMultiphaseCS(
                 grid, lattice, kappa, interface_width, rho_l, rho_v,
-                force_enabled=force_enabled,
+                force_enabled=force_enabled, bc_config=bc_config,
                 **kwargs  # forward additional EOS parameters
             )
         else:

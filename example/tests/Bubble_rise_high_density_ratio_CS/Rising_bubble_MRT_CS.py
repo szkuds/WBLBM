@@ -12,19 +12,19 @@ def test_mrt_rising_cs():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 550
+    nt = 1000
     save_interval = 50
     skip_interval = 0
-    kappa = 0.01
-    rho_l = 10.771099
-    rho_v = 0.093882
-    interface_width = 5
-    tau = 0.9
+    kappa = 0.02
+    rho_l = 12.18
+    rho_v = 0.01669
+    interface_width = 10
+    tau = 0.8
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-09-08/09-51-43/data/timestep_49999.npz"
 
-    force_g = 0.000002
+    force_g = 0.000005
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble(
+    gravity = GravityForceMultiphaseBubble (
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
@@ -48,7 +48,7 @@ def test_mrt_rising_cs():
     # Maxwell construction for Carnahan-Starling EOS
     rho_c = 3.5
     p_c = 0.001
-    Tr = 0.61
+    Tr = 0.5
 
     # Calculate EOS parameters
     b_eos = 0.5218 / rho_c

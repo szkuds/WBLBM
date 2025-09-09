@@ -26,6 +26,7 @@ class MacroscopicMultiphaseDW(Macroscopic):
         rho_l: float,
         rho_v: float,
         force_enabled: bool = False,
+        bc_config: dict = None,
     ):
         super().__init__(
             grid, lattice, force_enabled=force_enabled
@@ -33,8 +34,9 @@ class MacroscopicMultiphaseDW(Macroscopic):
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
-        self.gradient = Gradient(lattice)
-        self.laplacian = Laplacian(lattice)
+        self.bc_config = bc_config
+        self.gradient = Gradient(lattice, bc_config=bc_config)
+        self.laplacian = Laplacian(lattice, bc_config=bc_config)
         self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
 
     @partial(jit, static_argnums=(0,))
@@ -70,16 +72,17 @@ class MacroscopicMultiphaseDW(Macroscopic):
 
     @partial(jit, static_argnums=(0,))
     def eos(self, rho):
-        """
-        Default: Double Well EOS.
-        """
-        rho_2d = rho[:, :, 0, 0]
+        """Equation of state - extract 2D data for computation"""
+        rho_2d = rho[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
         eos_2d = (
-            2 * self.beta
+            2
+            * self.beta
             * (rho_2d - self.rho_l)
             * (rho_2d - self.rho_v)
             * (2 * rho_2d - self.rho_l - self.rho_v)
         )
+
+        # Convert back to 4D format
         eos_4d = jnp.zeros_like(rho)
         eos_4d = eos_4d.at[:, :, 0, 0].set(eos_2d)
         return eos_4d
@@ -98,7 +101,8 @@ class MacroscopicMultiphaseDW(Macroscopic):
         """
         Calculate the interaction force.
         """
-        grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
+        grad_chem_pot = self.gradient(self.chem_pot(rho))
+        # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))
@@ -106,4 +110,5 @@ class MacroscopicMultiphaseDW(Macroscopic):
         """
         Update velocity with interaction force.
         """
+        # Both u and force have shape (nx, ny, 1, 2)
         return u + force / 2

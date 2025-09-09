@@ -40,7 +40,7 @@ class Update(object):
             self.collision = CollisionMRT(grid, lattice, k_diag=kvec, **mrt_params)
         else:
             self.collision = CollisionBGK(grid, lattice, tau)
-        self.source_term = SourceTerm(grid, lattice)
+        self.source_term = SourceTerm(grid, lattice, bc_config)
         self.streaming = Streaming(lattice)
         if bc_config is not None:
             self.boundary_condition = BoundaryCondition(grid, lattice, bc_config)

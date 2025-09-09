@@ -7,9 +7,7 @@ from wblbm.operators.stream import Streaming
 from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphaseDW
 from wblbm.operators.differential import (
     Gradient,
-    Laplacian,
-    GradientWetting,
-    LaplacianWetting,
+    Laplacian
 )
 from wblbm.operators.collision import CollisionBGK, SourceTerm, CollisionMRT
 from wblbm.operators.boundary_condition import BoundaryCondition

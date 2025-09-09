@@ -5,8 +5,6 @@ from jax import jit
 
 from wblbm.grid import Grid
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
-from wblbm.operators.differential.gradient import Gradient
-from wblbm.operators.differential.laplacian import Laplacian
 from wblbm.lattice.lattice import Lattice
 
 
@@ -30,9 +28,10 @@ class MacroscopicMultiphaseCS(MacroscopicMultiphaseDW):
         t_eos: float,
 
         force_enabled: bool = False,
+        bc_config: dict = None,
     ):
         super().__init__(
-            grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled
+            grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled, bc_config=bc_config
         )
         self.a_eos = a_eos
         self.b_eos = b_eos
