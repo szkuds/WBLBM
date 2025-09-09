@@ -13,7 +13,7 @@ def test_mrt_static():
 
     grid_shape = (401, 401)
     nt = 50000
-    save_interval = 5000
+    save_interval = 2500
     skip_interval = 0
     kappa = 0.01
     rho_l = 1.0
@@ -58,7 +58,7 @@ def test_mrt_static():
         force_enabled=True,
         force_obj=gravity,
         collision=collision,
-        init_type="multiphase_bubble_bubble",
+        init_type="multiphase_lateral_bubble_configuration",
         tau=tau,
         #bc_config=bc_config,
     )
