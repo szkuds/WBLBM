@@ -7,7 +7,7 @@ import pandas as pd
 # Maxwell construction for Carnahan-Starling EOS
 rho_c = 3.5
 p_c = 0.001
-Tr = 0.61
+Tr = 0.5
 
 # Calculate EOS parameters
 b_eos = 0.5218 / rho_c
