@@ -24,4 +24,4 @@ def document_project(root_dir, output_file):
 
 
 # Usage
-document_project("./", "./LBM_code_base.txt")
+document_project("./wblbm/", "./LBM_code_base.txt")

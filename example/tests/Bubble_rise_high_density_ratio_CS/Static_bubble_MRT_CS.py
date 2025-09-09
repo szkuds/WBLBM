@@ -16,8 +16,8 @@ def test_mrt_static_cs():
     save_interval = 5000
     skip_interval = 0
     kappa = 0.01
-    rho_l = 10.771099
-    rho_v = 0.093882
+    rho_l = 12.18
+    rho_v = 0.01669
     interface_width = 5
     tau = 0.9
 
@@ -47,7 +47,7 @@ def test_mrt_static_cs():
     # Maxwell construction for Carnahan-Starling EOS
     rho_c = 3.5
     p_c = 0.001
-    Tr = 0.61
+    Tr = 0.5
 
     # Calculate EOS parameters
     b_eos = 0.5218 / rho_c

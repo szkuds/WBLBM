@@ -12,12 +12,12 @@ def test_multiphase_gravity_simulation():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
     grid_shape = (200, 800)
-    nt = 15000
+    nt = 10000
     save_interval = 1000
     kappa = 0.04
     rho_l = 1.0
-    rho_v = 0.01
-    interface_width = 12
+    rho_v = 0.001
+    interface_width = 8
     tau = 0.9
 
     force_g = 0.000002

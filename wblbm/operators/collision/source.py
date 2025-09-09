@@ -9,13 +9,14 @@ class SourceTerm:
     Callable class to calculate the source term for the LBM equation.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice):
+    def __init__(self, grid: Grid, lattice: Lattice, bc_config: dict = None):
         """
         Initialize the source term calculator.
 
         Args:
             grid (Grid): Grid object containing simulation domain information
             lattice (Lattice): Lattice object containing lattice properties
+            bc_config (dict, optional): Boundary condition configuration
         """
         self.nx: int = grid.nx
         self.ny: int = grid.ny
@@ -24,7 +25,8 @@ class SourceTerm:
         self.w = lattice.w
         self.cx = lattice.c[0]
         self.cy = lattice.c[1]
-        self.gradient = Gradient(lattice)
+        self.bc_config = bc_config
+        self.gradient = Gradient(lattice, bc_config=bc_config)
 
     def __call__(
         self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray
@@ -52,7 +54,7 @@ class SourceTerm:
         rho_2d = rho[:, :, 0, 0]  # Shape: (nx, ny)
 
         # Calculate gradient of rho
-        grad_rho = gradient(rho)  # Shape: (nx, ny, 1, 2)
+        grad_rho = self.gradient(rho)
         grad_rho_2d = grad_rho[:, :, 0, :]  # Shape: (nx, ny, 2)
 
         def source_term(u_2d_, force_2d_, grad_rho_2d_):
