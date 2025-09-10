@@ -54,22 +54,45 @@ operators/
             supporting asymmetric per-side padding.
             """
         
-            def __init__(self, lattice: Lattice):
+            def __init__(self, lattice: Lattice, bc_config: dict = None):
                 self.w = lattice.w
                 self.c = lattice.c
+                self.bc_config = bc_config
+                self.padmode = self._determine_padding_modes()
+        
+            def _determine_padding_modes(self):
+                """Determine padding modes based on boundary conditions."""
+                if not self.bc_config:
+                    return ["wrap", "wrap", "wrap", "wrap"]  # Default periodic
+        
+                pad_mode = ["wrap", "wrap", "wrap", "wrap"]  # [bottom, right, top, left]
+                for edge, bc_type in self.bc_config.items():
+                    if bc_type in ["symmetry", "bounce-back"]:
+                        if edge == "bottom":
+                            pad_mode[0] = "edge"
+                        elif edge == "right":
+                            pad_mode[1] = "edge"
+                        elif edge == "top":
+                            pad_mode[2] = "edge"
+                        elif edge == "left":
+                            pad_mode[3] = "edge"
+                return pad_mode
         
             @partial(jit, static_argnums=(0,))
-            def __call__(self, grid, pad_mode: list):
+            def __call__(self, grid, padmode: list = None):
                 """
                 Calculate the gradient using the provided stencil and per-side boundary modes.
         
                 Args:
                     grid (jnp.ndarray): Input field, shape (nx, ny, 1, 1)
-                    pad_mode (list): List of padding modes for each pad step
+                    padmode (list, optional): List of padding modes for each pad step
         
                 Returns:
                     jnp.ndarray: Gradient field, shape (nx, ny, 1, 2)
                 """
+                # Use provided padmode or fall back to self.padmode
+                effective_padmode = padmode if padmode is not None else self.padmode
+        
                 # Extract 2D data from 4D input
                 if grid.ndim == 4:
                     grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
@@ -82,10 +105,10 @@ operators/
                 grad_ = jnp.zeros((2, grid_2d.shape[0], grid_2d.shape[1]))
         
                 # Apply asymmetric per-side padding (same convention/order as Laplacian)
-                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=pad_mode[0])
-                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=pad_mode[1])
-                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=pad_mode[2])
-                grid_padded = jnp.pad(grid_padded_, pad_width=1, mode=pad_mode[3])
+                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
+                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
+                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
+                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
         
                 # Side nodes
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -151,20 +174,44 @@ operators/
             Callable class to calculate the Laplacian of a 2D grid using the LBM stencil.
             """
         
-            def __init__(self, lattice: Lattice):
+            def __init__(self, lattice: Lattice, bc_config: dict = None):
                 self.w = lattice.w
+                self.bc_config = bc_config
+                self.padmode = self._determine_padding_modes()
+        
+            def _determine_padding_modes(self):
+                """Determine padding modes based on boundary conditions."""
+                if not self.bc_config:
+                    return ["wrap", "wrap", "wrap", "wrap"]  # Default periodic
+        
+                pad_mode = ["wrap", "wrap", "wrap", "wrap"]  # [bottom, right, top, left]
+                for edge, bc_type in self.bc_config.items():
+                    if bc_type in ["symmetry", "bounce-back"]:
+                        if edge == "bottom":
+                            pad_mode[0] = "edge"
+                        elif edge == "right":
+                            pad_mode[1] = "edge"
+                        elif edge == "top":
+                            pad_mode[2] = "edge"
+                        elif edge == "left":
+                            pad_mode[3] = "edge"
+                return pad_mode
         
             @partial(jit, static_argnums=(0,))
-            def __call__(self, grid, pad_mode: list):
+            def __call__(self, grid, padmode: list = None):
                 """
                 Calculate the Laplacian of a 2D grid.
         
                 Args:
                     grid (jnp.ndarray): Input grid, shape (nx, ny, 1, 1)
+                    padmode (list, optional): List of padding modes for each pad step
         
                 Returns:
                     jnp.ndarray: Laplacian of the input grid, shape (nx, ny, 1, 1)
                 """
+                # Use provided padmode or fall back to self.padmode
+                effective_padmode = padmode if padmode is not None else self.padmode
+        
                 # Extract 2D data from 4D input
                 if grid.ndim == 4:
                     grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
@@ -174,10 +221,10 @@ operators/
                 w = self.w
         
                 laplacian_2d = jnp.zeros_like(grid_2d)
-                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=pad_mode[0])
-                grid_padded__ = jnp.pad(grid_padded___,pad_width=((0, 0), (1, 0)), mode=pad_mode[1])
-                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=pad_mode[2])
-                grid_padded = jnp.pad(grid_padded_, pad_width=1, mode=pad_mode[3])
+                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
+                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
+                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
+                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
         
                 # Side nodes
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -350,29 +397,10 @@ operators/
                 self.kappa = kappa
                 self.rho_l = rho_l
                 self.rho_v = rho_v
-                self.gradient = Gradient(lattice)
-                self.laplacian = Laplacian(lattice)
-                self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
                 self.bc_config = bc_config
-                self.pad_mode = self._determine_padding_modes()
-        
-            def _determine_padding_modes(self):
-                """Determine padding modes based on boundary conditions."""
-                if not self.bc_config:
-                    return ["wrap", "wrap", "wrap", "wrap"]  # Default periodic
-        
-                pad_mode = ["wrap", "wrap", "wrap", "wrap"]  # [bottom, right, top, left]
-                for edge, bc_type in self.bc_config.items():
-                    if bc_type in ["symmetry", "bounce-back"]:
-                        if edge == "bottom":
-                            pad_mode[0] = "edge"
-                        elif edge == "right":
-                            pad_mode[1] = "edge"
-                        elif edge == "top":
-                            pad_mode[2] = "edge"
-                        elif edge == "left":
-                            pad_mode[3] = "edge"
-                return pad_mode
+                self.gradient = Gradient(lattice, bc_config=bc_config)
+                self.laplacian = Laplacian(lattice, bc_config=bc_config)
+                self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
         
             @partial(jit, static_argnums=(0,))
             def __call__(
@@ -428,7 +456,7 @@ operators/
                 Calculate the chemical potential.
                 """
                 mu_0 = self.eos(rho)
-                chem_pot__ = mu_0 - self.kappa * self.laplacian(rho, self.pad_mode)
+                chem_pot__ = mu_0 - self.kappa * self.laplacian(rho)
                 return chem_pot__
         
             @partial(jit, static_argnums=(0,))
@@ -436,7 +464,7 @@ operators/
                 """
                 Calculate the interaction force.
                 """
-                grad_chem_pot = self.gradient(self.chem_pot(rho), self.pad_mode)
+                grad_chem_pot = self.gradient(self.chem_pot(rho))
                 # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
                 return -rho * grad_chem_pot
         
@@ -477,7 +505,6 @@ operators/
                 self.d: int = lattice.d
                 self.cx: jnp.ndarray = jnp.array(lattice.c[0])
                 self.cy: jnp.ndarray = jnp.array(lattice.c[1])
-                self.gradient = Gradient(lattice)
                 self.force_enabled = force_enabled
         
             @time_function(enable_timing=TIMING_ENABLED)
@@ -939,7 +966,7 @@ operators/
                 # Create a density field with a bubble in the center
                 x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
                 center_x, center_y = self.nx // 2, self.ny // 2
-                radius = min(self.nx, self.ny) // 4
+                radius = min(self.nx, self.ny) // 8
         
                 # Use tanh for a smooth, stable interface
                 distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
@@ -2438,27 +2465,8 @@ operators/
                 self.w = lattice.w
                 self.cx = lattice.c[0]
                 self.cy = lattice.c[1]
-                self.gradient = Gradient(lattice)
                 self.bc_config = bc_config
-                self.pad_mode = self._determine_padding_modes()
-        
-            def _determine_padding_modes(self):
-                """Determine padding modes based on boundary conditions."""
-                if not self.bc_config:
-                    return ["wrap", "wrap", "wrap", "wrap"]
-        
-                pad_mode = ["wrap", "wrap", "wrap", "wrap"]
-                for edge, bc_type in self.bc_config.items():
-                    if bc_type in ["symmetry", "bounce-back"]:
-                        if edge == "bottom":
-                            pad_mode[0] = "edge"
-                        elif edge == "right":
-                            pad_mode[1] = "edge"
-                        elif edge == "top":
-                            pad_mode[2] = "edge"
-                        elif edge == "left":
-                            pad_mode[3] = "edge"
-                return pad_mode
+                self.gradient = Gradient(lattice, bc_config=bc_config)
         
             def __call__(
                 self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray
@@ -2486,7 +2494,7 @@ operators/
                 rho_2d = rho[:, :, 0, 0]  # Shape: (nx, ny)
         
                 # Calculate gradient of rho
-                grad_rho = self.gradient(rho, self.pad_mode)  # Add padding mode
+                grad_rho = self.gradient(rho)
                 grad_rho_2d = grad_rho[:, :, 0, :]  # Shape: (nx, ny, 2)
         
                 def source_term(u_2d_, force_2d_, grad_rho_2d_):

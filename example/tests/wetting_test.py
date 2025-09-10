@@ -42,7 +42,7 @@ def test_wetting_simulation():
 
     # Initialize and run simulation with wetting enabled
     sim = Run(
-        simulation_type="wetting",
+        simulation_type="multiphase",
         grid_shape=grid_shape,
         lattice_type="D2Q9",
         tau=tau,
