@@ -51,6 +51,11 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             im1 = axes[0].imshow(
                 final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis"
             )
+            # Overlay the needle mask if available
+            if hasattr(sim_instance, "custom_mask") and sim_instance.custom_mask is not None:
+                mask = sim_instance.custom_mask.T  # Transpose to match imshow orientation
+                axes[0].contour(mask, levels=[0.5], colors='red', linewidths=1)
+
             axes[0].set_title(f"Density (t={timestep})")
             plt.colorbar(im1, ax=axes[0], label="Density")
 
