@@ -121,7 +121,7 @@ class Initialise:
         #create a density field with two bubbles placed side-by-side
         x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
         left_bubble_center_x, left_bubble_center_y = self.nx // 4, self.ny // 2
-        right_bubble_center_x, right_bubble_center_y = self.nx*2.4 // 4, self.ny // 2
+        right_bubble_center_x, right_bubble_center_y = self.nx*2.8 // 4, self.ny // 2
         radius = min(self.nx, self.ny) // 5
 
         #use tanh for a smooth, stable interface
@@ -160,7 +160,7 @@ class Initialise:
         #use tanh for a smooth, stable interface
         distance_to_left_bubble = jnp.sqrt((x - left_bubble_center_x) ** 2 + (y - left_bubble_center_y) ** 2)
         distance_to_right_bubble = jnp.sqrt((x - right_bubble_center_x) ** 2 + (y - right_bubble_center_y) ** 2)
-        minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble)
+        minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble*1.5)
         rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
             (minimum_distance - radius) / interface_width
         )
@@ -169,6 +169,58 @@ class Initialise:
 
         #initialize with zero velocity
         u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+        #Return the f_eq
+        return self.equilibrium(rho, u)
+
+    def initialise_multiphase_lateral_bubbles_with_needle(
+            self,rho_l: float, rho_v: float, interface_width: int, custom_mask= None,Rx= None, Ry= None,Rd=None
+    ):
+        """
+        Initialises a multiphase simulation with two low-density bubbles
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase (bubble) density.
+        returns
+            jnp.ndarray: Initialised population distribution f.
+        """
+        #create a density field with two bubbles placed side-by-side
+        x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
+        left_bubble_center_x, left_bubble_center_y = Ry, Rx
+        right_bubble_center_x, right_bubble_center_y = Ry, self.nx-Rx-3
+        radius = Rd
+
+        #use tanh for a smooth, stable interface
+        distance_to_left_bubble = jnp.sqrt((x - left_bubble_center_x) ** 2 + (y - left_bubble_center_y) ** 2)
+        distance_to_right_bubble = jnp.sqrt((x - right_bubble_center_x) ** 2 + (y - right_bubble_center_y) ** 2)
+        minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble)
+
+
+        rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
+            (minimum_distance - radius) / interface_width
+        )
+
+        # Reshape to 4D
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+
+        #initialize with zero velocity
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+
+
+
+        # Apply mask if provided
+        if custom_mask is not None:
+            # Convert to JAX array and transpose if needed
+            mask_jax = jnp.array(custom_mask)  # Transpose to match (nx, ny)
+            fluid_mask_rho = mask_jax.reshape((self.nx, self.ny, 1, 1))
+            fluid_mask_u = mask_jax.reshape((self.nx, self.ny, 1, 1))
+
+            # Zero out solid regions
+            rho = rho * fluid_mask_rho
+            u = u * fluid_mask_u
+
+
 
         #Return the f_eq
         return self.equilibrium(rho, u)

@@ -63,7 +63,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.force_enabled,
         )
 
-    def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
+    def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None, custom_mask=None, Rx=None, Ry=None,Rd=None):
         if init_type == "init_from_file":
             if init_dir is None:
                 raise ValueError(
@@ -94,6 +94,10 @@ class MultiphaseSimulation(BaseSimulation):
         elif init_type =="multiphase_lateral_bubble_configuration":
             return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
                 self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type =="multiphase_lateral_bubbles_with_needle":
+            return self.initialiser.initialise_multiphase_lateral_bubbles_with_needle(
+                self.rho_l,self.rho_v,self.interface_width, custom_mask=custom_mask,Rx=Rx,Ry=Ry,Rd=Rd
             )
         else:
             return self.initialiser.initialise_standard()

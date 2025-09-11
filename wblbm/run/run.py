@@ -35,6 +35,10 @@ class Run:
         init_type="standard",
         init_dir=None,
         skip_interval=0,
+        custom_mask = None,
+        Rx = None,
+        Ry = None,
+        Rd = None,
         **kwargs,
     ):
         # Allow collision config as a dict or CLI/JSON entry and pass it untouched
@@ -56,6 +60,10 @@ class Run:
             init_dir=init_dir,
             **kwargs,
         )
+        self.custom_mask=custom_mask
+        self.Rx=Rx
+        self.Ry=Ry
+        self.Rd=Rd
         from wblbm.utils.io import SimulationIO
 
         self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
@@ -102,11 +110,15 @@ class Run:
                 data_to_save = {"f": np.array(fprev)}
         else:
             data_to_save = {"f": np.array(fprev)}
+
+        if self.custom_mask is not None:
+            data_to_save["mask"] = np.array(self.custom_mask)
         self.io_handler.save_data_step(it, data_to_save)
 
     def run(self, *, verbose=True):
         fprev = self.simulation.initialize_fields(
-            self.init_type, init_dir=self.init_dir
+            self.init_type, init_dir=self.init_dir, custom_mask=self.custom_mask,Rx=self.Rx, Ry=self.Ry,Rd=self.Rd
+
         )
         nt = getattr(self.simulation, "nt", 1000)
         if verbose:
