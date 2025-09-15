@@ -7,3 +7,4 @@
 /example/tests/maxwell_reconstruction/
 /example/tests/Bubble_rise_high_density_ratio_CS/results/
 # TODO: need to make sure that new result folder are added to the gitignore file.
+/example/25-09-10_Examples_Orest/
