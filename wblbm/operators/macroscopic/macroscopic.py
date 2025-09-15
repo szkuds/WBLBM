@@ -44,7 +44,6 @@ class Macroscopic:
         if self.d == 2:
             # Compute density
             rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
-
             # Compute velocity WITHOUT force correction
             cx = self.cx.reshape((1, 1, self.q, 1))
             cy = self.cy.reshape((1, 1, self.q, 1))

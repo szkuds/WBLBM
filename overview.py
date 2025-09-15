@@ -1,6 +1,12 @@
 import os
 
 
+# TODO: Add readme and licencing.
+# TODO: Documentation.
+# TODO: Merge to main setup.
+# TODO: It would be nice to have the option to give a name to a simulation when testing different parameters.
+# TODO: Add log scaled when density ratio is large
+
 def document_project(root_dir, output_file):
     with open(output_file, "w", encoding="utf-8") as doc:
         for dirpath, dirnames, filenames in os.walk(root_dir):

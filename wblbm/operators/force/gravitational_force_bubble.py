@@ -31,4 +31,4 @@ class GravityForceMultiphaseBubble(Force):
         Returns the constant gravitational force field.
         Ignores rho as gravity is density-independent.
         """
-        return self.force * (rho - rho_l)
+        return self.force * (rho - rho_l) # Here I have also used * rho_v to compensate dividing by the density in the updating of the speed

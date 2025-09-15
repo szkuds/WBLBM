@@ -53,10 +53,16 @@ class Update(object):
     def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None):
         if self.force_enabled:
             rho, u, force_tot = self.macroscopic(f, force=force)
+
+            # Calculate source term and pass it to collision
+            feq = self.equilibrium(rho, u)
+            source = self.source_term(rho, u, force_tot)
+            fcol = self.collision(f, feq, source)
         else:
             rho, u = self.macroscopic(f)
-        feq = self.equilibrium(rho, u)
-        fcol = self.collision(f, feq)
+            feq = self.equilibrium(rho, u)
+            fcol = self.collision(f, feq)
+
         fstream = self.streaming(fcol)
         if self.boundary_condition is not None:
             fbc = self.boundary_condition(fstream, fcol)

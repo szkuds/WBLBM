@@ -1,19 +1,20 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseBubble
+from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
 
+# TODO: Need to make CS EoS work with MRT.
 
 def test_mrt_rising_cs():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 1000
-    save_interval = 50
+    nt = 10000
+    save_interval = 1000
     skip_interval = 0
     kappa = 0.02
     rho_l = 12.18
@@ -22,17 +23,17 @@ def test_mrt_rising_cs():
     tau = 0.8
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-09-08/09-51-43/data/timestep_49999.npz"
 
-    force_g = 0.000005
+    force_g = 0.000002
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble (
+    gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "periodic",
+        "right": "periodic",
     }
 
     # Specify MRT collision operator and its rates
@@ -70,11 +71,11 @@ def test_mrt_rising_cs():
         skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
-        collision="bgk",
+        collision=collision,
         init_type="init_from_file",
         init_dir=init_file,
         tau=tau,
-        #bc_config=bc_config,
+        bc_config=bc_config,
         eos="carnahan-starling",
         a_eos=a_eos,
         b_eos=b_eos,
