@@ -6,6 +6,7 @@ import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def test_single_phase_gravity_simulation():
@@ -30,7 +31,7 @@ def test_single_phase_gravity_simulation():
         tau=tau,
         nt=nt,
         save_interval=save_interval,
-        force_enabled=False,
+        force_enabled=True,
         force_obj=gravity,
         init_type="standard"
     )
