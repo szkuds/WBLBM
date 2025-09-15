@@ -613,11 +613,18 @@ operators/
             def __call__(self, f: jnp.ndarray, force: jnp.ndarray = None):
                 if self.force_enabled:
                     rho, u, force_tot = self.macroscopic(f, force=force)
+        
+                    # Calculate source term and pass it to collision
+                    feq = self.equilibrium(rho, u)
+                    source = self.source_term(rho, u, force_tot)
+                    fcol = self.collision(f, feq, source)
                 else:
                     rho, u = self.macroscopic(f)
-                feq = self.equilibrium(rho, u)
-                fcol = self.collision(f, feq)
+                    feq = self.equilibrium(rho, u)
+                    fcol = self.collision(f, feq)
+        
                 fstream = self.streaming(fcol)
+        
                 if self.boundary_condition is not None:
                     fbc = self.boundary_condition(fstream, fcol)
                     return fbc
@@ -1382,17 +1389,13 @@ operators/
         
                 # Initialize equilibrium distribution - note the 4D shape
                 f_eq = jnp.zeros((nx, ny, q, 1))
-        
+                u2 = ux * ux + uy * uy
                 # Calculate equilibrium for each velocity direction
                 for i in range(q):
                     cu = cx[i] * ux + cy[i] * uy
                     cu2 = cu * cu
-                    u2 = ux * ux + uy * uy
-        
                     f_eq = f_eq.at[:, :, i, :].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
-                f_eq = f_eq.at[:, :, 0, :].set(
-                    rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy)))
-                )
+                f_eq = f_eq.at[:, :, 0, :].set(rho * (1 - w[0] * (3 / 2 * u2)))
         
                 return f_eq
         --- End of equilibrium.py ---
@@ -1467,8 +1470,8 @@ operators/
                 Returns the constant gravitational force field.
                 Ignores rho as gravity is density-independent.
                 """
-                mask = rho > 0.95 * rho_v + 0.05 * rho_l
-                return self.force * rho * mask
+                #mask = rho > 0.95 * rho_v + 0.05 * rho_l
+                return self.force * (rho - (jnp.sum(rho)/(rho.shape[0]*rho.shape[1])))  # * mask
         --- End of gravitational_force_droplet.py ---
 
         gravitational_force_standard.py
@@ -1594,7 +1597,7 @@ operators/
                 Returns the constant gravitational force field.
                 Ignores rho as gravity is density-independent.
                 """
-                return self.force * (rho - rho_l)
+                return self.force * (rho - rho_l) # Here I have also used * rho_v to compensate dividing by the density in the updating of the speed
         --- End of gravitational_force_bubble.py ---
 
         __pycache__/
@@ -2536,10 +2539,13 @@ operators/
         
                     return source_
         
-                source_2d = source_term(u_2d, force_2d, grad_rho_2d)
+                source_3d = source_term(u_2d, force_2d, grad_rho_2d)
         
                 # Convert to 4D format: (nx, ny, q, 1)
-                source_4d = jnp.expand_dims(source_2d, axis=-1)
+                source_4d = jnp.expand_dims(source_3d, axis=-1)
+                
+                #assert jnp.sum(source_4d, axis=2).all() == 0
+                #assert jnp.allclose(jnp.sum(source_4d, axis=2), 0)
         
                 return source_4d
         --- End of source.py ---

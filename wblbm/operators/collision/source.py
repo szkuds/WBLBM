@@ -96,9 +96,12 @@ class SourceTerm:
 
             return source_
 
-        source_2d = source_term(u_2d, force_2d, grad_rho_2d)
+        source_3d = source_term(u_2d, force_2d, grad_rho_2d)
 
         # Convert to 4D format: (nx, ny, q, 1)
-        source_4d = jnp.expand_dims(source_2d, axis=-1)
+        source_4d = jnp.expand_dims(source_3d, axis=-1)
+        
+        #assert jnp.sum(source_4d, axis=2).all() == 0
+        #assert jnp.allclose(jnp.sum(source_4d, axis=2), 0)
 
         return source_4d
