@@ -120,33 +120,33 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             get_rho_func
         )
 
-        (phi_left, phi_right, d_rho_left, drhoright, leftsteppassed, rightsteppassed,
-         cahwindowleftphilic, cahwindowrightphilic, cahwindowleftphobic,
-         cahwindowrightphobic, pinnedcountleft, pinnedcountright, pmleft, pmright) = result
+        (phi_left, phi_right, d_rho_left, d_rho_right, left_step_passed, right_step_passed,
+         cah_window_left_philic, cah_window_right_philic, cah_window_left_phobic,
+         cah_window_right_phobic, pinned_count_left, pinned_count_right, pm_left, pm_right) = result
 
         self.hysteresis_state.update({
-            'leftsteppassed': leftsteppassed,
-            'rightsteppassed': rightsteppassed,
-            'cahwindowleftphilic': cahwindowleftphilic,
-            'cahwindowrightphilic': cahwindowrightphilic,
-            'cahwindowleftphobic': cahwindowleftphobic,
-            'cahwindowrightphobic': cahwindowrightphobic,
-            'pinnedcountleft': pinnedcountleft,
-            'pinnedcountright': pinnedcountright,
-            'pmleft': pmleft,
-            'pmright': pmright
+            'left_step_passed': left_step_passed,
+            'right_step_passed': right_step_passed,
+            'cah_window_left_philic': cah_window_left_philic,
+            'cah_window_right_philic': cah_window_right_philic,
+            'cah_window_left_phobic': cah_window_left_phobic,
+            'cah_window_right_phobic': cah_window_right_phobic,
+            'pinned_count_left': pinned_count_left,
+            'pinned_count_right': pinned_count_right,
+            'pm_left': pm_left,
+            'pm_right': pm_right
         })
 
         return {
             'phi_left': phi_left,
             'phi_right': phi_right,
             'd_rho_left': d_rho_left,
-            'd_rho_right': drhoright
+            'd_rho_right': d_rho_right
         }
 
     def _update_wetting_params(self, params):
         if "wetting_params" in self.bc_config:
-            self.bc_config["wettingparams"].update(params)
+            self.bc_config["wetting_params"].update(params)
             if hasattr(self.macroscopic, 'gradient'):
                 self.macroscopic.gradient.wettingparams.update(params)
             if hasattr(self.macroscopic, 'laplacian'):
