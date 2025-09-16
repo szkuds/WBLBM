@@ -41,17 +41,40 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             final_force = data.get("force", None)
             final_force_ext = data.get("force_ext", None)
 
+            # Calculate density ratio and determine scaling
+            rho_max = np.max(final_rho[:, :, 0, 0])
+            rho_min = np.min(final_rho[:, :, 0, 0])
+            density_ratio = rho_max / rho_min
+            use_log_scale = density_ratio > 100
+
+            if use_log_scale:
+                print(
+                    f"Using logarithmic scale for timestep {timestep} (density ratio: {density_ratio:.1f})"
+                )
+
             fig, axes = plt.subplots(
                 1,
                 2 if final_force is None else 4,
                 figsize=(12 if final_force is None else 18, 5),
             )
 
-            # Plot density
-            im1 = axes[0].imshow(
-                final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis"
-            )
-            axes[0].set_title(f"Density (t={timestep})")
+            # Plot density with conditional log scaling
+            if use_log_scale:
+                density_data = final_rho[:, :, 0, 0].T
+                density_data = np.maximum(
+                    density_data, np.min(density_data[density_data > 0]) * 1e-10
+                )
+                im1 = axes[0].imshow(
+                    density_data,
+                    origin="lower",
+                    cmap="viridis",
+                    norm=plt.matplotlib.colors.LogNorm(),
+                )
+                axes[0].set_title(f"Density (Log Scale) - t={timestep}")
+            else:
+                im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis")
+                axes[0].set_title(f"Density - t={timestep}")
+
             plt.colorbar(im1, ax=axes[0], label="Density")
 
             # --- Velocity Plotting with Vector Overlay ---

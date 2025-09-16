@@ -1,5 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
+import inspect
 
 
 class SimulationFactory:
@@ -30,6 +31,7 @@ class Run:
         init_dir=None,
         skip_interval=0,
         collision=None,  # Accept collision as a kwarg
+        simulation_name=None,  # Added simulation_name parameter
         **kwargs,
     ):
         # Accept either a string or a dict for collision
@@ -50,6 +52,19 @@ class Run:
         self.results_dir = results_dir
         self.init_type = init_type
         self.init_dir = init_dir
+        # Auto-detect simulation name from calling function if not provided
+        if simulation_name is None:
+            frame = inspect.currentframe()
+            try:
+                caller_frame = frame.f_back
+                while caller_frame:
+                    func_name = caller_frame.f_code.co_name
+                    if func_name != "<module>" and not func_name.startswith("_"):
+                        simulation_name = func_name
+                        break
+                    caller_frame = caller_frame.f_back
+            finally:
+                del frame
         self.config = self._build_config(
             simulation_type=simulation_type,
             save_interval=save_interval,
@@ -61,13 +76,15 @@ class Run:
         )
         from wblbm.utils.io import SimulationIO
 
-        self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
+        self.io_handler = SimulationIO(
+            base_dir=results_dir, config=self.config, simulation_name=simulation_name
+        )
 
     def _build_config(self, **kwargs):
         # Simple config builder for demonstration; extend as needed
         return dict(**kwargs)
 
-    #TODO: need to double check that data is saved properly
+    # TODO: need to double check that data is saved properly
     def _save_data(self, it, fprev):
         # Save data using the simulation's macroscopic operator
         force_ext = None

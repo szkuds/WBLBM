@@ -80,7 +80,7 @@ operators/
         
                 Args:
                     grid (jnp.ndarray): Input field, shape (nx, ny, 1, 1)
-                    padmode (list, optional): List of padding modes for each pad step
+                    pad_mode (list, optional): List of padding modes for each pad step
         
                 Returns:
                     jnp.ndarray: Gradient field, shape (nx, ny, 1, 2)
@@ -247,7 +247,7 @@ operators/
             def __init__(self, lattice: Lattice, bc_config: dict = None):
                 self.w = lattice.w
                 self.bc_config = bc_config
-                self.padmode = determine_padding_modes(bc_config)
+                self.pad_mode = determine_padding_modes(bc_config)
                 # Only extract wetting parameters if wetting BC is present
                 self.wetting_params = None
                 if has_wetting_bc(bc_config):
@@ -272,38 +272,31 @@ operators/
                 else:
                     return self._laplacian_standard(grid, padmode)
         
-            def _laplacian_standard(self, grid, pad_mode):
+            def _laplacian_standard(self, grid, padmode):
                 """Standard laplacian calculation."""
-                # Use provided pad_mode or fall back to self.pad_mode
-                effective_pad_mode = pad_mode if pad_mode is not None else self.padmode
+                effective_padmode = padmode if padmode is not None else self.pad_mode
         
-                # Extract 2D data from 4D input
                 if grid.ndim == 4:
-                    grid_2d = grid[:, :, 0, 0]  # Extract (nx, ny) from (nx, ny, 1, 1)
+                    grid_2d = grid[:, :, 0, 0]
                 else:
                     grid_2d = grid
         
                 w = self.w
         
                 laplacian_2d = jnp.zeros_like(grid_2d)
-                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_pad_mode[0])
-                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_pad_mode[1])
-                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_pad_mode[2])
-                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_pad_mode[3])
+                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
+                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
+                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
+                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
         
-                # Side nodes
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
                 grid_ipos1_j0 = grid_padded[2:, 1:-1]
                 grid_i0_jneg1 = grid_padded[1:-1, :-2]
                 grid_i0_jpos1 = grid_padded[1:-1, 2:]
-        
-                # Corner nodes
                 grid_ipos1_jpos1 = grid_padded[2:, 2:]
                 grid_ineg1_jpos1 = grid_padded[:-2, 2:]
                 grid_ineg1_jneg1 = grid_padded[:-2, :-2]
                 grid_ipos1_jneg1 = grid_padded[2:, :-2]
-        
-                # Central node
                 grid_i0_j0 = grid_padded[1:-1, 1:-1]
         
                 laplacian_2d = laplacian_2d.at[:, :].set(
@@ -320,40 +313,36 @@ operators/
                     )
                 )
         
-                # Convert to 4D format: (nx, ny, 1, 1)
                 laplacian_4d = jnp.zeros((grid_2d.shape[0], grid_2d.shape[1], 1, 1))
                 laplacian_4d = laplacian_4d.at[:, :, 0, 0].set(laplacian_2d)
         
                 return laplacian_4d
         
-            def _laplacian_wetting(self, grid, padmode):
+            def _laplacian_wetting(self, grid, pad_mode):
                 """Custom wetting laplacian implementation."""
-                RHO_L = self.wetting_params['rho_l']
-                RHO_V = self.wetting_params['rho_v']
+                rho_l = self.wetting_params['rho_l']
+                rho_v = self.wetting_params['rho_v']
                 phi_left = self.wetting_params['phi_left']
                 phi_right = self.wetting_params['phi_right']
                 d_rho_left = self.wetting_params['d_rho_left']
                 d_rho_right = self.wetting_params['d_rho_right']
-                W = self.wetting_params['W']
-                w = self.w
+                width = self.wetting_params['width']
+                weights = self.w
         
-                effective_padmode = padmode if padmode is not None else self.padmode
+                effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
                 if grid.ndim == 4:
                     grid2d = grid[:, :, 0, 0]
                 else:
                     grid2d = grid
         
-                # Pad as usual
-                grid_padded = jnp.pad(grid2d, ((0, 0), (0, 1)), mode=effective_padmode[0])
-                grid_padded = jnp.pad(grid_padded, ((0, 0), (1, 0)), mode=effective_padmode[1])
-                grid_padded = jnp.pad(grid_padded, ((0, 1), (0, 0)), mode=effective_padmode[2])
-                grid_padded = jnp.pad(grid_padded, ((1, 0), (0, 0)), mode=effective_padmode[3])
+                grid_padded = jnp.pad(grid2d, ((0, 0), (0, 1)), mode=effective_pad_mode[0])
+                grid_padded = jnp.pad(grid_padded, ((0, 0), (1, 0)), mode=effective_pad_mode[1])
+                grid_padded = jnp.pad(grid_padded, ((0, 1), (0, 0)), mode=effective_pad_mode[2])
+                grid_padded = jnp.pad(grid_padded, ((1, 0), (0, 0)), mode=effective_pad_mode[3])
         
-                # Apply wetting to any relevant edge
                 grid_padded = apply_wetting_to_all_edges(self, grid_padded,
-                    RHO_L, RHO_V, phi_left, phi_right, d_rho_left, d_rho_right, W)
+                    rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width)
         
-                # STANDARD LAPLACIAN STENCIL
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
                 grid_ipos1_j0 = grid_padded[2:, 1:-1]
                 grid_i0_jneg1 = grid_padded[1:-1, :-2]
@@ -365,21 +354,19 @@ operators/
                 grid_i0_j0 = grid_padded[1:-1, 1:-1]
         
                 laplacian2d = 6 * (
-                    w[1] * (grid_ipos1_j0 - grid_i0_j0) +
-                    w[2] * (grid_i0_jpos1 - grid_i0_j0) +
-                    w[3] * (grid_ineg1_j0 - grid_i0_j0) +
-                    w[4] * (grid_i0_jneg1 - grid_i0_j0) +
-                    w[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
-                    w[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
-                    w[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
-                    w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
+                    weights[1] * (grid_ipos1_j0 - grid_i0_j0) +
+                    weights[2] * (grid_i0_jpos1 - grid_i0_j0) +
+                    weights[3] * (grid_ineg1_j0 - grid_i0_j0) +
+                    weights[4] * (grid_i0_jneg1 - grid_i0_j0) +
+                    weights[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
+                    weights[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
+                    weights[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
+                    weights[8] * (grid_ipos1_jneg1 - grid_i0_j0)
                 )
         
                 laplacian4d = jnp.zeros(laplacian2d.shape + (1, 1))
                 laplacian4d = laplacian4d.at[..., 0, 0].set(laplacian2d)
-                return laplacian4d
-        
-        --- End of laplacian.py ---
+                return laplacian4d        --- End of laplacian.py ---
 
         __pycache__/
             laplacian.cpython-311.pyc
@@ -894,11 +881,11 @@ operators/
     initialise/
         __init__.py
         --- Code in __init__.py ---
-        from .init import Initialise
+        from .initialise import Initialise
         --- End of __init__.py ---
 
-        init.py
-        --- Code in init.py ---
+        initialise.py
+        --- Code in initialise.py ---
         import jax.numpy as jnp
         import numpy as np
         import os
@@ -1275,11 +1262,10 @@ operators/
                 rho_jax = jnp.array(rho)
                 u_jax = jnp.array(u)
                 return self.equilibrium(rho_jax, u_jax)
-        --- End of init.py ---
+        --- End of initialise.py ---
 
         __pycache__/
-            init.cpython-311.pyc
-            init.cpython-312.pyc
+            initialise.cpython-312.pyc
             __init__.cpython-312.pyc
             __init__.cpython-311.pyc
     __pycache__/
@@ -1313,6 +1299,10 @@ operators/
                 valid_edges = ["top", "bottom", "left", "right"]
                 valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
                 for edge, bc_type in bc_config.items():
+                    # Skip wetting_params as it is not an edge boundary condition
+                    if edge == "wetting_params":
+                        continue
+        
                     if edge not in valid_edges:
                         raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
                     if bc_type not in valid_types:
@@ -1635,7 +1625,8 @@ operators/
         from .gravitational_force_bubble import GravityForceMultiphaseBubble
         from .gravitational_force_standard import GravityForceSinglephase
         from .gravitational_force_droplet import GravityForceMultiphaseDroplet
-        from .gravitational_force import GravityForceMultiphase        --- End of __init__.py ---
+        from .gravitational_force import GravityForceMultiphase
+        --- End of __init__.py ---
 
         gravitational_force_multiphase_WithModifiedMask.py
         --- Code in gravitational_force_multiphase_WithModifiedMask.py ---
@@ -1903,6 +1894,7 @@ operators/
             else:
                 arr = arr.at[idx, 1:-1].set(updated_slice)
             return arr
+        
         --- End of wetting_util.py ---
 
         __init__.py
@@ -2591,6 +2583,7 @@ operators/
         --- End of contact_angle.py ---
 
         __pycache__/
+            wetting_util.cpython-312.pyc
             __init__.cpython-312.pyc
     collision/
         __init__.py
@@ -3989,7 +3982,7 @@ simulations/
     from .base import BaseSimulation
     from wblbm.operators.update.update import Update
     from wblbm.operators.macroscopic.macroscopic import Macroscopic
-    from wblbm.operators.initialise.init import Initialise
+    from wblbm.operators.initialise.initialise import Initialise
     import jax.numpy as jnp
     
     
@@ -4078,7 +4071,7 @@ simulations/
     from .base import BaseSimulation
     from wblbm.operators.update.update_multiphase import UpdateMultiphase
     from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
-    from wblbm.operators.initialise.init import Initialise
+    from wblbm.operators.initialise.initialise import Initialise
     import jax.numpy as jnp
     
     
@@ -4168,6 +4161,14 @@ simulations/
                 )
             elif init_type =="multiphase_lateral_bubble_configuration":
                 return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
+                    self.rho_l, self.rho_v, self.interface_width
+                )
+            elif init_type =="wetting_chem_step":
+                return self.initialiser.initialise_wetting_chemical_step(
+                    self.rho_l, self.rho_v, self.interface_width
+                )
+            elif init_type =="wetting":
+                return self.initialiser.initialise_wetting(
                     self.rho_l, self.rho_v, self.interface_width
                 )
             else:

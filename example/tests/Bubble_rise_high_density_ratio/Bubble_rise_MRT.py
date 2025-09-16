@@ -15,7 +15,7 @@ def rising_bubble_mrt():
 
     grid_shape = (201, 201)
     nt = 100000
-    save_interval = 100
+    save_interval = 1000
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
 
     kappa = 0.01
@@ -23,7 +23,7 @@ def rising_bubble_mrt():
     rho_v = .001
     interface_width = 5
 
-    force_g = 0.000000075
+    force_g = 0.0000000
     inclination_angle = 0
     gravity = GravityForceMultiphase(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
