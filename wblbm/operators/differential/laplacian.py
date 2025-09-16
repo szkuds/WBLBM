@@ -27,7 +27,7 @@ class Laplacian:
         if has_wetting_bc(bc_config):
             self.wetting_params = bc_config.get('wetting_params')
             if self.wetting_params is None:
-                raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bcconfig")
+                raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bc_config")
 
     @partial(jit, static_argnums=(0,))
     def __call__(self, grid, padmode: list = None):

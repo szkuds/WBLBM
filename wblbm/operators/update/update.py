@@ -22,7 +22,7 @@ class Update(object):
         bc_config: dict = None,
         force_enabled: bool = False,
         collision_scheme: str = "bgk",
-        kvec=None,
+        k_diag=None,
         **kwargs
     ):
         self.grid = grid
@@ -37,7 +37,7 @@ class Update(object):
             for param in ["k0", "kb", "k2", "k4", "kv"]:
                 if param in kwargs:
                     mrt_params[param] = kwargs[param]
-            self.collision = CollisionMRT(grid, lattice, k_diag=kvec, **mrt_params)
+            self.collision = CollisionMRT(grid, lattice, k_diag=k_diag, **mrt_params)
         else:
             self.collision = CollisionBGK(grid, lattice, tau)
         self.source_term = SourceTerm(grid, lattice, bc_config)

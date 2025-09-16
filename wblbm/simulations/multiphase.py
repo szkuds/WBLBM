@@ -1,5 +1,6 @@
 from .base import BaseSimulation
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
+from wblbm.operators.update.update_multiphase_hysteresis import UpdateMultiphaseHysteresis
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
@@ -26,7 +27,7 @@ class MultiphaseSimulation(BaseSimulation):
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
         self.update = None
-        self.initialiser = None
+        self.initialise = None
         self.macroscopic = None
         self.eos = eos
         self.kappa = kappa
@@ -43,22 +44,22 @@ class MultiphaseSimulation(BaseSimulation):
         self.multiphase = True
 
     def setup_operators(self):
-        self.initialiser = Initialise(self.grid, self.lattice)
-        self.update = UpdateMultiphase(
-            self.grid,
-            self.lattice,
-            self.tau,
-            self.kappa,
-            self.interface_width,
-            self.rho_l,
-            self.rho_v,
-            self.bc_config,
-            self.force_enabled,
-            collision_scheme=self.collision_scheme,
-            eos=self.eos,
-            kvec=self.k_diag,
-            **self.kwargs  # Pass additional keyword arguments
-        )
+        self.initialise = Initialise(self.grid, self.lattice)
+        # Check if hysteresis parameters are present
+        if self.bc_config and "hysteresis_params" in self.bc_config:
+            self.update = UpdateMultiphaseHysteresis(
+                self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
+                self.rho_l, self.rho_v, self.bc_config, self.force_enabled,
+                collision_scheme=self.collision_scheme, eos=self.eos,
+                k_diag=self.k_diag, **self.kwargs
+            )
+        else:
+            self.update = UpdateMultiphase(
+                self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
+                self.rho_l, self.rho_v, self.bc_config, self.force_enabled,
+                collisionscheme=self.collision_scheme, eos=self.eos,
+                k_diag=self.k_diag, **self.kwargs
+            )
         self.macroscopic = self.update.macroscopic
 
     def initialize_fields(self, init_type="multiphase_droplet", *, init_dir=None):
@@ -67,42 +68,42 @@ class MultiphaseSimulation(BaseSimulation):
                 raise ValueError(
                     "init_from_file requires init_dir pointing to a .npz file"
                 )
-            return self.initialiser.init_from_npz(init_dir)
+            return self.initialise.init_from_npz(init_dir)
 
         elif init_type == "multiphase_droplet":
-            return self.initialiser.initialise_multiphase_droplet(
+            return self.initialise.initialise_multiphase_droplet(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type == "multiphase_bubble":
-            return self.initialiser.initialise_multiphase_bubble(
+            return self.initialise.initialise_multiphase_bubble(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type == "multiphase_droplet_top":
-            return self.initialiser.initialise_multiphase_droplet_top(
+            return self.initialise.initialise_multiphase_droplet_top(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type == "multiphase_bubble_bot":
-            return self.initialiser.initialise_multiphase_bubble_bot(
+            return self.initialise.initialise_multiphase_bubble_bot(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type == "multiphase_bubble_bubble":
-            return self.initialiser.initialise_multiphase_bubble_bubble(
+            return self.initialise.initialise_multiphase_bubble_bubble(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type =="multiphase_lateral_bubble_configuration":
-            return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
+            return self.initialise.initialise_multiphase_lateral_bubble_configuration(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type =="wetting_chem_step":
-            return self.initialiser.initialise_wetting_chemical_step(
+            return self.initialise.initialise_wetting_chemical_step(
                 self.rho_l, self.rho_v, self.interface_width
             )
         elif init_type =="wetting":
-            return self.initialiser.initialise_wetting(
+            return self.initialise.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
             )
         else:
-            return self.initialiser.initialise_standard()
+            return self.initialise.initialise_standard()
 
     def run_timestep(self, fprev, it):
         force_ext = None

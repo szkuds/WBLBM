@@ -27,7 +27,7 @@ class UpdateMultiphase(Update):
         force_enabled: bool = False,
         collision_scheme: str = "bgk",
         eos: str = "double-well",
-        kvec=None,
+        k_diag=None,
         **kwargs
     ):
         super().__init__(
@@ -37,7 +37,7 @@ class UpdateMultiphase(Update):
             bc_config,
             force_enabled=force_enabled,
             collision_scheme=collision_scheme,
-            kvec=kvec,
+            k_diag=k_diag,
             **kwargs
         )
         if eos == "double-well":
