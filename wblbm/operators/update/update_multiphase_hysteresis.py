@@ -17,6 +17,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
         if bc_config and "hysteresis_params" in bc_config:
             self.hysteresis_enabled = True
+            self.bc_config = bc_config
             hparams = bc_config["hysteresis_params"]
 
             self.hysteresis = Hysteresis(

@@ -24,7 +24,7 @@ class BoundaryCondition:
         valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
         for edge, bc_type in bc_config.items():
             # Skip wetting_params as it is not an edge boundary condition
-            if edge == "wetting_params":
+            if edge == "wetting_params" or edge == "hysteresis_params":
                 continue
 
             if edge not in valid_edges:
