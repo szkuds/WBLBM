@@ -3,32 +3,28 @@ from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
-# this line is added for debugging
-# jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
-def test_wetting_simulation():
-    """Test wetting implementation with a droplet on a surface under gravity."""
-    print("\n=== Testing LBM Wetting Implementation ===")
+def test_wetting_hysteresis_simulation():
+    """Test LBM wetting implementation with hysteresis enabled."""
+    print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (200, 100)  # nx, ny
-    tau = 0.99  # Relaxation time
-    nt = 20000  # Number of time steps
-    save_interval = 2000  # Save every 500 steps
-    kappa = 0.04  # Surface tension parameter
-    rho_l = 1.0  # Liquid density
-    rho_v = 0.001  # Vapor density
-    interface_width = 5  # Interface width for smooth transition
+    grid_shape = (200, 100)
+    tau = 0.99
+    nt = 20000
+    save_interval = 2000
+    kappa = 0.04
+    rho_l = 1.0
+    rho_v = 0.001
+    interface_width = 5
 
-    # Wetting parameters
-    phi_value = 1.0  # Wetting strength parameter
-    d_rho_value = 0.0  # Density adjustment parameter
+    phi_value = 1.2
+    d_rho_value = 0.0
 
-    # Gravity setup (downward force for droplet settling)
-    force_g = 0.0000000  # Small gravity to observe wetting without rapid fall
-    inclination_angle = 0  # Vertical gravity
+    force_g = 0.0
+    inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
@@ -41,15 +37,28 @@ def test_wetting_simulation():
         'wetting_params': {
             'rho_l': rho_l,
             'rho_v': rho_v,
-            'phi_left': 1.2,
-            'phi_right': 1.2,
-            'd_rho_left': 0.0,
-            'd_rho_right': 0.0,
+            'phi_left': phi_value,
+            'phi_right': phi_value,
+            'd_rho_left': d_rho_value,
+            'd_rho_right': d_rho_value,
             'width': interface_width
+        },
+        'hysteresis_params': {
+            'advancing_ca_hydrophobic': 120.0,
+            'receding_ca_hydrophobic': 90.0,
+            'advancing_ca_hydrophilic': 60.0,
+            'receding_ca_hydrophilic': 30.0,
+            'cll_threshold': 0.1,
+            'ca_threshold': 5.0,
+            'change_d_rho': 0.01,
+            'change_phi': 0.01,
+            'while_limiter': 100,
+            'phi_val': 1.2,
+            'd_rho_val': 0.0,
+            'w': interface_width
         }
     }
 
-    # Initialize and run simulation with wetting enabled
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
@@ -67,20 +76,19 @@ def test_wetting_simulation():
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
-        hysteresis_params=None,
+        hysteresis_params=bc_config['hysteresis_params'],
         init_type="wetting",
     )
 
-    # Run with wetting initialization
     sim.run(verbose=True)
     return sim
 
 
 if __name__ == "__main__":
-    sim_wetting = test_wetting_simulation()
+    sim_wetting_hysteresis = test_wetting_hysteresis_simulation()
 
     # Visualize results
-    print("\n=== Visualizing Wetting Test Results ===")
-    visualise(sim_wetting, "Wetting Implementation Test")
+    print("\n=== Visualizing Wetting Hysteresis Test Results ===")
+    visualise(sim_wetting_hysteresis, "Wetting Hysteresis Implementation Test")
 
     print("\nTest completed! Check the 'results' directory for data and plots.")
