@@ -46,40 +46,35 @@ operators/
         from jax import jit
         
         from wblbm.lattice.lattice import Lattice
+        from wblbm.operators.wetting.wetting_util import (
+            determine_padding_modes,
+            has_wetting_bc,
+            apply_wetting_to_all_edges,
+        )
         
         
         class Gradient:
             """
             Callable class to calculate the gradient of a field using the LBM stencil,
             supporting asymmetric per-side padding.
+        
+            The implementation of the gradient operator is based on https://doi.org/10.1063/5.0072221
             """
         
             def __init__(self, lattice: Lattice, bc_config: dict = None):
                 self.w = lattice.w
                 self.c = lattice.c
                 self.bc_config = bc_config
-                self.padmode = self._determine_padding_modes()
-        
-            def _determine_padding_modes(self):
-                """Determine padding modes based on boundary conditions."""
-                if not self.bc_config:
-                    return ["wrap", "wrap", "wrap", "wrap"]  # Default periodic
-        
-                pad_mode = ["wrap", "wrap", "wrap", "wrap"]  # [bottom, right, top, left]
-                for edge, bc_type in self.bc_config.items():
-                    if bc_type in ["symmetry", "bounce-back"]:
-                        if edge == "bottom":
-                            pad_mode[0] = "edge"
-                        elif edge == "right":
-                            pad_mode[1] = "edge"
-                        elif edge == "top":
-                            pad_mode[2] = "edge"
-                        elif edge == "left":
-                            pad_mode[3] = "edge"
-                return pad_mode
+                self.pad_mode = determine_padding_modes(bc_config)
+                # Only extract wetting parameters if wetting BC is present
+                self.wetting_params = None
+                if has_wetting_bc(bc_config):
+                    self.wetting_params = bc_config.get('wetting_params')
+                    if self.wetting_params is None:
+                        raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bc_config")
         
             @partial(jit, static_argnums=(0,))
-            def __call__(self, grid, padmode: list = None):
+            def __call__(self, grid, pad_mode: list = None):
                 """
                 Calculate the gradient using the provided stencil and per-side boundary modes.
         
@@ -90,8 +85,15 @@ operators/
                 Returns:
                     jnp.ndarray: Gradient field, shape (nx, ny, 1, 2)
                 """
-                # Use provided padmode or fall back to self.padmode
-                effective_padmode = padmode if padmode is not None else self.padmode
+                if self.wetting_params is not None:  # Only use wetting if params are available
+                    return self._gradient_wetting(grid, pad_mode)
+                else:
+                    return self._gradient_standard(grid, pad_mode)
+        
+            def _gradient_standard(self, grid, pad_mode):
+                """Standard gradient calculation."""
+                # Use provided pad_mode or fall back to self.pad_mode
+                effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
         
                 # Extract 2D data from 4D input
                 if grid.ndim == 4:
@@ -105,10 +107,10 @@ operators/
                 grad_ = jnp.zeros((2, grid_2d.shape[0], grid_2d.shape[1]))
         
                 # Apply asymmetric per-side padding (same convention/order as Laplacian)
-                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
-                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
-                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
-                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
+                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_pad_mode[0])
+                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_pad_mode[1])
+                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_pad_mode[2])
+                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_pad_mode[3])
         
                 # Side nodes
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -125,24 +127,24 @@ operators/
                 grad_ = grad_.at[0, :, :].set(
                     3
                     * (
-                        w[1] * c[0, 1] * grid_ipos1_j0
-                        + w[3] * c[0, 3] * grid_ineg1_j0
-                        + w[5] * c[0, 5] * grid_ipos1_jpos1
-                        + w[6] * c[0, 6] * grid_ineg1_jpos1
-                        + w[7] * c[0, 7] * grid_ineg1_jneg1
-                        + w[8] * c[0, 8] * grid_ipos1_jneg1
+                            w[1] * c[0, 1] * grid_ipos1_j0
+                            + w[3] * c[0, 3] * grid_ineg1_j0
+                            + w[5] * c[0, 5] * grid_ipos1_jpos1
+                            + w[6] * c[0, 6] * grid_ineg1_jpos1
+                            + w[7] * c[0, 7] * grid_ineg1_jneg1
+                            + w[8] * c[0, 8] * grid_ipos1_jneg1
                     )
                 )
         
                 grad_ = grad_.at[1, :, :].set(
                     3
                     * (
-                        w[2] * c[1, 2] * grid_i0_jpos1
-                        + w[4] * c[1, 4] * grid_i0_jneg1
-                        + w[5] * c[1, 5] * grid_ipos1_jpos1
-                        + w[6] * c[1, 6] * grid_ineg1_jpos1
-                        + w[7] * c[1, 7] * grid_ineg1_jneg1
-                        + w[8] * c[1, 8] * grid_ipos1_jneg1
+                            w[2] * c[1, 2] * grid_i0_jpos1
+                            + w[4] * c[1, 4] * grid_i0_jneg1
+                            + w[5] * c[1, 5] * grid_ipos1_jpos1
+                            + w[6] * c[1, 6] * grid_ineg1_jpos1
+                            + w[7] * c[1, 7] * grid_ineg1_jneg1
+                            + w[8] * c[1, 8] * grid_ipos1_jneg1
                     )
                 )
         
@@ -152,6 +154,67 @@ operators/
                 grad_4d = grad_4d.at[:, :, 0, 1].set(grad_[1, :, :])
         
                 return grad_4d
+        
+            def _gradient_wetting(self, grid, pad_mode):
+                rho_l = self.wetting_params['rho_l']
+                rho_v = self.wetting_params['rho_v']
+                phi_left = self.wetting_params['phi_left']
+                phi_right = self.wetting_params['phi_right']
+                d_rho_left = self.wetting_params['d_rho_left']
+                d_rho_right = self.wetting_params['d_rho_right']
+                width = self.wetting_params['width']
+                weight = self.w
+                c = self.c
+        
+                effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
+                if grid.ndim == 4:
+                    grid2d = grid[:, :, 0, 0]
+                else:
+                    grid2d = grid
+        
+                grid_padded = jnp.pad(grid2d, ((0, 0), (0, 1)), mode=effective_pad_mode[0])
+                grid_padded = jnp.pad(grid_padded, ((0, 0), (1, 0)), mode=effective_pad_mode[1])
+                grid_padded = jnp.pad(grid_padded, ((0, 1), (0, 0)), mode=effective_pad_mode[2])
+                grid_padded = jnp.pad(grid_padded, ((1, 0), (0, 0)), mode=effective_pad_mode[3])
+        
+                # Apply wetting to any relevant edge
+                grid_padded = apply_wetting_to_all_edges(
+                    self, grid_padded, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width
+                )
+        
+                # STANDARD GRADIENT STENCIL
+                grid_ineg1_j0 = grid_padded[:-2, 1:-1]
+                grid_ipos1_j0 = grid_padded[2:, 1:-1]
+                grid_i0_jneg1 = grid_padded[1:-1, :-2]
+                grid_i0_jpos1 = grid_padded[1:-1, 2:]
+                grid_ipos1_jpos1 = grid_padded[2:, 2:]
+                grid_ineg1_jpos1 = grid_padded[:-2, 2:]
+                grid_ineg1_jneg1 = grid_padded[:-2, :-2]
+                grid_ipos1_jneg1 = grid_padded[2:, :-2]
+        
+                grad0 = (3 * (
+                        weight[1] * c[0, 1] * grid_ipos1_j0 +
+                        weight[3] * c[0, 3] * grid_ineg1_j0 +
+                        weight[5] * c[0, 5] * grid_ipos1_jpos1 +
+                        weight[6] * c[0, 6] * grid_ineg1_jpos1 +
+                        weight[7] * c[0, 7] * grid_ineg1_jneg1 +
+                        weight[8] * c[0, 8] * grid_ipos1_jneg1
+                ))
+        
+                grad1 = (3 * (
+                        weight[2] * c[1, 2] * grid_i0_jpos1 +
+                        weight[4] * c[1, 4] * grid_i0_jneg1 +
+                        weight[5] * c[1, 5] * grid_ipos1_jpos1 +
+                        weight[6] * c[1, 6] * grid_ineg1_jpos1 +
+                        weight[7] * c[1, 7] * grid_ineg1_jneg1 +
+                        weight[8] * c[1, 8] * grid_ipos1_jneg1
+                ))
+        
+                grad4d = jnp.zeros(grad0.shape + (1, 2))
+                grad4d = grad4d.at[..., 0, 0].set(grad0)
+                grad4d = grad4d.at[..., 0, 1].set(grad1)
+                return grad4d
+        
         --- End of gradient.py ---
 
         __init__.py
@@ -167,35 +230,30 @@ operators/
         from jax import jit
         
         from wblbm.lattice.lattice import Lattice
+        from wblbm.operators.wetting.wetting_util import (
+            determine_padding_modes,
+            has_wetting_bc,
+            apply_wetting_to_all_edges,
+        )
         
         
         class Laplacian:
             """
             Callable class to calculate the Laplacian of a 2D grid using the LBM stencil.
+        
+            The implementation of the laplacian is based on https://doi.org/10.1063/5.0072221
             """
         
             def __init__(self, lattice: Lattice, bc_config: dict = None):
                 self.w = lattice.w
                 self.bc_config = bc_config
-                self.padmode = self._determine_padding_modes()
-        
-            def _determine_padding_modes(self):
-                """Determine padding modes based on boundary conditions."""
-                if not self.bc_config:
-                    return ["wrap", "wrap", "wrap", "wrap"]  # Default periodic
-        
-                pad_mode = ["wrap", "wrap", "wrap", "wrap"]  # [bottom, right, top, left]
-                for edge, bc_type in self.bc_config.items():
-                    if bc_type in ["symmetry", "bounce-back"]:
-                        if edge == "bottom":
-                            pad_mode[0] = "edge"
-                        elif edge == "right":
-                            pad_mode[1] = "edge"
-                        elif edge == "top":
-                            pad_mode[2] = "edge"
-                        elif edge == "left":
-                            pad_mode[3] = "edge"
-                return pad_mode
+                self.padmode = determine_padding_modes(bc_config)
+                # Only extract wetting parameters if wetting BC is present
+                self.wetting_params = None
+                if has_wetting_bc(bc_config):
+                    self.wetting_params = bc_config.get('wetting_params')
+                    if self.wetting_params is None:
+                        raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bcconfig")
         
             @partial(jit, static_argnums=(0,))
             def __call__(self, grid, padmode: list = None):
@@ -209,8 +267,15 @@ operators/
                 Returns:
                     jnp.ndarray: Laplacian of the input grid, shape (nx, ny, 1, 1)
                 """
-                # Use provided padmode or fall back to self.padmode
-                effective_padmode = padmode if padmode is not None else self.padmode
+                if self.wetting_params is not None:  # Only use wetting if params are available
+                    return self._laplacian_wetting(grid, padmode)
+                else:
+                    return self._laplacian_standard(grid, padmode)
+        
+            def _laplacian_standard(self, grid, pad_mode):
+                """Standard laplacian calculation."""
+                # Use provided pad_mode or fall back to self.pad_mode
+                effective_pad_mode = pad_mode if pad_mode is not None else self.padmode
         
                 # Extract 2D data from 4D input
                 if grid.ndim == 4:
@@ -221,10 +286,10 @@ operators/
                 w = self.w
         
                 laplacian_2d = jnp.zeros_like(grid_2d)
-                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
-                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
-                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
-                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
+                grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_pad_mode[0])
+                grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_pad_mode[1])
+                grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_pad_mode[2])
+                grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_pad_mode[3])
         
                 # Side nodes
                 grid_ineg1_j0 = grid_padded[:-2, 1:-1]
@@ -260,6 +325,60 @@ operators/
                 laplacian_4d = laplacian_4d.at[:, :, 0, 0].set(laplacian_2d)
         
                 return laplacian_4d
+        
+            def _laplacian_wetting(self, grid, padmode):
+                """Custom wetting laplacian implementation."""
+                RHO_L = self.wetting_params['rho_l']
+                RHO_V = self.wetting_params['rho_v']
+                phi_left = self.wetting_params['phi_left']
+                phi_right = self.wetting_params['phi_right']
+                d_rho_left = self.wetting_params['d_rho_left']
+                d_rho_right = self.wetting_params['d_rho_right']
+                W = self.wetting_params['W']
+                w = self.w
+        
+                effective_padmode = padmode if padmode is not None else self.padmode
+                if grid.ndim == 4:
+                    grid2d = grid[:, :, 0, 0]
+                else:
+                    grid2d = grid
+        
+                # Pad as usual
+                grid_padded = jnp.pad(grid2d, ((0, 0), (0, 1)), mode=effective_padmode[0])
+                grid_padded = jnp.pad(grid_padded, ((0, 0), (1, 0)), mode=effective_padmode[1])
+                grid_padded = jnp.pad(grid_padded, ((0, 1), (0, 0)), mode=effective_padmode[2])
+                grid_padded = jnp.pad(grid_padded, ((1, 0), (0, 0)), mode=effective_padmode[3])
+        
+                # Apply wetting to any relevant edge
+                grid_padded = apply_wetting_to_all_edges(self, grid_padded,
+                    RHO_L, RHO_V, phi_left, phi_right, d_rho_left, d_rho_right, W)
+        
+                # STANDARD LAPLACIAN STENCIL
+                grid_ineg1_j0 = grid_padded[:-2, 1:-1]
+                grid_ipos1_j0 = grid_padded[2:, 1:-1]
+                grid_i0_jneg1 = grid_padded[1:-1, :-2]
+                grid_i0_jpos1 = grid_padded[1:-1, 2:]
+                grid_ipos1_jpos1 = grid_padded[2:, 2:]
+                grid_ineg1_jpos1 = grid_padded[:-2, 2:]
+                grid_ineg1_jneg1 = grid_padded[:-2, :-2]
+                grid_ipos1_jneg1 = grid_padded[2:, :-2]
+                grid_i0_j0 = grid_padded[1:-1, 1:-1]
+        
+                laplacian2d = 6 * (
+                    w[1] * (grid_ipos1_j0 - grid_i0_j0) +
+                    w[2] * (grid_i0_jpos1 - grid_i0_j0) +
+                    w[3] * (grid_ineg1_j0 - grid_i0_j0) +
+                    w[4] * (grid_i0_jneg1 - grid_i0_j0) +
+                    w[5] * (grid_ipos1_jpos1 - grid_i0_j0) +
+                    w[6] * (grid_ineg1_jpos1 - grid_i0_j0) +
+                    w[7] * (grid_ineg1_jneg1 - grid_i0_j0) +
+                    w[8] * (grid_ipos1_jneg1 - grid_i0_j0)
+                )
+        
+                laplacian4d = jnp.zeros(laplacian2d.shape + (1, 1))
+                laplacian4d = laplacian4d.at[..., 0, 0].set(laplacian2d)
+                return laplacian4d
+        
         --- End of laplacian.py ---
 
         __pycache__/
@@ -525,7 +644,6 @@ operators/
                 if self.d == 2:
                     # Compute density
                     rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
-        
                     # Compute velocity WITHOUT force correction
                     cx = self.cx.reshape((1, 1, self.q, 1))
                     cy = self.cy.reshape((1, 1, self.q, 1))
@@ -624,7 +742,6 @@ operators/
                     fcol = self.collision(f, feq)
         
                 fstream = self.streaming(fcol)
-        
                 if self.boundary_condition is not None:
                     fbc = self.boundary_condition(fstream, fcol)
                     return fbc
@@ -841,7 +958,7 @@ operators/
                 # Create a density field with a bubble in the center
                 x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
                 center_x, center_y = self.nx // 2, 5 * self.ny // 6
-                radius = min(self.nx, self.ny) // 8
+                radius = min(self.nx, self.ny) // 4
         
                 # Use tanh for a smooth, stable interface
                 distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
@@ -1194,7 +1311,7 @@ operators/
                 self.opp_indices = lattice.opp_indices
                 self.edges = grid.get_edges()
                 valid_edges = ["top", "bottom", "left", "right"]
-                valid_types = ["bounce-back", "symmetry", "periodic"]
+                valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
                 for edge, bc_type in bc_config.items():
                     if edge not in valid_edges:
                         raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
@@ -1319,6 +1436,9 @@ operators/
                     )
                 return f_streamed
         
+            # @partial(jit, static_argnums=(0,))
+            # def _apply_wetting(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
+        
             @partial(jit, static_argnums=(0,))
             def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
                 # For periodic boundaries, no additional transformation is needed
@@ -1381,21 +1501,22 @@ operators/
                 cx, cy = self.cx, self.cy
         
                 # Extract velocity components
-                ux = u_[..., 0]  # Shape: (nx, ny, 1)
-                uy = u_[..., 1]  # Shape: (nx, ny, 1)
+                ux = u_[:, :, 0, 0]  # Shape: (nx, ny, 1)
+                uy = u_[:, :, 0, 1]  # Shape: (nx, ny, 1)
         
                 # Squeeze density to match velocity dimensions
-                rho = rho_.squeeze(axis=-1)  # Shape: (nx, ny, 1)
+                rho = rho_[:, :, 0, 0]  # Shape: (nx, ny, 1)
         
                 # Initialize equilibrium distribution - note the 4D shape
                 f_eq = jnp.zeros((nx, ny, q, 1))
                 u2 = ux * ux + uy * uy
                 # Calculate equilibrium for each velocity direction
-                for i in range(q):
+                for i in range(1, q):
                     cu = cx[i] * ux + cy[i] * uy
                     cu2 = cu * cu
-                    f_eq = f_eq.at[:, :, i, :].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
-                f_eq = f_eq.at[:, :, 0, :].set(rho * (1 - w[0] * (3 / 2 * u2)))
+                    f_eq = f_eq.at[:, :, i, 0].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
+                f_sum = jnp.sum(f_eq[:, :, 1:, 0], axis=2)
+                f_eq = f_eq.at[:, :, 0, 0].set(rho - f_sum)
         
                 return f_eq
         --- End of equilibrium.py ---
@@ -1470,8 +1591,8 @@ operators/
                 Returns the constant gravitational force field.
                 Ignores rho as gravity is density-independent.
                 """
-                #mask = rho > 0.95 * rho_v + 0.05 * rho_l
-                return self.force * (rho - (jnp.sum(rho)/(rho.shape[0]*rho.shape[1])))  # * mask
+                mask = rho > 0.95 * rho_v + 0.05 * rho_l
+                return self.force * rho * mask
         --- End of gravitational_force_droplet.py ---
 
         gravitational_force_standard.py
@@ -1514,7 +1635,7 @@ operators/
         from .gravitational_force_bubble import GravityForceMultiphaseBubble
         from .gravitational_force_standard import GravityForceSinglephase
         from .gravitational_force_droplet import GravityForceMultiphaseDroplet
-        --- End of __init__.py ---
+        from .gravitational_force import GravityForceMultiphase        --- End of __init__.py ---
 
         gravitational_force_multiphase_WithModifiedMask.py
         --- Code in gravitational_force_multiphase_WithModifiedMask.py ---
@@ -1562,6 +1683,41 @@ operators/
                 return self.force * rho * combined_mask
         --- End of gravitational_force_multiphase_WithModifiedMask.py ---
 
+        gravitational_force.py
+        --- Code in gravitational_force.py ---
+        import jax.numpy as jnp
+        from wblbm.operators.force.force import Force
+        
+        
+        class GravityForceMultiphase(Force):
+            """
+            Subclass for gravitational force, constant across the grid.
+            """
+        
+            def __init__(
+                self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float
+            ):
+                if d != 2:
+                    raise ValueError("Currently supports 2D (d=2) only")
+        
+                force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
+                force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+        
+                force_array = jnp.zeros((nx, ny, 1, d))
+                force_array = force_array.at[:, :, 0, 0].set(force_x)
+                force_array = force_array.at[:, :, 0, 1].set(force_y)
+        
+                super().__init__(force_array)
+        
+            def compute_force(
+                self, rho: jnp.ndarray, rho_l: float, rho_v: float
+            ) -> jnp.ndarray:
+                """
+                Implementation of the force in which both phases experience acceleration.
+                """
+                return self.force * (rho - (jnp.average(rho)))
+        --- End of gravitational_force.py ---
+
         gravitational_force_bubble.py
         --- Code in gravitational_force_bubble.py ---
         import jax.numpy as jnp
@@ -1606,12 +1762,149 @@ operators/
             gravitational_force_multiphase_WithModifiedMask.cpython-311.pyc
             gravitational_force_standard.cpython-312.pyc
             gravitational_force_multiphase_WithModifiedMask.cpython-312.pyc
+            gravitational_force.cpython-312.pyc
             gravitational_force_droplet.cpython-312.pyc
             __init__.cpython-312.pyc
             gravitational_force_bubble.cpython-311.pyc
             __init__.cpython-311.pyc
             gravitational_force_bubble.cpython-312.pyc
     wetting/
+        wetting_util.py
+        --- Code in wetting_util.py ---
+        import jax.numpy as jnp
+        
+        def determine_padding_modes(bc_config):
+            if not bc_config:
+                return ["wrap", "wrap", "wrap", "wrap"]
+            padmode = ["wrap", "wrap", "wrap", "wrap"]
+            for edge, bc_type in bc_config.items():
+                if bc_type in ["symmetry", "bounce-back", "wetting"]:
+                    if edge == "bottom":
+                        padmode[0] = "edge"
+                    elif edge == "right":
+                        padmode[1] = "edge"
+                    elif edge == "top":
+                        padmode[2] = "edge"
+                    elif edge == "left":
+                        padmode[3] = "edge"
+            return padmode
+        
+        def has_wetting_bc(bc_config):
+            if not bc_config:
+                return False
+            return any(bc == "wetting" for key, bc in bc_config.items()
+                       if key != 'wetting_params' and isinstance(bc, str))
+        
+        def apply_wetting_to_all_edges(obj, grid_padded, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width):
+            for edge in ['bottom', 'top', 'left', 'right']:
+                if obj.bc_config.get(edge) == 'wetting':
+                    if edge == 'bottom':  # y=0 border
+                        grid_padded = wetting_1d(grid_padded, axis=1, idx=0,
+                                                 rho_l=rho_l, rho_v=rho_v, phi_left=phi_left, phi_right=phi_right,
+                                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right, width=width)
+                    elif edge == 'top':  # y=-1 border
+                        grid_padded = wetting_1d(grid_padded, axis=1, idx=-1,
+                                                 rho_l=rho_l, rho_v=rho_v, phi_left=phi_left, phi_right=phi_right,
+                                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right, width=width)
+                    elif edge == 'left':  # x=0 border
+                        grid_padded = wetting_1d(grid_padded, axis=0, idx=0,
+                                                 rho_l=rho_l, rho_v=rho_v, phi_left=phi_left, phi_right=phi_right,
+                                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right, width=width)
+                    elif edge == 'right':  # x=-1 border
+                        grid_padded = wetting_1d(grid_padded, axis=0, idx=-1,
+                                                 rho_l=rho_l, rho_v=rho_v, phi_left=phi_left, phi_right=phi_right,
+                                                 d_rho_left=d_rho_left, d_rho_right=d_rho_right, width=width)
+            return grid_padded
+        
+        def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width):
+            # axis == 1 for the y-edges
+            if axis == 1:
+                arr = arr.at[1:-1, idx].set(
+                    (1 / 3 * arr[1:-1, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[0:-2, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[2:, idx + 1 if idx == 0 else idx - 1])
+                    / (1 / 3 + 1 / 12 + 1 / 12))
+                # Corners
+                arr = arr.at[0, idx].set(
+                    (1 / 3 * arr[0, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[-1, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[1, idx + 1 if idx == 0 else idx - 1])
+                    / (1 / 3 + 1 / 12 + 1 / 12)
+                )
+                arr = arr.at[-1, idx].set(
+                    (1 / 3 * arr[-1, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[0, idx + 1 if idx == 0 else idx - 1] +
+                     1 / 12 * arr[-2, idx + 1 if idx == 0 else idx - 1])
+                    / (1 / 3 + 1 / 12 + 1 / 12)
+                )
+                edge_slice = arr[1:-1, idx]
+        
+                mask1 = arr[1:-1, idx] < (0.95 * rho_l + 0.05 * rho_v)
+                mask2 = arr[1:-1, idx] > (0.95 * rho_v + 0.05 * rho_l)
+            # axis == 0 for the x-edges
+            else:
+                arr = arr.at[idx, -1:1].set(
+                    (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, 1:-1] +
+                     1 / 12 * arr[idx + 1 if idx == 0 else idx - 1, 0:-2] +
+                     1 / 12 * arr[idx + 1 if idx == 0 else idx - 1, 2:])
+                    / (1 / 3 + 1 / 12 + 1 / 12))
+                #Corners
+                arr = arr.at[idx, 0].set(
+                    (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, 0] +
+                     1 / 12 * arr[idx, -1] +
+                     1 / 12 * arr[idx, 1]) / (1 / 3 + 1 / 12 + 1 / 12)
+                )
+                arr = arr.at[idx, -1].set(
+                    (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, -1] +
+                     1 / 12 * arr[idx, 0] +
+                     1 / 12 * arr[idx, -2]) / (1 / 3 + 1 / 12 + 1 / 12)
+                )
+                edge_slice = arr[idx, 1:-1]
+        
+                mask1 = arr[idx, -1:1] < (0.95 * rho_l + 0.05 * rho_v)
+                mask2 = arr[idx, -1:1] > (0.95 * rho_v + 0.05 * rho_l)
+        
+            # Wetting mask logic
+            mask_final = mask1 * mask2
+        
+            mask1_int = jnp.array(mask1, dtype=int)
+            diff_mask1 = jnp.diff(mask1_int)
+        
+            # Determining the transition index, the [0] is used to extract only the first value
+            transition_index_left_mask1 = jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + 2 * width
+            transition_index_right_mask1 = (jnp.where(diff_mask1 == 1, size=1, fill_value=0)[0]) - (2 * width + 1)
+        
+            # Here the mask_final is split into a left and a right mask to enable the CA of the left and right side to be
+            # determined separately, the reason left uses the right mask is that it works as a cover.
+            indices = jnp.arange(mask_final.shape[0])
+            mask_cover_left = jnp.where(indices >= transition_index_right_mask1[0], False, mask_final)
+            mask_cover_right = jnp.where(indices <= transition_index_left_mask1[0], False, mask_final)
+        
+            new_values_left = jnp.minimum(
+                jnp.maximum(
+                    ((phi_left * edge_slice) - d_rho_left),
+                    (0.95 * rho_v + 0.05 * rho_l)
+                ),
+                (0.95 * rho_l + 0.05 * rho_v)
+            )
+        
+            new_values_right = jnp.minimum(
+                jnp.maximum(
+                    ((phi_right * edge_slice) - d_rho_right),
+                    (0.95 * rho_v + 0.05 * rho_l)
+                ),
+                (0.95 * rho_l + 0.05 * rho_v)
+            )
+            updated_slice = jnp.where(mask_cover_left, new_values_left, edge_slice)
+            updated_slice = jnp.where(mask_cover_right, new_values_right, updated_slice)
+        
+            if axis == 1:
+                arr = arr.at[1:-1, idx].set(updated_slice)
+            else:
+                arr = arr.at[idx, 1:-1].set(updated_slice)
+            return arr
+        --- End of wetting_util.py ---
+
         __init__.py
         --- Code in __init__.py ---
         --- End of __init__.py ---
@@ -2298,6 +2591,7 @@ operators/
         --- End of contact_angle.py ---
 
         __pycache__/
+            __init__.cpython-312.pyc
     collision/
         __init__.py
         --- Code in __init__.py ---

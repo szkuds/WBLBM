@@ -1,20 +1,21 @@
 import numpy as np
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm.operators.force import GravityForceMultiphase
 from wblbm import visualise
 import jax
 
 # this line is added for debugging
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def rising_bubble_mrt():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a rising bubble ===")
 
-    grid_shape = (401, 401)
+    grid_shape = (201, 201)
     nt = 100000
-    save_interval = 1000
+    save_interval = 100
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
 
     kappa = 0.01
@@ -22,15 +23,15 @@ def rising_bubble_mrt():
     rho_v = .001
     interface_width = 5
 
-    force_g = 0.000000001
+    force_g = 0.000000075
     inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(
+    gravity = GravityForceMultiphase(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
     bc_config = {
-        "top": "bounce-back",
-        "bottom": "bounce-back",
+        "top": "periodic",
+        "bottom": "periodic",
         "left": "periodic",
         "right": "periodic",
     }
