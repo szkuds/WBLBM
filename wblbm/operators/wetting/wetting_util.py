@@ -130,4 +130,3 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
     else:
         arr = arr.at[idx, 1:-1].set(updated_slice)
     return arr
-

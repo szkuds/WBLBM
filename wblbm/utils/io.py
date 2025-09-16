@@ -32,15 +32,17 @@ class SimulationIO:
     Handles all I/O operations for the simulation, including logging and saving results.
     """
 
-    def __init__(self, base_dir: str = "results", config: Dict = None):
+    def __init__(self, base_dir: str = "results", config: Dict = None, simulation_name: str = None):
         """
         Initializes the IO handler.
 
         Args:
             base_dir (str): The base directory to store simulation results.
             config (Dict, optional): A dictionary containing the simulation configuration to save.
+            simulation_name (str, optional): Name of the simulation to include in the results directory.
         """
         self.base_dir = base_dir
+        self.simulation_name = simulation_name
         self.run_dir = self._create_timestamped_directory()
         self.data_dir = os.path.join(self.run_dir, "data")
         os.makedirs(self.data_dir, exist_ok=True)
@@ -97,10 +99,13 @@ class SimulationIO:
     def _create_timestamped_directory(self) -> str:
         """Creates a unique, timestamped directory for a single simulation run."""
         timestamp = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
-        run_dir = os.path.join(self.base_dir, timestamp)
-        os.makedirs(run_dir, exist_ok=True)
-        print(f"Created results directory: {run_dir}")
-        return run_dir
+        if self.simulation_name:
+            rundir = os.path.join(self.base_dir, f"{timestamp}_{self.simulation_name}")
+        else:
+            rundir = os.path.join(self.base_dir, timestamp)
+        os.makedirs(rundir, exist_ok=True)
+        print(f"Created results directory: {rundir}")
+        return rundir
 
     def save_config(self, config: Dict):
         """Saves the simulation configuration to a JSON file using CustomJSONEncoder."""

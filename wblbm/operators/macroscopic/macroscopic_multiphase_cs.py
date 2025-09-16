@@ -63,7 +63,7 @@ class MacroscopicMultiphaseCS(MacroscopicMultiphaseDW):
         else:
             force_total = force_int
 
-        u_eq = u + force_total / (2 * rho)  # divide by rho for proper correction
+        u_eq = u #+ force_total / (2 * rho)  # divide by rho for proper correction
 
         return rho, u_eq, force_total
 

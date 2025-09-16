@@ -40,7 +40,7 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray
     ) -> jnp.ndarray:
         for edge, bc_type in self.bc_config.items():
-            if bc_type == "bounce-back":
+            if bc_type == "bounce-back" or bc_type == "wetting":
                 f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
             elif bc_type == "symmetry":
                 f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
@@ -149,9 +149,6 @@ class BoundaryCondition:
                 f_collision[idx, :, right_dirs[2], 0]
             )
         return f_streamed
-
-    # @partial(jit, static_argnums=(0,))
-    # def _apply_wetting(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
 
     @partial(jit, static_argnums=(0,))
     def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
