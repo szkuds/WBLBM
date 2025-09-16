@@ -5,6 +5,7 @@ import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def test_wetting_simulation():
@@ -14,8 +15,8 @@ def test_wetting_simulation():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 100  # Number of time steps
-    save_interval = 10  # Save every 500 steps
+    nt = 10  # Number of time steps
+    save_interval = 1  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
@@ -32,12 +33,20 @@ def test_wetting_simulation():
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
-    # Boundary conditions: bounce-back at bottom for solid surface
     bc_config = {
-        "bottom": "bounce-back",  # Solid wall for wetting
-        "top": "symmetry",  # Open top
-        "left": "periodic",  # Periodic sides
-        "right": "periodic",
+        'left': 'periodic',
+        'bottom': 'wetting',
+        'top': 'symmetry',
+        'right': 'periodic',
+        'wetting_params': {
+            'rho_l': rho_l,
+            'rho_v': rho_v,
+            'phi_left': 1.1,
+            'phi_right': 1.1,
+            'd_rho_left': 0.0,
+            'd_rho_right': 0.0,
+            'width': interface_width
+        }
     }
 
     # Initialize and run simulation with wetting enabled

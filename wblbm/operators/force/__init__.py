@@ -2,3 +2,4 @@ from .force import Force
 from .gravitational_force_bubble import GravityForceMultiphaseBubble
 from .gravitational_force_standard import GravityForceSinglephase
 from .gravitational_force_droplet import GravityForceMultiphaseDroplet
+from .gravitational_force import GravityForceMultiphase

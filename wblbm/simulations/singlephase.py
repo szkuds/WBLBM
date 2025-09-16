@@ -1,7 +1,7 @@
 from .base import BaseSimulation
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
-from wblbm.operators.initialise.init import Initialise
+from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
 
 

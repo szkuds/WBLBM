@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from wblbm.operators.force.force import Force
 
 
-class GravityForceMultiphaseDroplet(Force):
+class GravityForceMultiphase(Force):
     """
     Subclass for gravitational force, constant across the grid.
     """
@@ -26,8 +26,6 @@ class GravityForceMultiphaseDroplet(Force):
         self, rho: jnp.ndarray, rho_l: float, rho_v: float
     ) -> jnp.ndarray:
         """
-        Returns the constant gravitational force field.
-        Ignores rho as gravity is density-independent.
+        Implementation of the force in which both phases experience acceleration.
         """
-        mask = rho > 0.95 * rho_v + 0.05 * rho_l
-        return self.force * rho * mask
+        return self.force * (rho - (jnp.average(rho)))

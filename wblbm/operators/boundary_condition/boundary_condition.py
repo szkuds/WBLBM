@@ -21,8 +21,12 @@ class BoundaryCondition:
         self.opp_indices = lattice.opp_indices
         self.edges = grid.get_edges()
         valid_edges = ["top", "bottom", "left", "right"]
-        valid_types = ["bounce-back", "symmetry", "periodic"]
+        valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
         for edge, bc_type in bc_config.items():
+            # Skip wetting_params as it is not an edge boundary condition
+            if edge == "wetting_params":
+                continue
+
             if edge not in valid_edges:
                 raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
             if bc_type not in valid_types:
@@ -145,6 +149,9 @@ class BoundaryCondition:
                 f_collision[idx, :, right_dirs[2], 0]
             )
         return f_streamed
+
+    # @partial(jit, static_argnums=(0,))
+    # def _apply_wetting(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
 
     @partial(jit, static_argnums=(0,))
     def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:

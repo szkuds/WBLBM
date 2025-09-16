@@ -1,10 +1,11 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm.operators.force import GravityForceMultiphase
 from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-# jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def test_multiphase_gravity_simulation():
@@ -22,7 +23,7 @@ def test_multiphase_gravity_simulation():
 
     force_g = 0.000002
     inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(
+    gravity = GravityForceMultiphase(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 

@@ -1,7 +1,7 @@
 from .base import BaseSimulation
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
-from wblbm.operators.initialise.init import Initialise
+from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
 
 
@@ -91,6 +91,14 @@ class MultiphaseSimulation(BaseSimulation):
             )
         elif init_type =="multiphase_lateral_bubble_configuration":
             return self.initialiser.initialise_multiphase_lateral_bubble_configuration(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type =="wetting_chem_step":
+            return self.initialiser.initialise_wetting_chemical_step(
+                self.rho_l, self.rho_v, self.interface_width
+            )
+        elif init_type =="wetting":
+            return self.initialiser.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
             )
         else:
