@@ -45,7 +45,7 @@ class SinglePhaseSimulation(BaseSimulation):
             bc_config=self.bc_config,
             force_enabled=self.force_enabled,
             collision_scheme=self.collision_scheme,
-            kvec=self.k_diag,
+            k_diag=self.k_diag,
             **self.kwargs
         )
         self.macroscopic = self.update.macroscopic

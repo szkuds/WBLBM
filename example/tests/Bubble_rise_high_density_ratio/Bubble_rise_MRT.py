@@ -13,15 +13,15 @@ def rising_bubble_mrt():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a rising bubble ===")
 
-    grid_shape = (201, 201)
-    nt = 100000
+    grid_shape = (401, 401)
+    nt = 20000
     save_interval = 1000
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
 
     kappa = 0.01
     rho_l = 1
     rho_v = .001
-    interface_width = 5
+    interface_width = 3
 
     force_g = 0.0000000
     inclination_angle = 0
