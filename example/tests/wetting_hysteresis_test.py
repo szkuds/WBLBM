@@ -4,7 +4,7 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
-
+jax.config.update("jax_disable_jit", True)
 
 def test_wetting_hysteresis_simulation():
     """Test LBM wetting implementation with hysteresis enabled."""
@@ -44,15 +44,15 @@ def test_wetting_hysteresis_simulation():
             'width': interface_width
         },
         'hysteresis_params': {
-            'advancing_ca_hydrophobic': 120.0,
-            'receding_ca_hydrophobic': 90.0,
+            'advancing_ca_hydrophobic': 91.0,
+            'receding_ca_hydrophobic': 89.0,
             'advancing_ca_hydrophilic': 60.0,
             'receding_ca_hydrophilic': 30.0,
-            'cll_threshold': 0.1,
-            'ca_threshold': 5.0,
-            'change_d_rho': 0.01,
-            'change_phi': 0.01,
-            'while_limiter': 100,
+            'cll_threshold': 1e-3,
+            'ca_threshold': 1e-3,
+            'change_d_rho': d_rho_value / 50,
+            'change_phi': (phi_value - 1)/50,
+            'while_limiter': 1000,
             'phi_val': 1.2,
             'd_rho_val': 0.0,
             'w': interface_width
