@@ -4,7 +4,7 @@ from wblbm import visualise
 import jax
 
 # this line is added for debugging
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 # Force double precision
 jax.config.update("jax_enable_x64", True)
 
