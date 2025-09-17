@@ -4,7 +4,7 @@ from wblbm import visualise
 import jax
 
 # this line is added for debugging
-# jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
 # Force double precision
 jax.config.update("jax_enable_x64", True)
 
@@ -16,8 +16,8 @@ def test_single_phase_simulation():
 
     grid_shape = (100, 100)
     tau = .6
-    nt = 100000
-    save_interval = 10000
+    nt = 10000
+    save_interval = 1000
 
     sim = Run(
         simulation_type="singlephase",
