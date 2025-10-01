@@ -20,7 +20,7 @@ def test_wetting_simulation():
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
-    interface_width = 5  # Interface width for smooth transition
+    interface_width = 6  # Interface width for smooth transition
 
     # Wetting parameters
     phi_value = 1.0  # Wetting strength parameter
