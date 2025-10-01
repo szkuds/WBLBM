@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import json
 
 
 def visualise(sim_instance, title="LBM Simulation Results"):
@@ -15,6 +16,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
     try:
         # Get the directory where data files are stored
         data_dir = sim_instance.io_handler.data_dir
+        run_dir = sim_instance.io_handler.run_dir
 
         # Create a new directory within the run to store the plots
         plot_dir = os.path.join(sim_instance.io_handler.run_dir, "plots")
@@ -41,16 +43,25 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             final_force = data.get("force", None)
             final_force_ext = data.get("force_ext", None)
 
+            # load the config .json
+            config = json.load(open(run_dir + "/config.json"))
+
             # Calculate density ratio and determine scaling
-            rho_max = np.max(final_rho[:, :, 0, 0])
-            rho_min = np.min(final_rho[:, :, 0, 0])
-            density_ratio = rho_max / rho_min
+            # droplet_mask = final_rho[:,:,0,0] > 0.995 * config["rho_l"] + 0.005 * config["rho_v"]
+            # background_mask = final_rho[:,:,0,0] < 0.995 * config["rho_v"] + 0.005 * config["rho_l"]
+            # rho_droplet = final_rho[:,:,0,0] * droplet_mask
+            # rho_background = final_rho[:,:,0,0] * background_mask
+            # rho_max = rho_droplet.sum()/droplet_mask.sum()
+            # rho_min = rho_background.sum()/background_mask.sum()
+            density_ratio = config["rho_l"] / config["rho_v"]
             use_log_scale = density_ratio > 100
 
-            if use_log_scale:
-                print(
-                    f"Using logarithmic scale for timestep {timestep} (density ratio: {density_ratio:.1f})"
-                )
+            # if use_log_scale:
+            #     # print(
+            #     #     f"Using logarithmic scale for timestep {timestep} (density ratio: {density_ratio:.1f})"
+            #     # )
+            #     # print(f"Timestep {timestep}: Droplet avg density = {rho_max:.3f}, "
+            #     #       f"Background avg density = {rho_min:.3f}")
 
             fig, axes = plt.subplots(
                 1,

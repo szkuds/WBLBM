@@ -9,3 +9,4 @@
 # TODO: need to make sure that new result folder are added to the gitignore file.
 /example/25-09-10_Examples_Orest/
 /test/
+/example/tests/Isolde/results/
