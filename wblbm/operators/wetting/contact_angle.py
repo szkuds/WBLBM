@@ -10,7 +10,8 @@ class ContactAngle:
     def __init__(self, rho_mean):
         self.rho_mean = rho_mean
 
-    def compute(self, rho):
+    def compute(self, rho_):
+        rho = rho_[:,:,0,0]
         array_i_j0 = rho[:, 1]
         array_i_jpos1 = rho[:, 2]
 
