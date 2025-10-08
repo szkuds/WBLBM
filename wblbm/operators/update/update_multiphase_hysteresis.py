@@ -149,6 +149,6 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         if "wetting_params" in self.bc_config:
             self.bc_config["wetting_params"].update(params)
             if hasattr(self.macroscopic, 'gradient'):
-                self.macroscopic.gradient.wettingparams.update(params)
+                self.macroscopic.gradient.wetting_params.update(params)
             if hasattr(self.macroscopic, 'laplacian'):
-                self.macroscopic.laplacian.wettingparams.update(params)
+                self.macroscopic.laplacian.wetting_params.update(params)
