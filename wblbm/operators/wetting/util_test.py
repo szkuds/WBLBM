@@ -1,0 +1,30 @@
+import json
+import numpy as np
+from wblbm.operators.wetting.contact_angle import ContactAngle
+from wblbm.operators.wetting.contact_line_location import ContactLineLocation
+
+# Paths
+data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-02/10-49-40_test_wetting_hysteresis_simulation/data"
+config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-02/10-49-40_test_wetting_hysteresis_simulation/config.json"
+
+# Load config
+with open(config_path) as f:
+    config = json.load(f)
+rho_l = float(config["rho_l"])
+rho_v = float(config["rho_v"])
+rho_mean = (rho_l + rho_v) / 2
+
+angle_calc = ContactAngle(rho_mean)
+line_loc_calc = ContactLineLocation(rho_mean)
+
+# Load all .npz result files
+import glob
+npz_files = glob.glob(f"{data_dir}/*.npz")
+for npz_file in npz_files:
+    data = np.load(npz_file)
+    rho = data["rho"]
+    # Calculate contact angles
+    left_angle, right_angle = angle_calc.compute(rho)
+    # Calculate contact line locations
+    left_line, right_line = line_loc_calc.compute(rho, left_angle, right_angle)
+    print(f"{npz_file}: left_angle={left_angle}, right_angle={right_angle}, left_line={left_line}, right_line={right_line}")
