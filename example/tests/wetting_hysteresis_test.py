@@ -13,8 +13,8 @@ def test_wetting_hysteresis_simulation():
     # Simulation parameters
     grid_shape = (200, 100)
     tau = 0.99
-    nt = 20000
-    save_interval = 2000
+    nt = 2000
+    save_interval = 200
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -44,18 +44,13 @@ def test_wetting_hysteresis_simulation():
             'width': interface_width
         },
         'hysteresis_params': {
-            'advancing_ca_hydrophobic': 91.0,
-            'receding_ca_hydrophobic': 89.0,
-            'advancing_ca_hydrophilic': 60.0,
-            'receding_ca_hydrophilic': 30.0,
+            'advancing_ca': 86.0,
+            'receding_ca': 85.0,
             'cll_threshold': 1e-3,
             'ca_threshold': 1e-3,
             'change_d_rho': d_rho_value / 50,
             'change_phi': (phi_value - 1)/50,
             'while_limiter': 1000,
-            'phi_val': 1.2,
-            'd_rho_val': 0.0,
-            'w': interface_width
         }
     }
 

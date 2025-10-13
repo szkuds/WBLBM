@@ -18,22 +18,22 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         if bc_config and "hysteresis_params" in bc_config:
             self.hysteresis_enabled = True
             self.bc_config = bc_config
-            hparams = bc_config["hysteresis_params"]
+            hysteresis_params = bc_config["hysteresis_params"]
 
             self.hysteresis = Hysteresis(
-                advancing_ca_hydrophobic=hparams["advancing_ca_hydrophobic"],
-                receding_ca_hydrophobic=hparams["receding_ca_hydrophobic"],
-                advancing_ca_hydrophilic=hparams["advancing_ca_hydrophilic"],
-                receding_ca_hydrophilic=hparams["receding_ca_hydrophilic"],
-                cll_threshold=hparams["cll_threshold"],
-                ca_threshold=hparams["ca_threshold"],
-                change_d_rho=hparams["change_d_rho"],
-                change_phi=hparams["change_phi"],
-                while_limiter=hparams["while_limiter"],
+                advancing_ca_hydrophobic=hysteresis_params["advancing_ca_hydrophobic"],
+                receding_ca_hydrophobic=hysteresis_params["receding_ca_hydrophobic"],
+                advancing_ca_hydrophilic=hysteresis_params["advancing_ca_hydrophilic"],
+                receding_ca_hydrophilic=hysteresis_params["receding_ca_hydrophilic"],
+                cll_threshold=hysteresis_params["cll_threshold"],
+                ca_threshold=hysteresis_params["ca_threshold"],
+                change_d_rho=hysteresis_params["change_d_rho"],
+                change_phi=hysteresis_params["change_phi"],
+                while_limiter=hysteresis_params["while_limiter"],
                 nx=grid.nx,
-                phi_val=hparams["phi_val"],
-                d_rho_val=hparams["d_rho_val"],
-                w=hparams["w"]
+                phi_val=hysteresis_params["phi_val"],
+                d_rho_val=hysteresis_params["d_rho_val"],
+                w=hysteresis_params["w"]
             )
 
             rho_mean = (rho_l + rho_v) / 2
@@ -90,7 +90,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             if "wetting_params" in updated_bc_config:
                 updated_bc_config["wetting_params"]["phi_left"] = phi_left
                 updated_bc_config["wetting_params"]["phi_right"] = phi_right
-                updated_bc_config["wetting_params"]["d_rh_oleft"] = d_rho_left
+                updated_bc_config["wetting_params"]["d_rho_left"] = d_rho_left
                 updated_bc_config["wetting_params"]["d_rho_right"] = d_rho_right
             rho_new, u_new, force_tot_new = self.macroscopic(f_in)
             return f_in, rho_new

@@ -24,6 +24,12 @@ def has_wetting_bc(bc_config):
     return any(bc == "wetting" for key, bc in bc_config.items()
                if key != 'wetting_params' and isinstance(bc, str))
 
+def has_hysteresis_bc(bc_config):
+    if not bc_config:
+        return False
+    return any(bc == "wetting" for key, bc in bc_config.items()
+               if key != 'hysteresis_params' and isinstance(bc, str))
+
 
 def apply_wetting_to_all_edges(obj, grid_padded, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width):
     for edge in ['bottom', 'top', 'left', 'right']:

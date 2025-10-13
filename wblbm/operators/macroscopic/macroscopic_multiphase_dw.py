@@ -8,6 +8,7 @@ from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.differential.gradient import Gradient
 from wblbm.operators.differential.laplacian import Laplacian
 from wblbm.lattice.lattice import Lattice
+from wblbm.operators.wetting.wetting_util import determine_padding_modes
 
 
 class MacroscopicMultiphaseDW(Macroscopic):
@@ -99,10 +100,11 @@ class MacroscopicMultiphaseDW(Macroscopic):
     @partial(jit, static_argnums=(0,))
     def force_int(self, rho):
         """
-        Calculate the interaction force.
+        Calculate the interaction force. Note that the chemical potential uses the same gradient calculation as the
+        density. This work because the values of the chemical potential are different to the rho_v and rho_l values.
+        If these where to match it would fail, but that will often not happen.
         """
         grad_chem_pot = self.gradient(self.chem_pot(rho))
-        # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))
@@ -112,3 +114,7 @@ class MacroscopicMultiphaseDW(Macroscopic):
         """
         # Both u and force have shape (nx, ny, 1, 2)
         return u + force / 2
+
+
+
+
