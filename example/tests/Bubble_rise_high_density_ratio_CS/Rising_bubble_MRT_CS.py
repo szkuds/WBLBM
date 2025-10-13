@@ -6,7 +6,6 @@ import jax
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
-# TODO: Need to make CS EoS work with MRT.
 
 def test_mrt_rising_cs():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
@@ -71,7 +70,7 @@ def test_mrt_rising_cs():
         skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
-        #collision=collision,
+        collision=collision,
         init_type="multiphase_bubble",
         init_dir=init_file,
         tau=tau,

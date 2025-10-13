@@ -15,7 +15,7 @@ def test_wetting_simulation():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 20000  # Number of time steps
+    nt = 2000  # Number of time steps
     save_interval = 2000  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density

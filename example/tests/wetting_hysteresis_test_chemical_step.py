@@ -5,7 +5,8 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_disable_jit", True)
-
+# TODO: To just make the implementation of hysteresis slightly simpler, I am not including the chemical step at the moment
+#  this logic will need to be added in later by a jax.lax.cond statement which determines if the step has been passed or not.
 def test_wetting_hysteresis_simulation():
     """Test LBM wetting implementation with hysteresis enabled."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
@@ -44,13 +45,18 @@ def test_wetting_hysteresis_simulation():
             'width': interface_width
         },
         'hysteresis_params': {
-            'advancing_ca': 86.0,
-            'receding_ca': 85.0,
+            'advancing_ca_hydrophobic': 91.0,
+            'receding_ca_hydrophobic': 89.0,
+            'advancing_ca_hydrophilic': 60.0,
+            'receding_ca_hydrophilic': 30.0,
             'cll_threshold': 1e-3,
             'ca_threshold': 1e-3,
             'change_d_rho': d_rho_value / 50,
             'change_phi': (phi_value - 1)/50,
             'while_limiter': 1000,
+            'phi_val': 1.2,
+            'd_rho_val': 0.0,
+            'w': interface_width
         }
     }
 

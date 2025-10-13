@@ -84,7 +84,6 @@ class Run:
         # Simple config builder for demonstration; extend as needed
         return dict(**kwargs)
 
-    # TODO: need to double check that data is saved properly
     def _save_data(self, it, fprev):
         # Save data using the simulation's macroscopic operator
         force_ext = None

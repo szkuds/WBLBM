@@ -46,8 +46,10 @@ class MultiphaseSimulation(BaseSimulation):
     def setup_operators(self):
         self.initialise = Initialise(self.grid, self.lattice)
         # Check if hysteresis parameters are present
+        # TODO: remove the UpdateMultiphaseHysteresis call here since it will be added
+        #  to the update_multiphase.py function.
         if self.bc_config and "hysteresis_params" in self.bc_config:
-            self.update = UpdateMultiphaseHysteresis(
+            self.update = UpdateMultiphase(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
                 self.rho_l, self.rho_v, self.bc_config, self.force_enabled,
                 collision_scheme=self.collision_scheme, eos=self.eos,
@@ -57,7 +59,7 @@ class MultiphaseSimulation(BaseSimulation):
             self.update = UpdateMultiphase(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
                 self.rho_l, self.rho_v, self.bc_config, self.force_enabled,
-                collisionscheme=self.collision_scheme, eos=self.eos,
+                collision_scheme=self.collision_scheme, eos=self.eos,
                 k_diag=self.k_diag, **self.kwargs
             )
         self.macroscopic = self.update.macroscopic
@@ -108,11 +110,11 @@ class MultiphaseSimulation(BaseSimulation):
     def run_timestep(self, fprev, it):
         force_ext = None
         # TODO: This is where the external force is added,
-        # since this will also be how I want to implement the electric force
-        # I will need to look at how I can best extend this.
-        # At the moment I think the creation of a composite force class will be best
-        # As it will allow for multiple force to be dealt with in a similar manner.
-        # https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
+        #  since this will also be how I want to implement the electric force
+        #  I will need to look at how I can best extend this.
+        #   At the moment I think the creation of a composite force class will be best
+        #    As it will allow for multiple force to be dealt with in a similar manner.
+        #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
         if self.force_enabled and self.force_obj:
             rho = jnp.sum(fprev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
