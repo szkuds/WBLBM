@@ -317,7 +317,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         if isinstance(self.macroscopic, MacroscopicMultiphaseDW):
             return MacroscopicMultiphaseDW(
                 self.grid, self.lattice, self.macroscopic.kappa,
-                self.macroscopic.interface_width, self.macroscopic.rho_l,
+                updated_bc_config['wetting_params']['width'], self.macroscopic.rho_l,
                 self.macroscopic.rho_v, force_enabled=self.force_enabled,
                 bc_config=updated_bc_config
             )

@@ -7,7 +7,7 @@ import jax
 # jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
-def test_mrt_rising_cs():
+def mrt_rising_cs_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = test_mrt_rising_cs()
+    sim_multiphase_gravity = mrt_rising_cs_test()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
