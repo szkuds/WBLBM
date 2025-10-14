@@ -49,7 +49,7 @@ class MultiphaseSimulation(BaseSimulation):
         # TODO: remove the UpdateMultiphaseHysteresis call here since it will be added
         #  to the update_multiphase.py function.
         if self.bc_config and "hysteresis_params" in self.bc_config:
-            self.update = UpdateMultiphase(
+            self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
                 self.rho_l, self.rho_v, self.bc_config, self.force_enabled,
                 collision_scheme=self.collision_scheme, eos=self.eos,
