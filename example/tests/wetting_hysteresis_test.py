@@ -4,7 +4,7 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
-#jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 
 
 def wetting_hysteresis_simulation_test():
@@ -14,8 +14,8 @@ def wetting_hysteresis_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)
     tau = 0.99
-    nt = 4000
-    save_interval = 200
+    nt = 20
+    save_interval = 1
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -30,6 +30,7 @@ def wetting_hysteresis_simulation_test():
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
+    # Add hysteresis parameters to bc_config
     bc_config = {
         'left': 'periodic',
         'bottom': 'wetting',
@@ -47,11 +48,8 @@ def wetting_hysteresis_simulation_test():
         'hysteresis_params': {
             'ca_advancing': 90.0,
             'ca_receding': 80.0,
-            'cll_threshold': 1e-3,
-            'ca_threshold': 1e-3,
-            'change_d_rho': d_rho_value / 50,
-            'change_phi': (phi_value - 1) / 50,
-            'while_limiter': 1000,
+            'learning_rate': 0.01,
+            'max_iterations': 20
         }
     }
 

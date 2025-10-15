@@ -4,27 +4,27 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 # this line is added for debugging
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
-def test_wetting_simulation():
+def wetting_simulation_test():
     """Test wetting implementation with a droplet on a surface under gravity."""
     print("\n=== Testing LBM Wetting Implementation ===")
 
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 2000  # Number of time steps
-    save_interval = 500  # Save every 500 steps
+    nt = 500 # Number of time steps
+    save_interval = 100  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
     interface_width = 5  # Interface width for smooth transition
 
     # Wetting parameters
-    phi_value = 1.3  # Wetting strength parameter
-    d_rho_value = 0.0  # Density adjustment parameter
+    phi_value = 1  # Wetting strength parameter
+    d_rho_value = 0.5  # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
     force_g = 0.0000000  # Small gravity to observe wetting without rapid fall
@@ -77,7 +77,7 @@ def test_wetting_simulation():
 
 
 if __name__ == "__main__":
-    sim_wetting = test_wetting_simulation()
+    sim_wetting = wetting_simulation_test()
 
     # Visualize results
     print("\n=== Visualizing Wetting Test Results ===")

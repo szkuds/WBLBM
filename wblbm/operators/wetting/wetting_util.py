@@ -1,4 +1,22 @@
+from typing import NamedTuple
+
+import jax
 import jax.numpy as jnp
+
+
+@jax.tree_util.register_pytree_node_class
+class WettingParameters(NamedTuple):
+    d_rho_left: jnp.ndarray
+    d_rho_right: jnp.ndarray
+    phi_left: jnp.ndarray
+    phi_right: jnp.ndarray
+
+    def tree_flatten(self):
+        return (self.d_rho_left, self.d_rho_right, self.phi_left, self.phi_right), None
+
+    @classmethod
+    def tree_unflatten(cls, aux_data, children):
+        return cls(*children)
 
 
 def determine_padding_modes(bc_config):
