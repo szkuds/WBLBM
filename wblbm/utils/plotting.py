@@ -47,21 +47,8 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             config = json.load(open(run_dir + "/config.json"))
 
             # Calculate density ratio and determine scaling
-            # droplet_mask = final_rho[:,:,0,0] > 0.995 * config["rho_l"] + 0.005 * config["rho_v"]
-            # background_mask = final_rho[:,:,0,0] < 0.995 * config["rho_v"] + 0.005 * config["rho_l"]
-            # rho_droplet = final_rho[:,:,0,0] * droplet_mask
-            # rho_background = final_rho[:,:,0,0] * background_mask
-            # rho_max = rho_droplet.sum()/droplet_mask.sum()
-            # rho_min = rho_background.sum()/background_mask.sum()
             density_ratio = config["rho_l"] / config["rho_v"]
             use_log_scale = density_ratio > 100
-
-            # if use_log_scale:
-            #     # print(
-            #     #     f"Using logarithmic scale for timestep {timestep} (density ratio: {density_ratio:.1f})"
-            #     # )
-            #     # print(f"Timestep {timestep}: Droplet avg density = {rho_max:.3f}, "
-            #     #       f"Background avg density = {rho_min:.3f}")
 
             fig, axes = plt.subplots(
                 1,
