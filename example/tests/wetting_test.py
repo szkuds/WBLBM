@@ -15,8 +15,8 @@ def wetting_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 500 # Number of time steps
-    save_interval = 100  # Save every 500 steps
+    nt = 20 # Number of time steps
+    save_interval = 1  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
@@ -41,10 +41,10 @@ def wetting_simulation_test():
         'wetting_params': {
             'rho_l': rho_l,
             'rho_v': rho_v,
-            'phi_left': phi_value,
-            'phi_right': phi_value,
-            'd_rho_left': d_rho_value,
-            'd_rho_right': d_rho_value,
+            'phi_left': 1,
+            'phi_right': 1.5,
+            'd_rho_left': .5,
+            'd_rho_right': 0,
             'width': interface_width
         }
     }

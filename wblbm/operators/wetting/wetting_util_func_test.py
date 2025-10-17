@@ -1,11 +1,12 @@
 import json
 import numpy as np
+import glob
 from wblbm.operators.wetting.contact_angle import ContactAngle
 from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 # Paths
-data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-02/10-49-40_test_wetting_hysteresis_simulation/data"
-config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-02/10-49-40_test_wetting_hysteresis_simulation/config.json"
+data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-16/15-32-24_wetting_simulation_test/data"
+config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-16/15-32-24_wetting_simulation_test/config.json"
 
 # Load config
 with open(config_path) as f:
@@ -17,9 +18,12 @@ rho_mean = (rho_l + rho_v) / 2
 angle_calc = ContactAngle(rho_mean)
 line_loc_calc = ContactLineLocation(rho_mean)
 
-# Load all .npz result files
-import glob
+# Load and sort all .npz result files
 npz_files = glob.glob(f"{data_dir}/*.npz")
+# Sort by timestep number extracted from filename
+npz_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
+
+# Process sorted files
 for npz_file in npz_files:
     data = np.load(npz_file)
     rho = data["rho"]
