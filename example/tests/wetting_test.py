@@ -4,7 +4,7 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 # this line is added for debugging
-# jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
@@ -15,8 +15,8 @@ def wetting_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 20 # Number of time steps
-    save_interval = 1  # Save every 500 steps
+    nt = 2000 # Number of time steps
+    save_interval = 200  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
@@ -42,8 +42,8 @@ def wetting_simulation_test():
             'rho_l': rho_l,
             'rho_v': rho_v,
             'phi_left': 1,
-            'phi_right': 1.5,
-            'd_rho_left': .5,
+            'phi_right': 1.2,
+            'd_rho_left': .1,
             'd_rho_right': 0,
             'width': interface_width
         }
