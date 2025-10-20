@@ -23,8 +23,8 @@ def wetting_simulation_test():
     interface_width = 5  # Interface width for smooth transition
 
     # Wetting parameters
-    phi_value = 1  # Wetting strength parameter
-    d_rho_value = 0.5  # Density adjustment parameter
+    phi_value = 1.2  # Wetting strength parameter
+    d_rho_value = 0  # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
     force_g = 0.0000000  # Small gravity to observe wetting without rapid fall
@@ -41,10 +41,10 @@ def wetting_simulation_test():
         'wetting_params': {
             'rho_l': rho_l,
             'rho_v': rho_v,
-            'phi_left': 1,
-            'phi_right': 1.2,
-            'd_rho_left': .1,
-            'd_rho_right': 0,
+            'phi_left': phi_value,
+            'phi_right': phi_value,
+            'd_rho_left': d_rho_value,
+            'd_rho_right': d_rho_value,
             'width': interface_width
         }
     }
