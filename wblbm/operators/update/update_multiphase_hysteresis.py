@@ -3,12 +3,11 @@ from typing import Tuple, Any
 
 import jax
 import jax.numpy as jnp
-from jax import jit, Array
+from jax import jit
 import optax
 
 from wblbm.operators.differential import Gradient
 from wblbm.operators.differential import Laplacian
-from wblbm.operators.macroscopic.macroscopic_multiphase_cs import MacroscopicMultiphaseCS
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.update import UpdateMultiphase
 from wblbm.grid import Grid
@@ -230,7 +229,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         """Optimize left side contact angle by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_left
-        def objective_drho(params):
+        def objective_d_rho(params):
             ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
             return self._cost_function_ca(ca_target, ca_left)
 
@@ -239,13 +238,13 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
             return self._cost_function_ca(ca_target, ca_left)
 
-        opt_state_drho = self.optimiser.init(initial_params)
+        opt_state_d_rho = self.optimiser.init(initial_params)
         opt_state_phi = self.optimiser.init(initial_params)
 
         # Optimization step for d_rho_left
-        def step_drho(carry, _):
+        def step_d_rho(carry, _):
             params, opt_state = carry
-            loss, grads = jax.value_and_grad(objective_drho)(params)
+            loss, grads = jax.value_and_grad(objective_d_rho)(params)
             # Only update d_rho_left, zero out other gradients
             grads = WettingParameters(
                 d_rho_left=grads.d_rho_left,
@@ -275,19 +274,19 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             return (params, opt_state), loss
 
         # Run both optimizations
-        (final_params_drho, _), losses_drho = jax.lax.scan(
-            step_drho, (initial_params, opt_state_drho), jnp.arange(self.max_iterations)
+        (final_params_d_rho, _), losses_d_rho = jax.lax.scan(
+            step_d_rho, (initial_params, opt_state_d_rho), jnp.arange(self.max_iterations)
         )
         (final_params_phi, _), losses_phi = jax.lax.scan(
             step_phi, (initial_params, opt_state_phi), jnp.arange(self.max_iterations)
         )
 
         # Choose the best result (lowest final loss)
-        final_loss_drho = losses_drho[-1]
+        final_loss_drho = losses_d_rho[-1]
         final_loss_phi = losses_phi[-1]
         best_params = jax.lax.cond(
             final_loss_drho < final_loss_phi,
-            lambda: final_params_drho,
+            lambda: final_params_d_rho,
             lambda: final_params_phi
         )
         best_loss = jnp.minimum(final_loss_drho, final_loss_phi)
@@ -514,28 +513,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         )
         return merged_params
 
-    def _update_operators_with_params(self, params: WettingParameters):
-        """Update the macroscopic and boundary condition operators with new wetting parameters."""
-        new_wetting_params = {
-            **self.boundary_condition.bc_config.get('wetting_params', {}),
-            'd_rho_left': float(params.d_rho_left),
-            'd_rho_right': float(params.d_rho_right),
-            'phi_left': float(params.phi_left),
-            'phi_right': float(params.phi_right),
-        }
-        new_bc_config = {
-            **self.macroscopic.bc_config,
-            'wetting_params': new_wetting_params
-        }
-
-        # Update gradient and laplacian with new config
-        self.macroscopic.gradient = Gradient(self.lattice, bc_config=new_bc_config)
-        self.macroscopic.laplacian = Laplacian(self.lattice, bc_config=new_bc_config)
-        self.macroscopic.bc_config = new_bc_config
-
-        # Update boundary condition config
-        self.boundary_condition.bc_config = new_bc_config
-
+    @partial(jit, static_argnums=(0,))
     def __call__(self, f_t: jnp.ndarray, force: jnp.ndarray = None):
         f_tplus1 = super(UpdateMultiphaseHysteresis, self).__call__(f_t, force)
 
@@ -555,26 +533,22 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         hysteresis_window_left = self._check_hysteresis_window(ca_left_tplus1)
         hysteresis_window_right = self._check_hysteresis_window(ca_right_tplus1)
 
-        # Prepare optimization arguments for left side
-        optimisation_args_left_cll = (ca_left_t, cll_left_t, f_t)
-        optimisation_args_left_ca = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t)
-
-        # Prepare optimization arguments for right side
-        optimisation_args_right_cll = (ca_right_t, cll_right_t, f_t)
-        optimisation_args_right_ca = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t)
-
-        # Optimize left and right sides based on hysteresis window
+        # Prepare common operand for left side (contains all needed data for both branches)
+        operand_left = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t)
         params_left = jax.lax.cond(
             hysteresis_window_left,
-            self._cll_pinned,
-            self._ca_optimisation,
-            optimisation_args_left_cll if hysteresis_window_left else optimisation_args_left_ca
+            lambda args: self._cll_pinned((args[0], args[1], args[4])),  # unpack only what _cll_pinned expects
+            lambda args: self._ca_optimisation(args),  # pass full operand to _ca_optimisation
+            operand_left
         )
+
+        # Prepare common operand for right side
+        operand_right = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t)
         params_right = jax.lax.cond(
             hysteresis_window_right,
-            self._cll_pinned,
-            self._ca_optimisation,
-            optimisation_args_right_cll if hysteresis_window_right else optimisation_args_right_ca
+            lambda args: self._cll_pinned((args[0], args[1], args[4])),
+            lambda args: self._ca_optimisation(args),
+            operand_right
         )
 
         # Merge optimized parameters from both sides
@@ -585,7 +559,4 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             phi_right=params_right.phi_right
         )
 
-        # Update operators with the merged optimized parameters
-        self._update_operators_with_params(merged_params)
-
-        return f_tplus1
+        return self._evaluate_with_new_wetting_params(f_t, merged_params)[4]

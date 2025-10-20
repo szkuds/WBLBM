@@ -5,8 +5,8 @@ from wblbm.operators.wetting.contact_angle import ContactAngle
 from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 # Paths
-data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-16/15-32-24_wetting_simulation_test/data"
-config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-16/15-32-24_wetting_simulation_test/config.json"
+data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-20/11-47-45_wetting_hysteresis_simulation_test/data"
+config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-20/11-47-45_wetting_hysteresis_simulation_test/config.json"
 
 # Load config
 with open(config_path) as f:
