@@ -51,7 +51,6 @@ class SourceTerm:
         # Extract 2D data from 4D arrays
         u_2d = u[:, :, 0, :]  # Shape: (nx, ny, 2)
         force_2d = force[:, :, 0, :]  # Shape: (nx, ny, 2)
-        rho_2d = rho[:, :, 0, 0]  # Shape: (nx, ny)
 
         # Calculate gradient of rho
         grad_rho = self.gradient(rho)
@@ -100,8 +99,5 @@ class SourceTerm:
 
         # Convert to 4D format: (nx, ny, q, 1)
         source_4d = jnp.expand_dims(source_3d, axis=-1)
-        
-        #assert jnp.sum(source_4d, axis=2).all() == 0
-        #assert jnp.allclose(jnp.sum(source_4d, axis=2), 0)
 
         return source_4d
