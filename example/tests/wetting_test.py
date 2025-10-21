@@ -4,7 +4,7 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 # this line is added for debugging
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
@@ -27,8 +27,8 @@ def wetting_simulation_test():
     d_rho_value = 0  # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
-    force_g = 0.0000000  # Small gravity to observe wetting without rapid fall
-    inclination_angle = 0  # Vertical gravity
+    force_g = 0.00001
+    inclination_angle = 45
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
