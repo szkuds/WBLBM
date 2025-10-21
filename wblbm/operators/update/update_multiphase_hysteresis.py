@@ -57,6 +57,61 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         self.max_iterations = self.hysteresis_params.get('max_iterations', 20)
         self.optimiser = optax.adam(self.learning_rate)
 
+    @partial(jit, static_argnums=(0,))
+    def __call__(self, f_t: jnp.ndarray, force: jnp.ndarray = None):
+        f_tplus1 = super(UpdateMultiphaseHysteresis, self).__call__(f_t, force)
+
+        if self.force_enabled and force is None:
+            raise TypeError(
+                "When the force is enabled an external force needs to be provided"
+            )
+        # TODO: expect that I will need to extract the force here to pass it further on
+        elif self.force_enabled:
+            rho_t, _, _ = self.macroscopic(f_t, force)
+            rho_tplus1, _, _ = self.macroscopic(f_tplus1, force)
+        else:
+            rho_t, _, _ = self.macroscopic(f_t)
+            rho_tplus1, _, _ = self.macroscopic(f_tplus1)
+
+        # Get the variables from the previous time step (t)
+        ca_left_t, ca_right_t = self.contact_angle.compute(rho_t)
+        cll_left_t, cll_right_t = self.contact_line_location.compute(rho_t, ca_left_t, ca_right_t)
+
+        # Get the variables from the next time step (tplus1)
+        ca_left_tplus1, ca_right_tplus1 = self.contact_angle.compute(rho_tplus1)
+
+        # Check for both sides if the ca_tplus1 is within the hysteresis window
+        hysteresis_window_left = self._check_hysteresis_window(ca_left_tplus1)
+        hysteresis_window_right = self._check_hysteresis_window(ca_right_tplus1)
+
+        # Prepare common operand for left side (contains all needed data for both branches)
+        operand_left = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t)
+        params_left = jax.lax.cond(
+            hysteresis_window_left,
+            lambda args: self._cll_pinned((args[0], args[1], args[4])),  # unpack only what _cll_pinned expects
+            lambda args: self._ca_optimisation(args),  # pass full operand to _ca_optimisation
+            operand_left
+        )
+
+        # Prepare common operand for right side
+        operand_right = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t)
+        params_right = jax.lax.cond(
+            hysteresis_window_right,
+            lambda args: self._cll_pinned((args[0], args[1], args[4])),
+            lambda args: self._ca_optimisation(args),
+            operand_right
+        )
+
+        # Merge optimized parameters from both sides
+        merged_params = WettingParameters(
+            d_rho_left=params_left.d_rho_left,
+            d_rho_right=params_right.d_rho_right,
+            phi_left=params_left.phi_left,
+            phi_right=params_right.phi_right
+        )
+
+        return self._evaluate_with_new_wetting_params(f_t, merged_params)[4]
+
     def _cost_fucntion_cll(self, cll_t: jnp.ndarray, cll_tplus1: jnp.ndarray):
         return jnp.abs(cll_t - cll_tplus1)
 
@@ -363,42 +418,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
         return best_params, best_loss
 
-    def _update_macroscopic(self, params: WettingParameters):
-        """Create new macroscopic operator with updated wetting parameters."""
-        new_wetting_params = {
-            **self.macroscopic.bc_config.get('wetting_params', {}),
-            'd_rho_left': params.d_rho_left,
-            'd_rho_right': params.d_rho_right,
-            'phi_left': params.phi_left,
-            'phi_right': params.phi_right,
-        }
-        new_bc_config = {
-            **self.macroscopic.bc_config,
-            'wetting_params': new_wetting_params
-        }
-        new_gradient = Gradient(self.lattice, bc_config=new_bc_config)
-        new_laplacian = Laplacian(self.lattice, bc_config=new_bc_config)
-        new_macroscopic = type(self.macroscopic)(
-            self.macroscopic.grid,
-            self.lattice,
-            self.macroscopic.kappa,
-            self.macroscopic.beta,
-            self.macroscopic.rhol,
-            self.macroscopic.rhov,
-            force_enabled=self.macroscopic.force_enabled,
-            bc_config=new_bc_config
-        )
-        new_macroscopic.gradient = new_gradient
-        new_macroscopic.laplacian = new_laplacian
-        return new_macroscopic
-
-    def _reevaluate(self, f: jnp.ndarray, params: WettingParameters):
-        temp_macroscopic = self._update_macroscopic(params)
-        rho, _, _ = temp_macroscopic(f)
-        ca_left, ca_right = self.contact_angle.compute(rho)
-        cll_left, cll_right = self.contact_line_location.compute(rho, ca_left, ca_right)
-        return ca_left, ca_right, cll_left, cll_right, temp_macroscopic
-
+    @partial(jit, static_argnums=(0,))
     def _check_hysteresis_window(self, ca_tplus1: jnp.ndarray):
         return jnp.logical_and(
             ca_tplus1 >= self.ca_receding,
@@ -458,9 +478,9 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         else:
             return fstream, temp_macroscopic
 
-    def _evaluate_with_new_wetting_params(self, f_t: jnp.ndarray, params: WettingParameters):
+    def _evaluate_with_new_wetting_params(self, f_t: jnp.ndarray, params: WettingParameters, force: jnp.ndarray = None):
         """Evaluate contact angles and line locations with given wetting parameters (both sides)."""
-        f_tplus1, temp_macroscopic = self._run_timestep_with_new_wetting_params(f_t, params)
+        f_tplus1, temp_macroscopic = self._run_timestep_with_new_wetting_params(f_t, params, force)
         rho_tplus1, _, _ = temp_macroscopic(f_tplus1)
         ca_left, ca_right = self.contact_angle.compute(rho_tplus1)
         cll_left, cll_right = self.contact_line_location.compute(rho_tplus1, ca_left, ca_right)
@@ -485,6 +505,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         )
         return merged_params
 
+    @partial(jit, static_argnums=(0,))
     def _ca_optimisation(self, args):
         """When CA is outside hysteresis window, optimize to reach target CA."""
         ca_t, cll_t, ca_advancing, ca_receding, f_state = args
@@ -512,51 +533,3 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             phi_right=params_right.phi_right
         )
         return merged_params
-
-    @partial(jit, static_argnums=(0,))
-    def __call__(self, f_t: jnp.ndarray, force: jnp.ndarray = None):
-        f_tplus1 = super(UpdateMultiphaseHysteresis, self).__call__(f_t, force)
-
-        # Get the variables from the previous time step (t)
-        # TODO: Need to make sure that this also passes the force when it is not None
-        rho_t, _, _ = self.macroscopic(f_t)
-        ca_left_t, ca_right_t = self.contact_angle.compute(rho_t)
-        cll_left_t, cll_right_t = self.contact_line_location.compute(rho_t, ca_left_t, ca_right_t)
-
-        # Get the variables from the next time step (tplus1)
-        rho_tplus1, _, _ = self.macroscopic(f_tplus1)
-        ca_left_tplus1, ca_right_tplus1 = self.contact_angle.compute(rho_tplus1)
-        cll_left_tplus1, cll_right_tplus1 = self.contact_line_location.compute(rho_tplus1, ca_left_tplus1,
-                                                                               ca_right_tplus1)
-
-        # Check for both sides if the ca_tplus1 is within the hysteresis window
-        hysteresis_window_left = self._check_hysteresis_window(ca_left_tplus1)
-        hysteresis_window_right = self._check_hysteresis_window(ca_right_tplus1)
-
-        # Prepare common operand for left side (contains all needed data for both branches)
-        operand_left = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t)
-        params_left = jax.lax.cond(
-            hysteresis_window_left,
-            lambda args: self._cll_pinned((args[0], args[1], args[4])),  # unpack only what _cll_pinned expects
-            lambda args: self._ca_optimisation(args),  # pass full operand to _ca_optimisation
-            operand_left
-        )
-
-        # Prepare common operand for right side
-        operand_right = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t)
-        params_right = jax.lax.cond(
-            hysteresis_window_right,
-            lambda args: self._cll_pinned((args[0], args[1], args[4])),
-            lambda args: self._ca_optimisation(args),
-            operand_right
-        )
-
-        # Merge optimized parameters from both sides
-        merged_params = WettingParameters(
-            d_rho_left=params_left.d_rho_left,
-            d_rho_right=params_right.d_rho_right,
-            phi_left=params_left.phi_left,
-            phi_right=params_right.phi_right
-        )
-
-        return self._evaluate_with_new_wetting_params(f_t, merged_params)[4]
