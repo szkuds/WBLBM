@@ -8,12 +8,14 @@ from wblbm.operators.macroscopic.macroscopic import Macroscopic
 from wblbm.operators.differential.gradient import Gradient
 from wblbm.operators.differential.laplacian import Laplacian
 from wblbm.lattice.lattice import Lattice
+from wblbm.operators.wetting.wetting_util import determine_padding_modes
 
 
-class MacroscopicMultiphase(Macroscopic):
+class MacroscopicMultiphaseDW(Macroscopic):
     """
     Calculates macroscopic variables for multiphase simulations.
     Inherits from Macroscopic and adds multiphase-specific methods.
+    This is the double well implementation.
     """
 
     def __init__(
@@ -25,15 +27,17 @@ class MacroscopicMultiphase(Macroscopic):
         rho_l: float,
         rho_v: float,
         force_enabled: bool = False,
+        bc_config: dict = None,
     ):
         super().__init__(
             grid, lattice, force_enabled=force_enabled
-        )  # Pass force_enabled to parent
+        )
         self.kappa = kappa
         self.rho_l = rho_l
         self.rho_v = rho_v
-        self.gradient = Gradient(lattice)
-        self.laplacian = Laplacian(lattice)
+        self.bc_config = bc_config
+        self.gradient = Gradient(lattice, bc_config=bc_config)
+        self.laplacian = Laplacian(lattice, bc_config=bc_config)
         self.beta = 8 * kappa / (float(interface_width) ** 2 * (rho_l - rho_v) ** 2)
 
     @partial(jit, static_argnums=(0,))
@@ -96,10 +100,11 @@ class MacroscopicMultiphase(Macroscopic):
     @partial(jit, static_argnums=(0,))
     def force_int(self, rho):
         """
-        Calculate the interaction force.
+        Calculate the interaction force. Note that the chemical potential uses the same gradient calculation as the
+        density. This work because the values of the chemical potential are different to the rho_v and rho_l values.
+        If these where to match it would fail, but that will often not happen.
         """
-        grad_chem_pot = self.gradient(self.chem_pot(rho))  # Shape: (nx, ny, 1, 2)
-        # Return -rho * grad_chem_pot, shape (nx, ny, 1, 2)
+        grad_chem_pot = self.gradient(self.chem_pot(rho))
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))
@@ -109,3 +114,7 @@ class MacroscopicMultiphase(Macroscopic):
         """
         # Both u and force have shape (nx, ny, 1, 2)
         return u + force / 2
+
+
+
+

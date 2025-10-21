@@ -6,24 +6,23 @@ import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
 def test_single_phase_gravity_simulation():
     """Test a single-phase LBM simulation with gravity."""
     print("\n=== Single-Phase LBM Simulation with Gravity Test ===")
 
-    grid_shape = (200, 200)
-    tau = 1.0
-    nt = 1000
-    save_interval = 100
+    grid_shape = (100, 100)
+    tau = .6
+    nt = 20000
+    save_interval = 2000
 
-    force_g = 0.01
+    force_g = 0.000001
     inclination_angle = 0
     gravity = GravityForceSinglephase(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
-
-    bc_config = {"left": "bounce-back", "right": "bounce-back"}
 
     sim = Run(
         simulation_type="singlephase",
@@ -34,8 +33,7 @@ def test_single_phase_gravity_simulation():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
-        bc_config=bc_config,
-        init_type="standard",
+        init_type="standard"
     )
     sim.run(verbose=True)
     return sim

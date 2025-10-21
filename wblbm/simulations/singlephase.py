@@ -1,7 +1,7 @@
 from .base import BaseSimulation
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic import Macroscopic
-from wblbm.operators.initialise.init import Initialise
+from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
 
 
@@ -22,6 +22,9 @@ class SinglePhaseSimulation(BaseSimulation):
         super().__init__(grid_shape, lattice_type, tau, nt)
 
         # Set simulation type flags
+        self.macroscopic = None
+        self.initialiser = None
+        self.update = None
         self.multiphase = False
         self.wetting_enabled = False
 
@@ -42,12 +45,10 @@ class SinglePhaseSimulation(BaseSimulation):
             bc_config=self.bc_config,
             force_enabled=self.force_enabled,
             collision_scheme=self.collision_scheme,
-            kvec=self.k_diag,
+            k_diag=self.k_diag,
             **self.kwargs
         )
-        self.macroscopic = Macroscopic(
-            self.grid, self.lattice, force_enabled=self.force_enabled
-        )
+        self.macroscopic = self.update.macroscopic
         if self.bc_config:
             from wblbm.operators.boundary_condition.boundary_condition import (
                 BoundaryCondition,

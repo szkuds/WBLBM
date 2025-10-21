@@ -21,8 +21,12 @@ class BoundaryCondition:
         self.opp_indices = lattice.opp_indices
         self.edges = grid.get_edges()
         valid_edges = ["top", "bottom", "left", "right"]
-        valid_types = ["bounce-back", "symmetry", "periodic"]
+        valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
         for edge, bc_type in bc_config.items():
+            # Skip wetting_params as it is not an edge boundary condition
+            if edge == "wetting_params" or edge == "hysteresis_params":
+                continue
+
             if edge not in valid_edges:
                 raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
             if bc_type not in valid_types:
@@ -36,7 +40,7 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray
     ) -> jnp.ndarray:
         for edge, bc_type in self.bc_config.items():
-            if bc_type == "bounce-back":
+            if bc_type == "bounce-back" or bc_type == "wetting":
                 f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
             elif bc_type == "symmetry":
                 f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)

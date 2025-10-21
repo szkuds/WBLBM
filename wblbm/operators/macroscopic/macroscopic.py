@@ -24,7 +24,6 @@ class Macroscopic:
         self.d: int = lattice.d
         self.cx: jnp.ndarray = jnp.array(lattice.c[0])
         self.cy: jnp.ndarray = jnp.array(lattice.c[1])
-        self.gradient = Gradient(lattice)
         self.force_enabled = force_enabled
 
     @time_function(enable_timing=TIMING_ENABLED)
@@ -45,7 +44,6 @@ class Macroscopic:
         if self.d == 2:
             # Compute density
             rho = jnp.sum(f, axis=2, keepdims=True)  # (nx, ny, 1, 1)
-
             # Compute velocity WITHOUT force correction
             cx = self.cx.reshape((1, 1, self.q, 1))
             cy = self.cy.reshape((1, 1, self.q, 1))

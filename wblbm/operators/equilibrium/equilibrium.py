@@ -40,24 +40,21 @@ class Equilibrium:
         cx, cy = self.cx, self.cy
 
         # Extract velocity components
-        ux = u_[..., 0]  # Shape: (nx, ny, 1)
-        uy = u_[..., 1]  # Shape: (nx, ny, 1)
+        ux = u_[:, :, 0, 0]  # Shape: (nx, ny, 1)
+        uy = u_[:, :, 0, 1]  # Shape: (nx, ny, 1)
 
         # Squeeze density to match velocity dimensions
-        rho = rho_.squeeze(axis=-1)  # Shape: (nx, ny, 1)
+        rho = rho_[:, :, 0, 0]  # Shape: (nx, ny, 1)
 
         # Initialize equilibrium distribution - note the 4D shape
         f_eq = jnp.zeros((nx, ny, q, 1))
-
+        u2 = ux * ux + uy * uy
         # Calculate equilibrium for each velocity direction
-        for i in range(q):
+        for i in range(1, q):
             cu = cx[i] * ux + cy[i] * uy
             cu2 = cu * cu
-            u2 = ux * ux + uy * uy
-
-            f_eq = f_eq.at[:, :, i, :].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
-        f_eq = f_eq.at[:, :, 0, :].set(
-            rho[:, :, :] * (1 - w[0] * (3 / 2 * (ux * ux + uy * uy)))
-        )
+            f_eq = f_eq.at[:, :, i, 0].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
+        f_sum = jnp.sum(f_eq[:, :, 1:, 0], axis=2)
+        f_eq = f_eq.at[:, :, 0, 0].set(rho - f_sum)
 
         return f_eq
