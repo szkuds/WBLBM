@@ -1,5 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
+import inspect
 
 
 class SimulationFactory:
@@ -7,16 +8,10 @@ class SimulationFactory:
     def create_simulation(simulation_type, **kwargs):
         if simulation_type == "singlephase":
             from wblbm.simulations.singlephase import SinglePhaseSimulation
-
             return SinglePhaseSimulation(**kwargs)
         elif simulation_type == "multiphase":
             from wblbm.simulations.multiphase import MultiphaseSimulation
-
             return MultiphaseSimulation(**kwargs)
-        elif simulation_type == "wetting":
-            from wblbm.simulations.wetting import WettingSimulation
-
-            return WettingSimulation(**kwargs)
         else:
             raise ValueError(f"Unknown simulation type: {simulation_type}")
 
@@ -25,7 +20,7 @@ class Run:
     """
     Main class to configure and run lattice Boltzmann simulations using the simulation factory.
     """
-
+        # TODO:  Currently seems like you always use singlephase, since it passed here need to clarify
     def __init__(
         self,
         simulation_type="singlephase",
@@ -35,11 +30,21 @@ class Run:
         init_type="standard",
         init_dir=None,
         skip_interval=0,
+        collision=None,  # Accept collision as a kwarg
+        simulation_name=None,  # Added simulation_name parameter
         **kwargs,
     ):
-        # Allow collision config as a dict or CLI/JSON entry and pass it untouched
-        collision_cfg = kwargs.pop("collision", None)
-        if collision_cfg is not None:
+        # Accept either a string or a dict for collision
+        collision_cfg = None
+        if collision is not None:
+            if isinstance(collision, str):
+                collision_cfg = {"collision_scheme": collision}
+            elif isinstance(collision, dict):
+                collision_cfg = collision.copy()
+            else:
+                raise ValueError(
+                    "collision must be either a string (for BGK) or dict (for MRT config)."
+                )
             kwargs.update(collision_cfg)
         self.simulation = SimulationFactory.create_simulation(simulation_type, **kwargs)
         self.save_interval = save_interval
@@ -47,6 +52,19 @@ class Run:
         self.results_dir = results_dir
         self.init_type = init_type
         self.init_dir = init_dir
+        # Auto-detect simulation name from calling function if not provided
+        if simulation_name is None:
+            frame = inspect.currentframe()
+            try:
+                caller_frame = frame.f_back
+                while caller_frame:
+                    func_name = caller_frame.f_code.co_name
+                    if func_name != "<module>" and not func_name.startswith("_"):
+                        simulation_name = func_name
+                        break
+                    caller_frame = caller_frame.f_back
+            finally:
+                del frame
         self.config = self._build_config(
             simulation_type=simulation_type,
             save_interval=save_interval,
@@ -58,7 +76,9 @@ class Run:
         )
         from wblbm.utils.io import SimulationIO
 
-        self.io_handler = SimulationIO(base_dir=results_dir, config=self.config)
+        self.io_handler = SimulationIO(
+            base_dir=results_dir, config=self.config, simulation_name=simulation_name
+        )
 
     def _build_config(self, **kwargs):
         # Simple config builder for demonstration; extend as needed

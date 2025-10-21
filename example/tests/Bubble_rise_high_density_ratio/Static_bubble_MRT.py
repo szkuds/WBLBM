@@ -12,8 +12,8 @@ def test_mrt_static():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 50000
-    save_interval = 5000
+    nt = 5000
+    save_interval = 1000
     skip_interval = 0
     kappa = 0.01
     rho_l = 1
@@ -57,7 +57,7 @@ def test_mrt_static():
         skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
-        collision=collision,
+        collision="bgk",
         init_type="multiphase_bubble_bot",
         tau=tau,
         #bc_config=bc_config,

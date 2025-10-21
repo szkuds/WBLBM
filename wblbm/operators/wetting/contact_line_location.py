@@ -9,7 +9,8 @@ class ContactLineLocation:
     def __init__(self, rho_mean):
         self.rho_mean = rho_mean
 
-    def compute(self, rho, ca_left, ca_right):
+    def compute(self, rho_, ca_left, ca_right):
+        rho = rho_[:,:,0,0]
         array_i_j0 = rho[:, 0]
 
         mask_i_j0 = array_i_j0 < self.rho_mean

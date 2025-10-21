@@ -1,5 +1,6 @@
 from functools import partial
 
+import jax.lax
 import jax.numpy as jnp
 from jax import jit
 
@@ -8,25 +9,30 @@ from wblbm.lattice import Lattice
 from wblbm.operators.collision.collision_BGK import CollisionBGK
 from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
-from wblbm.operators.macroscopic.macroscopic_multiphase import MacroscopicMultiphase
+from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
+from wblbm.operators.macroscopic.macroscopic_multiphase_cs import MacroscopicMultiphaseCS
+from wblbm.operators.wetting.wetting_util import (has_hysteresis_bc)
 from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
+from wblbm.operators.wetting.contact_angle import ContactAngle
+from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 
 class UpdateMultiphase(Update):
     def __init__(
-        self,
-        grid: Grid,
-        lattice: Lattice,
-        tau: float,
-        kappa: float,
-        interface_width: int,
-        rho_l: float,
-        rho_v: float,
-        bc_config: dict = None,
-        force_enabled: bool = False,
-        collision_scheme: str = "bgk",
-        kvec=None,
-        **kwargs
+            self,
+            grid: Grid,
+            lattice: Lattice,
+            tau: float,
+            kappa: float,
+            interface_width: int,
+            rho_l: float,
+            rho_v: float,
+            bc_config: dict = None,
+            force_enabled: bool = False,
+            collision_scheme: str = "bgk",
+            eos: str = "double-well",
+            k_diag=None,
+            **kwargs
     ):
         super().__init__(
             grid,
@@ -35,18 +41,33 @@ class UpdateMultiphase(Update):
             bc_config,
             force_enabled=force_enabled,
             collision_scheme=collision_scheme,
-            kvec=kvec,
+            k_diag=k_diag,
             **kwargs
         )
-        self.macroscopic = MacroscopicMultiphase(
-            grid,
-            lattice,
-            kappa,
-            interface_width,
-            rho_l,
-            rho_v,
-            force_enabled=force_enabled,
-        )
+        if eos == "double-well":
+            self.macroscopic = MacroscopicMultiphaseDW(
+                grid, lattice, kappa, interface_width, rho_l, rho_v, force_enabled=force_enabled, bc_config=bc_config
+            )
+        #TODO: Need to make sure that the maxwell contruction is done to get the correct starting values.
+        elif eos == "carnahan-starling":
+            macroscopic_args = dict(
+                grid=grid,
+                lattice=lattice,
+                kappa=kappa,
+                interface_width=interface_width,
+                rho_l=rho_l,
+                rho_v=rho_v,
+                a_eos=kwargs['a_eos'],
+                b_eos=kwargs['b_eos'],
+                r_eos=kwargs['r_eos'],
+                t_eos=kwargs['t_eos'],
+                force_enabled=force_enabled,
+                bc_config=bc_config,
+            )
+            self.macroscopic = MacroscopicMultiphaseCS(**macroscopic_args)
+
+        else:
+            raise ValueError(f"Unknown EOS: {eos}")
 
     @partial(jit, static_argnums=(0,))
     def __call__(self, f: jnp.array, force: jnp.ndarray = None):
@@ -56,13 +77,11 @@ class UpdateMultiphase(Update):
                 "When the force is enabled an external force needs to be provided"
             )
         elif self.force_enabled:
-            rho, u, force_tot = self.macroscopic(f, force=force)
+            rho_prev, u, force_tot = self.macroscopic(f, force=force)
         else:
-            rho, u, force_tot = self.macroscopic(
-                f
-            )  # In this case the total force is only the interaction force
-        feq = self.equilibrium(rho, u)
-        source = self.source_term(rho, u, force_tot)
+            rho_prev, u, force_tot = self.macroscopic(f)  # In this case the total force is only the interaction force
+        feq = self.equilibrium(rho_prev, u)
+        source = self.source_term(rho_prev, u, force_tot)
         fcol = self.collision(f, feq, source)
         fstream = self.streaming(fcol)
         if self.boundary_condition is not None:
