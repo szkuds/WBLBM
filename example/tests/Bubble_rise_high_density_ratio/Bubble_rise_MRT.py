@@ -21,7 +21,7 @@ def rising_bubble_mrt():
     kappa = 0.01
     rho_l = 1
     rho_v = .001
-    interface_width = 3
+    interface_width = 5
 
     force_g = 0.0000000
     inclination_angle = 0

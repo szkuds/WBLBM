@@ -7,7 +7,7 @@ import jax
 # jax.config.update("jax_disable_jit", True)
 
 
-def test_mrt_static():
+def mrt_static_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
@@ -57,7 +57,7 @@ def test_mrt_static():
         skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
-        collision="bgk",
+        collision=collision,
         init_type="multiphase_bubble_bot",
         tau=tau,
         #bc_config=bc_config,
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = test_mrt_static()
+    sim_multiphase_gravity = mrt_static_test()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
