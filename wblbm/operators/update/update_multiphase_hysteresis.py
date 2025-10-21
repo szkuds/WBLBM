@@ -85,19 +85,19 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         hysteresis_window_right = self._check_hysteresis_window(ca_right_tplus1)
 
         # Prepare common operand for left side (contains all needed data for both branches)
-        operand_left = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t)
+        operand_left = (ca_left_t, cll_left_t, self.ca_advancing, self.ca_receding, f_t, force)
         params_left = jax.lax.cond(
             hysteresis_window_left,
-            lambda args: self._cll_pinned((args[0], args[1], args[4])),  # unpack only what _cll_pinned expects
+            lambda args: self._cll_pinned((args[0], args[1], args[4], args[5])),  # unpack only what _cll_pinned expects
             lambda args: self._ca_optimisation(args),  # pass full operand to _ca_optimisation
             operand_left
         )
 
         # Prepare common operand for right side
-        operand_right = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t)
+        operand_right = (ca_right_t, cll_right_t, self.ca_advancing, self.ca_receding, f_t, force)
         params_right = jax.lax.cond(
             hysteresis_window_right,
-            lambda args: self._cll_pinned((args[0], args[1], args[4])),
+            lambda args: self._cll_pinned((args[0], args[1], args[4], args[5])),
             lambda args: self._ca_optimisation(args),
             operand_right
         )
@@ -110,7 +110,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             phi_right=params_right.phi_right
         )
 
-        return self._evaluate_with_new_wetting_params(f_t, merged_params)[4]
+        return self._evaluate_with_new_wetting_params(f_t, merged_params, force)[4]
 
     def _cost_fucntion_cll(self, cll_t: jnp.ndarray, cll_tplus1: jnp.ndarray):
         return jnp.abs(cll_t - cll_tplus1)
@@ -120,12 +120,12 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     def _clamp_wetting_params(self, params: WettingParameters) -> WettingParameters:
         """Clamp wetting parameters to physically reasonable ranges."""
-        # Clamp d_rho values to reasonable range (e.g., -2 to 2)
-        d_rho_left = jnp.clip(params.d_rho_left, -2.0, 2.0)
-        d_rho_right = jnp.clip(params.d_rho_right, -2.0, 2.0)
-        # Clamp phi values to reasonable range (e.g., -1 to 1)
-        phi_left = jnp.clip(params.phi_left, -1.0, 1.0)
-        phi_right = jnp.clip(params.phi_right, -1.0, 1.0)
+        # Clamp d_rho values to reasonable range (e.g., 0 to 0.8)
+        d_rho_left = jnp.clip(params.d_rho_left, 0, 0.8)
+        d_rho_right = jnp.clip(params.d_rho_right, 0, 0.8)
+        # Clamp phi values to reasonable range (e.g., 1 to 1.5)
+        phi_left = jnp.clip(params.phi_left, 1.0, 1.5)
+        phi_right = jnp.clip(params.phi_right, 1.0, 1.5)
         return WettingParameters(d_rho_left, d_rho_right, phi_left, phi_right)
 
     def _get_current_params(self) -> WettingParameters:
@@ -140,17 +140,17 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     @partial(jit, static_argnums=(0,))
     def _optimize_cll_left(self, initial_params: WettingParameters,
-                           cll_t: jnp.ndarray, f_state: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
+                           cll_t: jnp.ndarray, f_state: jnp.ndarray, force: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
         """Optimize left side to pin contact line location by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_left
         def objective_drho(params):
-            _, _, cll_left, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, _, cll_left, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_fucntion_cll(cll_t, cll_left)
 
         # Objective for optimizing phi_left
         def objective_phi(params):
-            _, _, cll_left, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, _, cll_left, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_fucntion_cll(cll_t, cll_left)
 
         opt_state_drho = self.optimiser.init(initial_params)
@@ -210,17 +210,17 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     @partial(jit, static_argnums=(0,))
     def _optimize_cll_right(self, initial_params: WettingParameters,
-                            cll_t: jnp.ndarray, f_state: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
+                            cll_t: jnp.ndarray, f_state: jnp.ndarray, force: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
         """Optimize right side to pin contact line location by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_right
         def objective_drho(params):
-            _, _, _, cll_right, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, _, _, cll_right, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_fucntion_cll(cll_t, cll_right)
 
         # Objective for optimizing phi_right
         def objective_phi(params):
-            _, _, _, cll_right, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, _, _, cll_right, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_fucntion_cll(cll_t, cll_right)
 
         opt_state_drho = self.optimiser.init(initial_params)
@@ -280,17 +280,17 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     @partial(jit, static_argnums=(0,))
     def _optimize_ca_left(self, initial_params: WettingParameters,
-                          ca_target: jnp.ndarray, f_state: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
+                          ca_target: jnp.ndarray, f_state: jnp.ndarray, force: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
         """Optimize left side contact angle by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_left
         def objective_d_rho(params):
-            ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_left)
 
         # Objective for optimizing phi_left
         def objective_phi(params):
-            ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            ca_left, _, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_left)
 
         opt_state_d_rho = self.optimiser.init(initial_params)
@@ -350,17 +350,17 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     @partial(jit, static_argnums=(0,))
     def _optimize_ca_right(self, initial_params: WettingParameters,
-                           ca_target: jnp.ndarray, f_state: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
+                           ca_target: jnp.ndarray, f_state: jnp.ndarray, force: jnp.ndarray) -> Tuple[WettingParameters, jnp.ndarray]:
         """Optimize right side contact angle by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_right
         def objective_drho(params):
-            _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_right)
 
         # Objective for optimizing phi_right
         def objective_phi(params):
-            _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params)
+            _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_right)
 
         opt_state_drho = self.optimiser.init(initial_params)
@@ -488,13 +488,13 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
 
     def _cll_pinned(self, args):
         """When CA is within hysteresis window, pin the contact line location."""
-        ca_t, cll_t, f_state = args
+        ca_t, cll_t, f_state, force = args
         # Get current parameters and optimize to maintain CLL
         initial_params = self._get_current_params()
 
         # Optimize both left and right sides concurrently
-        params_left, _ = self._optimize_cll_left(initial_params, cll_t, f_state)
-        params_right, _ = self._optimize_cll_right(initial_params, cll_t, f_state)
+        params_left, _ = self._optimize_cll_left(initial_params, cll_t, f_state, force)
+        params_right, _ = self._optimize_cll_right(initial_params, cll_t, f_state, force)
 
         # Merge the optimized parameters (left side from params_left, right side from params_right)
         merged_params = WettingParameters(
@@ -508,7 +508,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
     @partial(jit, static_argnums=(0,))
     def _ca_optimisation(self, args):
         """When CA is outside hysteresis window, optimize to reach target CA."""
-        ca_t, cll_t, ca_advancing, ca_receding, f_state = args
+        ca_t, cll_t, ca_advancing, ca_receding, f_state, force = args
 
         # Determine target CA (advancing or receding based on current CA)
         # If CA < receding, target is receding; if CA > advancing, target is advancing
@@ -522,8 +522,8 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         initial_params = self._get_current_params()
 
         # Optimize both left and right sides concurrently
-        params_left, _ = self._optimize_ca_left(initial_params, ca_target, f_state)
-        params_right, _ = self._optimize_ca_right(initial_params, ca_target, f_state)
+        params_left, _ = self._optimize_ca_left(initial_params, ca_target, f_state, force)
+        params_right, _ = self._optimize_ca_right(initial_params, ca_target, f_state, force)
 
         # Merge the optimized parameters
         merged_params = WettingParameters(
