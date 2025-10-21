@@ -1,5 +1,5 @@
-from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm import Run
+from wblbm import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 import jax
 
@@ -56,6 +56,7 @@ def mrt_static_test():
         save_interval=save_interval,
         skip_interval=skip_interval,
         force_enabled=True,
+        bubble=True,
         force_obj=gravity,
         collision=collision,
         init_type="multiphase_bubble_bot",

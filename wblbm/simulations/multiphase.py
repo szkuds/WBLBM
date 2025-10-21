@@ -40,6 +40,7 @@ class MultiphaseSimulation(BaseSimulation):
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
         self.kwargs = kwargs
+        self.bubble = kwargs.get('bubble', False)
         self.setup_operators()
         self.multiphase = True
 
@@ -48,7 +49,7 @@ class MultiphaseSimulation(BaseSimulation):
             bc_type == 'wetting'
             for bc_type in (self.bc_config or {}).values()
         )
-        self.initialise = Initialise(self.grid, self.lattice)
+        self.initialise = Initialise(self.grid, self.lattice, self.bubble)
         # Check if hysteresis parameters are present
         # TODO: remove the UpdateMultiphaseHysteresis call here since it will be added
         #  to the update_multiphase.py function.
