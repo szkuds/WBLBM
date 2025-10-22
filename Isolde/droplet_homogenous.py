@@ -1,0 +1,132 @@
+import numpy as np
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+
+from wblbm.run import Run
+from wblbm.operators.wetting.contact_angle import ContactAngle
+from wblbm import GravityForceMultiphaseDroplet
+from wblbm import visualise
+
+#Simulation parameters
+grid_shape = (200,100) #nx, ny
+tau = 0.99
+nt = 500
+save_interval = 100
+kappa = 0.01
+rho_l = 1.0
+rho_v = 0.001
+interface_width = 5
+
+#Wetting parameters
+phi_value = 1.0
+d_rho_value = 0.0
+
+#Inclination angle constant
+inclination_angle = 0.0
+
+#Empty arrays for each contact angle
+theta_left_list = []
+theta_right_list = []
+
+#Gravity sweep
+#force_g = 0.00001
+force_g = [0.0, 1e-7,5e-7,1e-6,5e-6,1e-5,5e-5] #gravity very small and log scale
+for g in force_g:
+    gravity = GravityForceMultiphaseDroplet(grid_shape[0], grid_shape[1], 2, g, inclination_angle)
+
+    #Boundary conditions
+    bc_config = {
+          'left': 'periodic',
+          'bottom': 'wetting',
+          'top': 'symmetry',
+          'right': 'periodic',
+          'wetting_params': {
+              'rho_l': rho_l,
+              'rho_v': rho_v,
+              'phi_left': phi_value,
+              'phi_right': phi_value,
+             'd_rho_left': d_rho_value,
+                'd_rho_right': d_rho_value,
+                'width': interface_width,
+         },
+    }
+
+    #Wetting simulation
+    sim = Run(
+        simulation_type="multiphase",
+        grid_shape=grid_shape,
+        lattice_type="D2Q9",
+        tau=tau,
+        nt=nt,
+        kappa=kappa,
+        rho_l=rho_l,
+        rho_v=rho_v,
+        interface_width=interface_width,
+        save_interval=save_interval,
+        bc_config=bc_config,
+        force_enabled=True,
+        force_obj=gravity,
+        phi_value=phi_value,
+        d_rho_value=d_rho_value,
+        wetting_enabled=True,
+        init_type="wetting",  # droplet on surface
+    )
+    sim.run(verbose=False)
+
+#check how to get latest result for plotting multiple calculations
+# (manual input not handy)
+    #Load saved results
+    latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-10-22/11-01-28/data/timestep_499.npz"
+#latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
+    data = np.load(latest_result)
+    rho = data["rho"]
+
+    #Compute contact angle
+    rho_mean = 0.5 * (rho_l + rho_v)
+    angle_calc = ContactAngle(rho_mean)
+    theta_left, theta_right = angle_calc.compute(rho)
+
+#Add computed contact angles to empty arrays
+    theta_left_list.append(theta_left)
+    theta_right_list.append(theta_right)
+
+#Convert lists into arrays for plotting
+theta_left_list = np.array(theta_left_list)
+theta_right_list = np.array(theta_right_list)
+
+#Plot contact angle vs. gravity
+plt.figure(figsize=(7,3))
+plt.semilogx(force_g, theta_left_list, 'o-', label='θ_left')
+plt.semilogy(force_g, theta_right_list, 's-', label='θ_right')
+plt.xlabel('Gravity force (N)')
+plt.ylabel('Contact angle (degrees)')
+plt.title('Contact angle vs. Gravity')
+plt.grid(True)
+plt.legend()
+plt.show()
+
+#Extract and squeeze density field to 2D
+rho_2d = rho[:,:,0,0]  # removes dimensions of size 1
+print("rho shape after squeeze:", rho_2d.shape)  # should print (100, 200)
+
+# Check with a quick plot
+plt.imshow(rho_2d.T, origin="lower", cmap="jet")
+plt.colorbar(label="Density")
+plt.title("Droplet density field at equilibrium", weight="bold")
+
+#Add calculated angles and parameters to the plot for info
+plt.text(1, rho_2d.shape[1]-10, f'θ_left = {theta_left:.1f}°', color='white', fontsize=12, weight='bold')
+plt.text(70, rho_2d.shape[1]-10, f'θ_right = {theta_right:.1f}°', color='white', fontsize=12, weight='bold')
+plt.text(1, rho_2d.shape[1]-20, f'Gravity= {force_g:.1e}N', color='white', fontsize=12, weight='bold')
+plt.text(100, rho_2d.shape[1]-20, f'Incline angle = {inclination_angle:.1f}°', color='white', fontsize=12, weight='bold')
+
+plt.show()
+
+#Plot droplet density field
+visualise(
+    sim,
+    title=f"Equilibrium droplet (θ_left={theta_left:.1f}°, θ_right={theta_right:.1f}°)"
+)
+
+print(f"Contact angle (left): {theta_left:.2f}°, {theta_right:.2f}°")
+
