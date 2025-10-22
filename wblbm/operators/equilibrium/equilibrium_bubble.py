@@ -13,7 +13,7 @@ class EquilibriumBubble:
     Callable class to calculate the equilibrium population distribution for LBM.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice) -> None:
+    def __init__(self, grid: Grid, lattice: Lattice, g: float, rho_ref: float) -> None:
         self.nx: int = grid.nx
         self.ny: int = grid.ny
         self.q: int = lattice.q
@@ -21,6 +21,8 @@ class EquilibriumBubble:
         self.w = lattice.w
         self.cx = lattice.c[0]
         self.cy = lattice.c[1]
+        self.g = g
+        self.rho_ref = rho_ref
 
     @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))
@@ -49,12 +51,13 @@ class EquilibriumBubble:
         # Initialize equilibrium distribution - note the 4D shape
         f_eq = jnp.zeros((nx, ny, q, 1))
         u2 = ux * ux + uy * uy
+        y_coords = jnp.arange(ny).reshape(1, -1)
         # Calculate equilibrium for each velocity direction
         for i in range(1, q):
             cu = cx[i] * ux + cy[i] * uy
             cu2 = cu * cu
-            f_eq = f_eq.at[:, :, i, 0].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2))
-        f_sum = jnp.sum(f_eq[:, :, 1:, 0], axis=2)
-        f_eq = f_eq.at[:, :, 0, 0].set(rho - f_sum)
+            f_eq = f_eq.at[:, :, i, 0].set(w[i] * rho * (3 * cu + 4.5 * cu2 - 1.5 * u2) +
+                                           w[i] * (3 * self.rho_ref * self.g * y_coords))
+        f_eq = f_eq.at[:, :, 0, 0].set(rho - (1 - w[0]) * (3 * self.rho_ref * self.g * y_coords) - w[0] * rho * 1.5 * u2)
 
         return f_eq
