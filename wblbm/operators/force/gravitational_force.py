@@ -28,4 +28,4 @@ class GravityForceMultiphase(Force):
         """
         Implementation of the force in which both phases experience acceleration.
         """
-        return self.force * (rho - (jnp.average(rho)))
+        return self.force * (rho - rho_l)
