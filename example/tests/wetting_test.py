@@ -15,20 +15,20 @@ def wetting_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 500 # Number of time steps
-    save_interval = 100  # Save every 500 steps
+    nt = 2000 # Number of time steps
+    save_interval = 200  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
     interface_width = 5  # Interface width for smooth transition
 
     # Wetting parameters
-    phi_value = 1  # Wetting strength parameter
-    d_rho_value = 0.5  # Density adjustment parameter
+    phi_value = 1.2  # Wetting strength parameter
+    d_rho_value = 0  # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
-    force_g = 0.0000000  # Small gravity to observe wetting without rapid fall
-    inclination_angle = 0  # Vertical gravity
+    force_g = 0.00001
+    inclination_angle = 45
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )

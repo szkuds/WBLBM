@@ -20,6 +20,10 @@ line_loc_calc = ContactLineLocation(rho_mean)
 # Load all .npz result files
 import glob
 npz_files = glob.glob(f"{data_dir}/*.npz")
+# Sort by timestep number extracted from filename
+npz_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
+
+# Process sorted files
 for npz_file in npz_files:
     data = np.load(npz_file)
     rho = data["rho"]

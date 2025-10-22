@@ -7,6 +7,8 @@ jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_disable_jit", True)
 # TODO: To just make the implementation of hysteresis slightly simpler, I am not including the chemical step at the moment
 #  this logic will need to be added in later by a jax.lax.cond statement which determines if the step has been passed or not.
+# TODO: Need to pass the wetting params as an array, to implement the chemical step, since at the moment there is no mechanism to change the wetting as the droplet moves
+
 def test_wetting_hysteresis_simulation():
     """Test LBM wetting implementation with hysteresis enabled."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")

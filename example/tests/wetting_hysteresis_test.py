@@ -14,8 +14,8 @@ def wetting_hysteresis_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)
     tau = 0.99
-    nt = 20
-    save_interval = 1
+    nt = 2000
+    save_interval = 200
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -24,8 +24,8 @@ def wetting_hysteresis_simulation_test():
     phi_value = 1.2
     d_rho_value = 0.0
 
-    force_g = 0.0
-    inclination_angle = 0
+    force_g = 0.00001
+    inclination_angle = 90
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
@@ -48,8 +48,8 @@ def wetting_hysteresis_simulation_test():
         'hysteresis_params': {
             'ca_advancing': 90.0,
             'ca_receding': 80.0,
-            'learning_rate': 0.01,
-            'max_iterations': 20
+            'learning_rate': 0.05,
+            'max_iterations': 10
         }
     }
 
