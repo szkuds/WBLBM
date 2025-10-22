@@ -12,13 +12,13 @@ class Initialise:
     Handles the initialisation of the simulation for various scenarios.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice, bubble: bool = False):
+    def __init__(self, grid: Grid, lattice: Lattice, bubble: bool = False, g: float = None, rho_ref: float = None):
         self.grid = grid
         self.lattice = lattice
         self.nx, self.ny = grid.nx, grid.ny
         self.q = self.lattice.q
-        self.equilibrium = EquilibriumBubble(self.grid, self.lattice) if bubble else Equilibrium(self.grid, self.lattice)
-
+        self.equilibrium = EquilibriumBubble(self.grid, self.lattice, g, rho_ref) if bubble \
+            else Equilibrium(self.grid, self.lattice)
 
     def initialise_standard(
             self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])

@@ -29,9 +29,11 @@ class Update(object):
         self.grid = grid
         self.lattice = lattice
         self.bubble = kwargs.get('bubble', False)
+        self.rho_ref = kwargs.get('rho_ref', False)
+        self.g = kwargs.get('g', False)
         self.tau = tau
         self.macroscopic = Macroscopic(grid, lattice, force_enabled=force_enabled)
-        self.equilibrium = EquilibriumBubble(self.grid, self.lattice) if self.bubble \
+        self.equilibrium = EquilibriumBubble(self.grid, self.lattice, self.g, self.rho_ref) if self.bubble \
             else Equilibrium(self.grid, self.lattice)
         # Select collision scheme
         if collision_scheme == "mrt":
@@ -43,7 +45,7 @@ class Update(object):
             self.collision = CollisionMRT(grid, lattice, k_diag=k_diag, **mrt_params)
         else:
             self.collision = CollisionBGK(grid, lattice, tau)
-        self.source_term = SourceTermBubble(grid, lattice, bc_config) if self.bubble \
+        self.source_term = SourceTermBubble(grid, lattice, self.g, self.rho_ref, bc_config) if self.bubble \
             else SourceTerm(grid, lattice, bc_config)
         self.streaming = Streaming(lattice)
         if bc_config is not None:
