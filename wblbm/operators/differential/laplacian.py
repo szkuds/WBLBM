@@ -46,9 +46,9 @@ class Laplacian:
         else:
             return self._laplacian_standard(grid, padmode)
 
-    def _laplacian_standard(self, grid, padmode):
+    def _laplacian_standard(self, grid, pad_mode):
         """Standard laplacian calculation."""
-        effective_padmode = padmode if padmode is not None else self.pad_mode
+        effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
 
         if grid.ndim == 4:
             grid_2d = grid[:, :, 0, 0]
@@ -58,10 +58,10 @@ class Laplacian:
         w = self.w
 
         laplacian_2d = jnp.zeros_like(grid_2d)
-        grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_padmode[0])
-        grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_padmode[1])
-        grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_padmode[2])
-        grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_padmode[3])
+        grid_padded___ = jnp.pad(grid_2d, pad_width=((0, 0), (0, 1)), mode=effective_pad_mode[0])
+        grid_padded__ = jnp.pad(grid_padded___, pad_width=((0, 0), (1, 0)), mode=effective_pad_mode[1])
+        grid_padded_ = jnp.pad(grid_padded__, pad_width=((0, 1), (0, 0)), mode=effective_pad_mode[2])
+        grid_padded = jnp.pad(grid_padded_, pad_width=((1, 0), (0, 0)), mode=effective_pad_mode[3])
 
         grid_ineg1_j0 = grid_padded[:-2, 1:-1]
         grid_ipos1_j0 = grid_padded[2:, 1:-1]
