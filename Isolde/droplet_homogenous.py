@@ -18,11 +18,11 @@ rho_v = 0.001
 interface_width = 5
 
 #Wetting parameters
-phi_value = 1.0
+phi_value = 1.8
 d_rho_value = 0.0
 
 #Inclination angle constant
-inclination_angle = 45.0 #degrees
+inclination_angle = 0.0 #degrees
 
 #Gravity
 force_g = 0.00001
@@ -76,8 +76,8 @@ sim.run(verbose=True)
 #check how to get latest result for plotting multiple calculations
 # (manual input not handy)
 #Load saved results
-latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-10-22/13-47-03/data/timestep_499.npz"
-#latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
+#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-10-24/13-30-52/data/timestep_499.npz"
+latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
 data = np.load(latest_result)
 rho = data["rho"]
 
@@ -112,7 +112,7 @@ plt.text(70, rho_2d.shape[1]-10, f'θ_right = {theta_right:.1f}°', color='white
 plt.text(1, rho_2d.shape[1]-20, f'Gravity= {force_g:.1e} N', color='white', fontsize=12, weight='bold')
 plt.text(100, rho_2d.shape[1]-20, f'Incline angle = {inclination_angle:.1f}°', color='white', fontsize=12, weight='bold')
 
-#plt.show()
+plt.show()
 
 #Plot droplet density field
 visualise(

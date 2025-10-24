@@ -22,7 +22,7 @@ phi_value = 1.0
 d_rho_value = 0.0
 
 #Inclination angle constant
-inclination_angle = 45 #degrees
+inclination_angle = 45.0 #degrees
 
 #Gravity
 force_g = 0.00001
