@@ -26,7 +26,12 @@ class Gradient:
         self.pad_mode = determine_padding_modes(bc_config)
         # Only extract wetting parameters if wetting BC is present
         self.wetting_params = None
-        if has_wetting_bc(bc_config):
+        if self.bc_config and 'chemical_step' in self.bc_config and has_wetting_bc(bc_config):
+            self.wetting_params = bc_config.get('wetting_params')
+            if self.wetting_params is None:
+                raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bc_config")
+            self.chemical_step = bc_config.get('chemical_step')
+        elif has_wetting_bc(bc_config):
             self.wetting_params = bc_config.get('wetting_params')
             if self.wetting_params is None:
                 raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bc_config")
@@ -116,13 +121,28 @@ class Gradient:
     def _gradient_wetting(self, grid, pad_mode):
         rho_l = self.wetting_params['rho_l']
         rho_v = self.wetting_params['rho_v']
-        phi_left = self.wetting_params['phi_left']
-        phi_right = self.wetting_params['phi_right']
-        d_rho_left = self.wetting_params['d_rho_left']
-        d_rho_right = self.wetting_params['d_rho_right']
         width = self.wetting_params['width']
-        weight = self.w
+        weights = self.w
         c = self.c
+
+        if getattr(self, "chemical_step", False):
+            phi_left = jnp.ones(grid.shape[0])
+            phi_left = (phi_left.at[(grid.shape[0] // int(1 / self.chemical_step['chemical_step_location'])):]
+                        .set(self.wetting_params['phi_left']))
+            d_rho_left = jnp.zeros(grid.shape[0])
+            d_rho_left = (d_rho_left.at[:(grid.shape[0] // int(1 / self.chemical_step['chemical_step_location']))]
+                          .set(self.wetting_params['d_rho_left']))
+            phi_right = jnp.ones(grid.shape[0])
+            phi_right = (phi_right.at[(grid.shape[0] // int(1 / self.chemical_step['chemical_step_location'])):]
+                         .set(self.wetting_params['phi_right']))
+            d_rho_right = jnp.zeros(grid.shape[0])
+            d_rho_right = (d_rho_right.at[:(grid.shape[0] // int(1 / self.chemical_step['chemical_step_location']))]
+                           .set(self.wetting_params['d_rho_right']))
+        else:
+            phi_left = self.wetting_params['phi_left']
+            phi_right = self.wetting_params['phi_right']
+            d_rho_left = self.wetting_params['d_rho_left']
+            d_rho_right = self.wetting_params['d_rho_right']
 
         effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
         if grid.ndim == 4:
