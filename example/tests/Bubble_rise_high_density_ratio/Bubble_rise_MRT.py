@@ -58,7 +58,7 @@ def rising_bubble_mrt():
         save_interval=save_interval,
         force_enabled=True,
         force_obj=gravity,
-        init_type="multiphase_bubble",
+        init_type="init_from_file",
         init_dir=init_file,
         collision=collision,
         bc_config=bc_config,
