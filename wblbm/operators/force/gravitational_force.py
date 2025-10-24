@@ -13,8 +13,8 @@ class GravityForceMultiphase(Force):
         if d != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
-        force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
-        force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
+        force_x = force_g * -jnp.sin(jnp.deg2rad(inclination_angle_deg))
+        force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
 
         force_array = jnp.zeros((nx, ny, 1, d))
         force_array = force_array.at[:, :, 0, 0].set(force_x)
@@ -28,4 +28,4 @@ class GravityForceMultiphase(Force):
         """
         Implementation of the force in which both phases experience acceleration.
         """
-        return self.force * (rho - rho_l)
+        return - self.force * rho
