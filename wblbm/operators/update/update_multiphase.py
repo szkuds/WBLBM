@@ -11,10 +11,6 @@ from wblbm.operators.collision.collision_MRT import CollisionMRT
 from wblbm.operators.update.update import Update
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.macroscopic.macroscopic_multiphase_cs import MacroscopicMultiphaseCS
-from wblbm.operators.wetting.wetting_util import (has_hysteresis_bc)
-from wblbm.operators.boundary_condition.boundary_condition import BoundaryCondition
-from wblbm.operators.wetting.contact_angle import ContactAngle
-from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 
 class UpdateMultiphase(Update):
