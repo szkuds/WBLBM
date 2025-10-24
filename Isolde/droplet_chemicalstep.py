@@ -1,7 +1,7 @@
 import numpy as np
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
+from Isolde.droplet_homogenous import grid_shape, phi_value, d_rho_value, inclination_angle, latest_result
 from wblbm.run import Run
 from wblbm.operators.wetting.contact_angle import ContactAngle
 from wblbm import GravityForceMultiphaseDroplet
@@ -22,7 +22,7 @@ phi_value = 1.0
 d_rho_value = 0.0
 
 #Inclination angle constant
-inclination_angle = 45.0 #degrees
+inclination_angle = 45 #degrees
 
 #Gravity
 force_g = 0.00001
@@ -51,7 +51,6 @@ bc_config = {
         }
 }
 
-#Wetting simulation
 sim = Run(
     simulation_type="multiphase",
     grid_shape=grid_shape,
@@ -73,29 +72,17 @@ sim = Run(
 )
 sim.run(verbose=True)
 
-#check how to get latest result for plotting multiple calculations
-# (manual input not handy)
+
 #Load saved results
 latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-10-22/13-47-03/data/timestep_499.npz"
-#latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
 data = np.load(latest_result)
-rho = data["rho"]
+rho = data['rho']
 
 #Compute contact angle
 rho_mean = 0.5 * (rho_l + rho_v)
 angle_calc = ContactAngle(rho_mean)
 theta_left, theta_right = angle_calc.compute(rho)
-
-#Plot contact angle vs. gravity
-#plt.figure(figsize=(7,3))
-#plt.semilogx(force_g, theta_left_list, 'o-', label='θ_left')
-#plt.semilogy(force_g, theta_right_list, 's-', label='θ_right')
-#plt.xlabel('Gravity force (N)')
-#plt.ylabel('Contact angle (degrees)')
-#plt.title('Contact angle vs. Gravity')
-#plt.grid(True)
-#plt.legend()
-#plt.show()
+#Advancing vs receding here ?
 
 #Extract and squeeze density field to 2D
 rho_2d = rho[:,:,0,0]  # removes dimensions of size 1
@@ -112,13 +99,10 @@ plt.text(70, rho_2d.shape[1]-10, f'θ_right = {theta_right:.1f}°', color='white
 plt.text(1, rho_2d.shape[1]-20, f'Gravity= {force_g:.1e} N', color='white', fontsize=12, weight='bold')
 plt.text(100, rho_2d.shape[1]-20, f'Incline angle = {inclination_angle:.1f}°', color='white', fontsize=12, weight='bold')
 
-#plt.show()
+plt.show()
 
 #Plot droplet density field
 visualise(
     sim,
     title=f"Equilibrium droplet (θ_left={theta_left:.1f}°, θ_right={theta_right:.1f}°, Gravity= {force_g:.1e} N, Incline= {inclination_angle:.1f}°)"
 )
-
-print(f"Contact angle (left): {theta_left:.2f}°, {theta_right:.2f}°")
-
