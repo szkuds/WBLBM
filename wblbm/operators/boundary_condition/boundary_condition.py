@@ -8,11 +8,11 @@ from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
 class BoundaryCondition:
-    """
+    '''
     Applies boundary conditions to the post-streaming distribution function.
     Supports bounce-back, symmetry, and periodic BCs on specified grid edges.
     Uses dynamic indices from Lattice class instead of hardcoding.
-    """
+    '''
 
     def __init__(self, grid: Grid, lattice: Lattice, bc_config: Dict[str, str]):
         self.grid = grid
@@ -20,18 +20,18 @@ class BoundaryCondition:
         self.bc_config = bc_config
         self.opp_indices = lattice.opp_indices
         self.edges = grid.get_edges()
-        valid_edges = ["top", "bottom", "left", "right"]
-        valid_types = ["bounce-back", "symmetry", "periodic", "wetting"]
+        valid_edges = ['top', 'bottom', 'left', 'right']
+        valid_types = ['bounce-back', 'symmetry', 'periodic', 'wetting']
         for edge, bc_type in bc_config.items():
             # Skip wetting_params as it is not an edge boundary condition
-            if edge == "wetting_params" or edge == "hysteresis_params":
+            if edge == 'wetting_params' or edge == 'hysteresis_params' or edge == 'chemical_step':
                 continue
 
             if edge not in valid_edges:
-                raise ValueError(f"Invalid edge: {edge}. Must be one of {valid_edges}.")
+                raise ValueError(f'Invalid edge: {edge}. Must be one of {valid_edges}.')
             if bc_type not in valid_types:
                 raise ValueError(
-                    f"Invalid BC type: {bc_type}. Must be one of {valid_types}."
+                    f'Invalid BC type: {bc_type}. Must be one of {valid_types}.'
                 )
 
     @time_function(enable_timing=TIMING_ENABLED)
@@ -40,11 +40,11 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray
     ) -> jnp.ndarray:
         for edge, bc_type in self.bc_config.items():
-            if bc_type == "bounce-back" or bc_type == "wetting":
+            if bc_type == 'bounce-back' or bc_type == 'wetting':
                 f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
-            elif bc_type == "symmetry":
+            elif bc_type == 'symmetry':
                 f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
-            elif bc_type == "periodic":
+            elif bc_type == 'periodic':
                 f_streamed = self._apply_periodic(f_streamed)
         return f_streamed
 
@@ -53,7 +53,7 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str
     ) -> jnp.ndarray:
         lattice = self.lattice
-        if edge == "bottom":
+        if edge == 'bottom':
             idx = 0
             incoming_dirs = lattice.construct_top_indices
             for i in incoming_dirs:
@@ -61,7 +61,7 @@ class BoundaryCondition:
                 f_streamed = f_streamed.at[:, idx, i, 0].set(
                     f_collision[:, idx, opp_i, 0]
                 )
-        elif edge == "top":
+        elif edge == 'top':
             idx = -1
             incoming_dirs = lattice.construct_bottom_indices
             for i in incoming_dirs:
@@ -69,7 +69,7 @@ class BoundaryCondition:
                 f_streamed = f_streamed.at[:, idx, i, 0].set(
                     f_collision[:, idx, opp_i, 0]
                 )
-        elif edge == "left":
+        elif edge == 'left':
             idx = 0
             incoming_dirs = lattice.construct_right_indices
             for i in incoming_dirs:
@@ -77,7 +77,7 @@ class BoundaryCondition:
                 f_streamed = f_streamed.at[idx, :, i, 0].set(
                     f_collision[idx, :, opp_i, 0]
                 )
-        elif edge == "right":
+        elif edge == 'right':
             idx = -1
             incoming_dirs = lattice.construct_left_indices
             for i in incoming_dirs:
@@ -92,7 +92,7 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray, edge: str
     ) -> jnp.ndarray:
         lattice = self.lattice
-        if edge == "bottom":
+        if edge == 'bottom':
             idx = 0
             top_dirs = lattice.construct_top_indices
             bottom_dirs = lattice.construct_bottom_indices
@@ -109,7 +109,7 @@ class BoundaryCondition:
             f_streamed = f_streamed.at[:, idx, diag_top_left, 0].set(
                 f_collision[:, idx, diag_bottom_left, 0]
             )
-        elif edge == "top":
+        elif edge == 'top':
             idx = -1
             bottom_dirs = lattice.construct_bottom_indices
             top_dirs = lattice.construct_top_indices
@@ -122,7 +122,7 @@ class BoundaryCondition:
             f_streamed = f_streamed.at[:, idx, bottom_dirs[2], 0].set(
                 jnp.roll(f_collision[:, idx, top_dirs[2], 0], -1, axis=0)
             )
-        elif edge == "left":
+        elif edge == 'left':
             idx = 0
             right_dirs = lattice.construct_right_indices
             left_dirs = lattice.construct_left_indices
@@ -135,7 +135,7 @@ class BoundaryCondition:
             f_streamed = f_streamed.at[idx, :, right_dirs[2], 0].set(
                 f_collision[idx, :, left_dirs[2], 0]
             )
-        elif edge == "right":
+        elif edge == 'right':
             idx = -1
             left_dirs = lattice.construct_left_indices
             right_dirs = lattice.construct_right_indices
