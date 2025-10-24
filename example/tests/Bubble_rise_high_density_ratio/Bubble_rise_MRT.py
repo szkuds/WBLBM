@@ -1,6 +1,6 @@
 import numpy as np
 from wblbm import Run
-from wblbm import GravityForceMultiphaseBubble
+from wblbm import GravityForceMultiphase
 from wblbm import visualise
 import jax
 
@@ -15,7 +15,7 @@ def rising_bubble_mrt():
 
     grid_shape = (201, 201)
     nt = 5000
-    save_interval = 10
+    save_interval = 100
     init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
 
     kappa = 0.01
@@ -26,8 +26,8 @@ def rising_bubble_mrt():
     rho_ref = rho_l
     force_g = 0.0000001
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle, rho_ref
+    gravity = GravityForceMultiphase(
+        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
 
     bc_config = {
