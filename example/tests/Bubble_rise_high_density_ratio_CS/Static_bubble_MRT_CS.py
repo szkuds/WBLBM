@@ -30,10 +30,10 @@ def mrt_static_cs_test():
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
+        "top": "symmetry",
+        "bottom": "bounce-back",
+        "left": "periodic",
+        "right": "periodic",
     }
 
     # Specify MRT collision operator and its rates
@@ -74,7 +74,7 @@ def mrt_static_cs_test():
         collision="bgk",
         init_type="multiphase_bubble_bot",
         tau=tau,
-        #bc_config=bc_config,
+        bc_config=bc_config,
         eos="carnahan-starling",
         a_eos=a_eos,
         b_eos=b_eos,
