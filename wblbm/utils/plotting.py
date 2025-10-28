@@ -41,7 +41,10 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             final_rho = data["rho"]
             final_u = data["u"]
             final_force = data.get("force", None)
-            final_force_ext = data.get("force_ext", None)
+            if sim_instance.config['force_enabled']:
+                final_force_ext = data.get("force_ext")
+            else:
+                final_force_ext = None
 
             # load the config .json
             config = json.load(open(run_dir + "/config.json"))
@@ -52,7 +55,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
 
             fig, axes = plt.subplots(
                 1,
-                2 if final_force is None else 4,
+                2 if final_force is None else (3 if final_force_ext is None else 4),
                 figsize=(12 if final_force is None else 18, 5),
             )
 
@@ -169,5 +172,5 @@ def visualise(sim_instance, title="LBM Simulation Results"):
 
     except ImportError:
         print("Matplotlib not found. Please install it to visualize results.")
-    except Exception as e:
-        print(f"An error occurred during visualization: {e}")
+    # except Exception as e:
+    #     print(f"An error occurred during visualization: {e}")
