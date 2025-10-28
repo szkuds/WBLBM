@@ -65,7 +65,6 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             raise TypeError(
                 "When the force is enabled an external force needs to be provided"
             )
-        # TODO: expect that I will need to extract the force here to pass it further on
         elif self.force_enabled:
             rho_t, _, _ = self.macroscopic(f_t, force)
             rho_tplus1, _, _ = self.macroscopic(f_tplus1, force)
