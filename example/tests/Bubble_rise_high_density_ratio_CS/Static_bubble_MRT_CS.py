@@ -31,9 +31,9 @@ def mrt_static_cs_test():
 
     bc_config = {
         "top": "symmetry",
-        "bottom": "bounce-back",
-        "left": "periodic",
-        "right": "periodic",
+        "bottom": "symmetry",
+        "left": "symmetry",
+        "right": "symmetry",
     }
 
     # Specify MRT collision operator and its rates
