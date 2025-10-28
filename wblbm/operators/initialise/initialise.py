@@ -4,6 +4,7 @@ import os
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
+from wblbm.operators.equilibrium.equilibrium_bubble import EquilibriumBubble
 
 
 class Initialise:
@@ -11,15 +12,16 @@ class Initialise:
     Handles the initialisation of the simulation for various scenarios.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice):
+    def __init__(self, grid: Grid, lattice: Lattice, bubble: bool = False, g: float = None, rho_ref: float = None):
         self.grid = grid
         self.lattice = lattice
         self.nx, self.ny = grid.nx, grid.ny
         self.q = self.lattice.q
-        self.equilibrium = Equilibrium(self.grid, self.lattice)
+        self.equilibrium = EquilibriumBubble(self.grid, self.lattice, g, rho_ref) if bubble \
+            else Equilibrium(self.grid, self.lattice)
 
     def initialise_standard(
-        self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])
+            self, density: float = 1.0, velocity: np.ndarray = np.array([0.0, 0.0])
     ):
         """
         Initialises a standard simulation with uniform density and velocity.
@@ -42,7 +44,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_droplet_top(
-        self, rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with a low-density bubble in the center.
@@ -75,7 +77,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_bubble(
-        self, rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with a low-density bubble in the center.
@@ -108,7 +110,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_bubble_bubble(
-            self,rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with two low-density bubbles
@@ -119,15 +121,15 @@ class Initialise:
             jnp.ndarray: Initialised population distribution f.
         """
         #create a density field with two bubbles placed side-by-side
-        x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
         left_bubble_center_x, left_bubble_center_y = self.nx // 4, self.ny // 2
-        right_bubble_center_x, right_bubble_center_y = self.nx*2.4 // 4, self.ny // 2
+        right_bubble_center_x, right_bubble_center_y = self.nx * 2.4 // 4, self.ny // 2
         radius = min(self.nx, self.ny) // 5
 
         #use tanh for a smooth, stable interface
         distance_to_left_bubble = jnp.sqrt((x - left_bubble_center_x) ** 2 + (y - left_bubble_center_y) ** 2)
         distance_to_right_bubble = jnp.sqrt((x - right_bubble_center_x) ** 2 + (y - right_bubble_center_y) ** 2)
-        minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble*1.5)
+        minimum_distance = jnp.minimum(distance_to_left_bubble, distance_to_right_bubble * 1.5)
         rho_field_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
             (minimum_distance - radius) / interface_width
         )
@@ -141,7 +143,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_lateral_bubble_configuration(
-            self,rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with two low-density bubbles
@@ -152,9 +154,9 @@ class Initialise:
             jnp.ndarray: Initialised population distribution f.
         """
         #create a density field with two bubbles placed side-by-side
-        x,y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
-        left_bubble_center_x, left_bubble_center_y = self.nx // 2, self.ny*2 // 6
-        right_bubble_center_x, right_bubble_center_y = self.nx // 2, self.ny*4 // 6
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny))
+        left_bubble_center_x, left_bubble_center_y = self.nx // 2, self.ny * 2 // 6
+        right_bubble_center_x, right_bubble_center_y = self.nx // 2, self.ny * 4 // 6
         radius = min(self.nx, self.ny) // 6.5
 
         #use tanh for a smooth, stable interface
@@ -174,7 +176,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_droplet(
-        self, rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with a low-density bubble in the center.
@@ -207,7 +209,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_multiphase_bubble_bot(
-        self, rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialises a multiphase simulation with a low-density bubble in the center.
@@ -240,7 +242,7 @@ class Initialise:
         return self.equilibrium(rho, u)
 
     def initialise_wetting_chemical_step(
-        self, rho_l: float, rho_v: float, interface_width: int
+            self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
         Initialize the simulation with a droplet wetting a solid surface.
@@ -306,7 +308,7 @@ class Initialise:
         xc, yc = self.nx / 2, self.ny / 2
 
         # Calculate distance from center (shifted to simulate wetting at bottom)
-        distance = jnp.sqrt((x - xc/2) ** 2 + (y) ** 2)
+        distance = jnp.sqrt((x - xc / 2) ** 2 + (y) ** 2)
 
         # Calculate density distribution using tanh for smooth interface
         rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(
