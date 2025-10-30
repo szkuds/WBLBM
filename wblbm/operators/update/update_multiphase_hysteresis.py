@@ -243,7 +243,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             _, _, _, cll_right, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_fucntion_cll(cll_t, cll_right)
 
-        opt_state_drho = self.optimiser.init(initial_params)
+        opt_state_d_rho = self.optimiser.init(initial_params)
         opt_state_phi = self.optimiser.init(initial_params)
 
         # Optimization step for d_rho_right
@@ -279,22 +279,22 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             return (params, opt_state), loss
 
         # Run both optimizations
-        (final_params_drho, _), losses_drho = jax.lax.scan(
-            step_d_rho, (initial_params, opt_state_drho), jnp.arange(self.max_iterations)
+        (final_params_d_rho, _), losses_d_rho = jax.lax.scan(
+            step_d_rho, (initial_params, opt_state_d_rho), jnp.arange(self.max_iterations)
         )
         (final_params_phi, _), losses_phi = jax.lax.scan(
             step_phi, (initial_params, opt_state_phi), jnp.arange(self.max_iterations)
         )
 
         # Choose the best result (lowest final loss)
-        final_loss_drho = losses_drho[-1]
+        final_loss_d_rho = losses_d_rho[-1]
         final_loss_phi = losses_phi[-1]
         best_params = jax.lax.cond(
-            final_loss_drho < final_loss_phi,
-            lambda: final_params_drho,
+            final_loss_d_rho < final_loss_phi,
+            lambda: final_params_d_rho,
             lambda: final_params_phi
         )
-        best_loss = jnp.minimum(final_loss_drho, final_loss_phi)
+        best_loss = jnp.minimum(final_loss_d_rho, final_loss_phi)
 
         return best_params, best_loss
 
@@ -358,14 +358,14 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         )
 
         # Choose the best result (lowest final loss)
-        final_loss_drho = losses_d_rho[-1]
+        final_loss_d_rho = losses_d_rho[-1]
         final_loss_phi = losses_phi[-1]
         best_params = jax.lax.cond(
-            final_loss_drho < final_loss_phi,
+            final_loss_d_rho < final_loss_phi,
             lambda: final_params_d_rho,
             lambda: final_params_phi
         )
-        best_loss = jnp.minimum(final_loss_drho, final_loss_phi)
+        best_loss = jnp.minimum(final_loss_d_rho, final_loss_phi)
 
         return best_params, best_loss
 
@@ -376,7 +376,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         """Optimize right side contact angle by testing both phi and d_rho."""
 
         # Objective for optimizing d_rho_right
-        def objective_drho(params):
+        def objective_d_rho(params):
             _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_right)
 
@@ -385,13 +385,13 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             _, ca_right, _, _, _ = self._evaluate_with_new_wetting_params(f_state, params, force)
             return self._cost_function_ca(ca_target, ca_right)
 
-        opt_state_drho = self.optimiser.init(initial_params)
+        opt_state_d_rho = self.optimiser.init(initial_params)
         opt_state_phi = self.optimiser.init(initial_params)
 
         # Optimization step for d_rho_right
         def step_d_rho(carry, _):
             params, opt_state = carry
-            loss, grads = jax.value_and_grad(objective_drho)(params)
+            loss, grads = jax.value_and_grad(objective_d_rho)(params)
             # Only update d_rho_right, zero out other gradients
             grads = WettingParameters(
                 d_rho_left=jnp.zeros_like(grads.d_rho_left),
@@ -421,22 +421,22 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
             return (params, opt_state), loss
 
         # Run both optimizations
-        (final_params_drho, _), losses_drho = jax.lax.scan(
-            step_d_rho, (initial_params, opt_state_drho), jnp.arange(self.max_iterations)
+        (final_params_d_rho, _), losses_d_rho = jax.lax.scan(
+            step_d_rho, (initial_params, opt_state_d_rho), jnp.arange(self.max_iterations)
         )
         (final_params_phi, _), losses_phi = jax.lax.scan(
             step_phi, (initial_params, opt_state_phi), jnp.arange(self.max_iterations)
         )
 
         # Choose the best result (lowest final loss)
-        final_loss_drho = losses_drho[-1]
+        final_loss_d_rho = losses_d_rho[-1]
         final_loss_phi = losses_phi[-1]
         best_params = jax.lax.cond(
-            final_loss_drho < final_loss_phi,
-            lambda: final_params_drho,
+            final_loss_d_rho < final_loss_phi,
+            lambda: final_params_d_rho,
             lambda: final_params_phi
         )
-        best_loss = jnp.minimum(final_loss_drho, final_loss_phi)
+        best_loss = jnp.minimum(final_loss_d_rho, final_loss_phi)
 
         return best_params, best_loss
 
