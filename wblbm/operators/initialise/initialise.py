@@ -254,7 +254,7 @@ class Initialise:
             jnp.ndarray: Initial distribution function.
         """
         # Radius of the droplet (adapted from user query)
-        r = (self.ny) / 3.3
+        r = (self.ny) / 5
 
         # Initialize velocity (zero) and density fields with correct shapes
         u = jnp.zeros((self.nx, self.ny, 1, 2))
@@ -306,7 +306,7 @@ class Initialise:
         xc, yc = self.nx / 2, self.ny / 2
 
         # Calculate distance from center (shifted to simulate wetting at bottom)
-        distance = jnp.sqrt((x - xc/2) ** 2 + (y) ** 2)
+        distance = jnp.sqrt((x - xc) ** 2 + (y) ** 2)
 
         # Calculate density distribution using tanh for smooth interface
         rho_2d = (rho_l + rho_v) / 2 + (rho_l - rho_v) / 2 * jnp.tanh(

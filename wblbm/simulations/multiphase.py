@@ -8,22 +8,22 @@ import jax.numpy as jnp
 
 class MultiphaseSimulation(BaseSimulation):
     def __init__(
-        self,
-        grid_shape,
-        lattice_type="D2Q9",
-        tau=1.0,
-        nt=1000,
-        kappa=0.1,
-        rho_l=1.0,
-        rho_v=0.1,
-        interface_width=4,
-        force_enabled=False,
-        force_obj=None,
-        bc_config=None,
-        collision_scheme="bgk",
-        k_diag=None,
-        eos="double-well",
-        **kwargs
+            self,
+            grid_shape,
+            lattice_type="D2Q9",
+            tau=1.0,
+            nt=1000,
+            kappa=0.1,
+            rho_l=1.0,
+            rho_v=0.1,
+            interface_width=4,
+            force_enabled=False,
+            force_obj=None,
+            bc_config=None,
+            collision_scheme="bgk",
+            k_diag=None,
+            eos="double-well",
+            **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
         self.update = None
@@ -50,8 +50,6 @@ class MultiphaseSimulation(BaseSimulation):
         )
         self.initialise = Initialise(self.grid, self.lattice)
         # Check if hysteresis parameters are present
-        # TODO: remove the UpdateMultiphaseHysteresis call here since it will be added
-        #  to the update_multiphase.py function.
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -59,8 +57,6 @@ class MultiphaseSimulation(BaseSimulation):
                 collision_scheme=self.collision_scheme, eos=self.eos,
                 k_diag=self.k_diag, **self.kwargs
             )
-
-
         else:
             self.update = UpdateMultiphase(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -98,15 +94,15 @@ class MultiphaseSimulation(BaseSimulation):
             return self.initialise.initialise_multiphase_bubble_bubble(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="multiphase_lateral_bubble_configuration":
+        elif init_type == "multiphase_lateral_bubble_configuration":
             return self.initialise.initialise_multiphase_lateral_bubble_configuration(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="wetting_chem_step":
+        elif init_type == "wetting_chem_step":
             return self.initialise.initialise_wetting_chemical_step(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="wetting":
+        elif init_type == "wetting":
             return self.initialise.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
             )
