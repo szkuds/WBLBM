@@ -1,12 +1,16 @@
 import json
 import numpy as np
 import glob
+import os
 from wblbm.operators.wetting.contact_angle import ContactAngle
 from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 # Paths
-data_dir = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-21/11-28-59_wetting_hysteresis_simulation_test/data"
-config_path = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-21/11-28-59_wetting_hysteresis_simulation_test/config.json"
+folder = "results/2025-11-03/12-00-35_wetting_hysteresis_chem_step_simulation_test"
+base_dir = os.path.join("/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/", folder)
+data_dir = os.path.join(base_dir, "data")
+config_path = os.path.join(base_dir, "config.json")
+output_path = os.path.join(base_dir, "wetting_analysis.txt")
 
 # Load config
 with open(config_path) as f:
@@ -20,15 +24,17 @@ line_loc_calc = ContactLineLocation(rho_mean)
 
 # Load and sort all .npz result files
 npz_files = glob.glob(f"{data_dir}/*.npz")
-# Sort by timestep number extracted from filename
 npz_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
 
-# Process sorted files
-for npz_file in npz_files:
-    data = np.load(npz_file)
-    rho = data["rho"]
-    # Calculate contact angles
-    left_angle, right_angle = angle_calc.compute(rho)
-    # Calculate contact line locations
-    left_line, right_line = line_loc_calc.compute(rho, left_angle, right_angle)
-    print(f"{npz_file}: left_angle={left_angle}, right_angle={right_angle}, left_line={left_line}, right_line={right_line}")
+# Process sorted files and save results to file
+with open(output_path, "w") as out_f:
+    out_f.write("Wetting analysis results\n")
+    out_f.write("=======================\n")
+    for npz_file in npz_files:
+        data = np.load(npz_file)
+        rho = data["rho"]
+        left_angle, right_angle = angle_calc.compute(rho)
+        left_line, right_line = line_loc_calc.compute(rho, left_angle, right_angle)
+        line = f"{npz_file}: left_angle={left_angle}, right_angle={right_angle}, left_line={left_line}, right_line={right_line}"
+        print(line)
+        out_f.write(line + "\n")

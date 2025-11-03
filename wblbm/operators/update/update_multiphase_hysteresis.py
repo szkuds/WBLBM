@@ -142,7 +142,7 @@ class UpdateMultiphaseHysteresis(UpdateMultiphase):
         d_rho_left = jnp.clip(params.d_rho_left, 0, 0.2)
         d_rho_right = jnp.clip(params.d_rho_right, 0, 0.2)
         # Clamp phi values to reasonable range (e.g., 1 to 1.5)
-        phi_left = jnp.clip(params.phi_left, 1.0, 1.5)
+        phi_left = jnp.clip(params.phi_left, 1.0, 1.5 )
         phi_right = jnp.clip(params.phi_right, 1.0, 1.5)
         return WettingParameters(d_rho_left, d_rho_right, phi_left, phi_right)
 
