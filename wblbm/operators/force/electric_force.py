@@ -2,7 +2,7 @@ import jax.numpy as jnp
 from wblbm.operators.force.force import Force
 
 
-class ElectricalForce(Force):
+class ElectricForce(Force):
     """
     Subclass for electrical force with electric potential distribution.
     Solves for electric potential using a separate distribution function h_i.
