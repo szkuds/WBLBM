@@ -18,9 +18,9 @@ class SimulationFactory:
 
 class Run:
     """
-    Main class to configure and run lattice Boltzmann simulations using the simulation factory.
+    Main class to configure and run lattice Boltzmann simulations using the simulation factory. Note that the parameters
+    stated below are placeholders in the case the user does not specify them.
     """
-        # TODO:  Currently seems like you always use singlephase, since it passed here need to clarify
     def __init__(
         self,
         simulation_type="singlephase",

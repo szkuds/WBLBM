@@ -2,14 +2,14 @@ import wblbm.lattice
 import wblbm.grid
 from wblbm.operators.update import Update, UpdateMultiphase
 from wblbm.operators.initialise import Initialise
-from wblbm.operators.equilibrium import Equilibrium
+from wblbm.operators.equilibrium import Equilibrium, EquilibriumBubble
 from wblbm.operators.stream import Streaming
 from wblbm.operators.macroscopic import Macroscopic, MacroscopicMultiphaseDW
 from wblbm.operators.differential import (
     Gradient,
     Laplacian
 )
-from wblbm.operators.collision import CollisionBGK, SourceTerm, CollisionMRT
+from wblbm.operators.collision import CollisionBGK, SourceTerm, CollisionMRT, SourceTermBubble
 from wblbm.operators.boundary_condition import BoundaryCondition
 from wblbm.run import Run
 from wblbm.operators.force import (
@@ -17,6 +17,7 @@ from wblbm.operators.force import (
     GravityForceMultiphaseBubble,
     GravityForceMultiphaseDroplet,
     GravityForceSinglephase,
+    GravityForceMultiphase
 )
 from wblbm.utils import (
     SimulationIO,

@@ -1,5 +1,5 @@
-from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm import Run
+from wblbm import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 import jax
 

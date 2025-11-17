@@ -3,7 +3,7 @@ from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 
 # TODO: Nice to test the MRT operator with these parameters, since this is the pattern which often leads to a crash.
-def multiphase_gravity_simulation_test():
+def test_multiphase_gravity_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
@@ -43,7 +43,6 @@ def multiphase_gravity_simulation_test():
         bc_config=bc_config,
         force_enabled=True,
         force_obj=gravity,
-        force_g=force_g,
         init_type="multiphase_droplet",
     )
     sim.run(verbose=True)
@@ -55,7 +54,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+    sim_multiphase_gravity = test_multiphase_gravity_simulation()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
