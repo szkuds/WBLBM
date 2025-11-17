@@ -1,0 +1,81 @@
+Configuration saved to results/2025-12-05/12-27-57_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10000 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 221, in _broadcast_shapes_uncached
+    return _try_broadcast_shapes(*rank_promoted_shapes, name='broadcast_shapes')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 136, in _try_broadcast_shapes
+    raise TypeError(f'{name} got incompatible shapes for broadcasting: '
+TypeError: broadcast_shapes got incompatible shapes for broadcasting: (1, 9, 1, 1), (200, 800, 9, 1).
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 199, in broadcast_shapes
+    return _broadcast_shapes_cached(*shapes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/util.py", line 300, in wrapper
+    return cached(trace_context(), *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/util.py", line 294, in cached
+    return f(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 205, in _broadcast_shapes_cached
+    return _broadcast_shapes_uncached(*shapes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 224, in _broadcast_shapes_uncached
+    raise ValueError(f"Incompatible shapes for broadcasting: shapes={list(shapes)}") from err
+ValueError: Incompatible shapes for broadcasting: shapes=[(9, 1, 1), (200, 800, 9, 1)]
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 221, in _broadcast_shapes_uncached
+    return _try_broadcast_shapes(*rank_promoted_shapes, name='broadcast_shapes')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 136, in _try_broadcast_shapes
+    raise TypeError(f'{name} got incompatible shapes for broadcasting: '
+TypeError: broadcast_shapes got incompatible shapes for broadcasting: (1, 9, 1, 1), (200, 800, 9, 1).
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 148, in run
+    f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/simulations/multiphase.py", line 139, in run_timestep
+    h_next = electric_force.update_h_i(h_prev, conductivity)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 105, in update_h_i
+    h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 122, in equilibrium_h
+    return w_i[:, jnp.newaxis, jnp.newaxis] * h_i
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/array_methods.py", line 604, in deferring_binary_op
+    return binary_op(*args)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/ufunc_api.py", line 183, in __call__
+    return call(*args)
+           ^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/ufuncs.py", line 1279, in multiply
+    x, y = promote_args("multiply", x, y)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/util.py", line 230, in promote_args
+    return promote_shapes(fun_name, *promote_dtypes(*args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/util.py", line 68, in promote_shapes
+    result_rank = len(lax.broadcast_shapes(*shapes))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 201, in broadcast_shapes
+    return _broadcast_shapes_uncached(*shapes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 224, in _broadcast_shapes_uncached
+    raise ValueError(f"Incompatible shapes for broadcasting: shapes={list(shapes)}") from err
+ValueError: Incompatible shapes for broadcasting: shapes=[(9, 1, 1), (200, 800, 9, 1)]

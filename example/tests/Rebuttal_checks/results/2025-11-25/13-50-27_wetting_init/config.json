@@ -1,0 +1,48 @@
+{
+    "simulation_type": "multiphase",
+    "save_interval": 10000,
+    "results_dir": "results",
+    "skip_interval": 0,
+    "init_type": "wetting",
+    "init_dir": null,
+    "grid_shape": [
+        401,
+        101
+    ],
+    "lattice_type": "D2Q9",
+    "tau": 0.99,
+    "nt": 200000,
+    "kappa": 0.017,
+    "rho_l": 1.0,
+    "rho_v": 0.33,
+    "interface_width": 4,
+    "force_enabled": false,
+    "force_obj": [
+        {
+            "__class__": "GravityForceMultiphaseDroplet",
+            "__module__": "wblbm.operators.force.gravitational_force_droplet"
+        }
+    ],
+    "phi_value": 1,
+    "d_rho_value": 0,
+    "wetting_enabled": true,
+    "hysteresis_params": null,
+    "force_g": 2e-06,
+    "inclination_angle": 0,
+    "collision_scheme": "bgk",
+    "boundary_conditions": {
+        "left": "periodic",
+        "bottom": "wetting",
+        "top": "bounce-back",
+        "right": "periodic",
+        "wetting_params": {
+            "rho_l": 1.0,
+            "rho_v": 0.33,
+            "phi_left": 1,
+            "phi_right": 1,
+            "d_rho_left": 0,
+            "d_rho_right": 0,
+            "width": 4
+        }
+    }
+}

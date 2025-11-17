@@ -1,0 +1,16 @@
+Configuration saved to results/2025-12-05/13-46-39_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 158, in run
+    f_prev = self.simulation.run_timestep(f_prev, it)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 98, in _save_data
+    self.config.get("force_obj")):
+    ^^^^
+KeyboardInterrupt

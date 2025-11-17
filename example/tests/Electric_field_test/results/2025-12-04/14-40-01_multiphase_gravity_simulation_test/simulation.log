@@ -1,0 +1,67 @@
+Configuration saved to results/2025-12-04/14-40-01_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10000 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 140, in run
+    f_prev = self.simulation.run_timestep(f_prev, it)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/traceback_util.py", line 180, in reraise_with_filtered_traceback
+    return fun(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 268, in cache_miss
+    executable, pgle_profiler, const_args) = _python_pjit_helper(
+                                             ^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 137, in _python_pjit_helper
+    p, args_flat = _infer_params(fun, jit_info, args, kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 635, in _infer_params
+    return _infer_params_internal(fun, ji, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 659, in _infer_params_internal
+    p, args_flat = _infer_params_impl(
+                   ^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 556, in _infer_params_impl
+    jaxpr, consts, out_avals = _create_pjit_jaxpr(
+                               ^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/linear_util.py", line 504, in memoized_fun
+    ans = call(fun, *args)
+          ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/pjit.py", line 1343, in _create_pjit_jaxpr
+    jaxpr, global_out_avals, consts = pe.trace_to_jaxpr_dynamic(fun, in_type)
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/profiler.py", line 364, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/interpreters/partial_eval.py", line 2387, in trace_to_jaxpr_dynamic
+    ans = fun.call_wrapped(*in_tracers)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/linear_util.py", line 212, in call_wrapped
+    return self.f_transformed(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/api_util.py", line 73, in flatten_fun
+    ans = f(*py_args, **py_kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/api_util.py", line 318, in _argnames_partial
+    return _fun(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/api_util.py", line 292, in _argnums_partial
+    return _fun(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/linear_util.py", line 429, in _get_result_paths_thunk
+    ans = _fun(*args, **kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/simulations/multiphase.py", line 125, in run_timestep
+    force_ext = self.force_obj.compute_force(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/composite_force.py", line 47, in compute_force
+    force_contribution = force.compute_force(**kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 70, in compute_force
+    conductivity_field = self.conductivity(rho,
+                         ^^^^
+KeyboardInterrupt

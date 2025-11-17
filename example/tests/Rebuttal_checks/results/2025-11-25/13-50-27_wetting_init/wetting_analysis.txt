@@ -1,0 +1,9 @@
+Wetting analysis results
+=======================
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_10000.npz: left_angle=86.19207763671875, right_angle=86.19207763671875, left_line=171.33226013183594, right_line=229.66773986816406
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_20000.npz: left_angle=85.65104675292969, right_angle=85.6501693725586, left_line=171.93040466308594, right_line=229.06961059570312
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_30000.npz: left_angle=86.00933837890625, right_angle=86.00933837890625, left_line=172.2173614501953, right_line=228.7826385498047
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_40000.npz: left_angle=86.05892944335938, right_angle=86.05892944335938, left_line=172.3365936279297, right_line=228.66339111328125
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_50000.npz: left_angle=86.05892944335938, right_angle=86.05892944335938, left_line=172.38909912109375, right_line=228.6108856201172
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_60000.npz: left_angle=86.0554428100586, right_angle=86.05458068847656, left_line=172.41253662109375, right_line=228.5874786376953
+/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/results/2025-11-25/13-50-27_wetting_init/data/timestep_70000.npz: left_angle=86.05197143554688, right_angle=86.05197143554688, left_line=172.42300415039062, right_line=228.57699584960938

@@ -1,0 +1,38 @@
+Configuration saved to results/2025-12-05/11-52-59_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10000 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 147, in run
+    f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/simulations/multiphase.py", line 125, in run_timestep
+    force_ext = self.force_obj.compute_force(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/composite_force.py", line 47, in compute_force
+    force_contribution = force.compute_force(**kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 76, in compute_force
+    potential = self.electric_potential(h_i)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 101, in electric_potential
+    U = jnp.sum(h_i, axis=2, keepdims=True)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/reductions.py", line 309, in sum
+    return _reduce_sum(a, axis=_ensure_optional_axes(axis), dtype=dtype, out=out,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/reductions.py", line 232, in _reduce_sum
+    return _reduction(a, "sum", lax.add, 0, preproc=_cast_to_numeric,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/reductions.py", line 116, in _reduction
+    a = ensure_arraylike(name, a)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/util.py", line 157, in ensure_arraylike
+    check_arraylike(fun_name, *args)
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/util.py", line 183, in check_arraylike
+    raise TypeError(msg.format(fun_name, type(arg), pos))
+TypeError: sum requires ndarray or scalar arguments, got <class 'ellipsis'> at position 0.

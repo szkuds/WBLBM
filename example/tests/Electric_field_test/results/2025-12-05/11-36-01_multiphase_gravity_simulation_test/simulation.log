@@ -1,0 +1,48 @@
+Configuration saved to results/2025-12-05/11-36-01_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10000 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 147, in run
+    f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/simulations/multiphase.py", line 125, in run_timestep
+    force_ext = self.force_obj.compute_force(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/composite_force.py", line 47, in compute_force
+    force_contribution = force.compute_force(**kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/force/electric_force.py", line 88, in compute_force
+    electric_force = q * electric_field - 0.5 * jnp.dot(electric_field,
+                                                ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/tensor_contractions.py", line 122, in dot
+    result = lax.dot_general(a, b, dimension_numbers=(contract_dims, batch_dims),
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 2463, in dot_general
+    return dot(lhs, rhs, dimension_numbers=dimension_numbers, precision=precision,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 2572, in dot
+    return dot_general_p.bind(lhs, rhs,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 634, in bind
+    return self._true_bind(*args, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 650, in _true_bind
+    return self.bind_with_trace(prev_trace, args, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 662, in bind_with_trace
+    return trace.process_primitive(self, args, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 1189, in process_primitive
+    return primitive.impl(*args, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/dispatch.py", line 90, in apply_primitive
+    outs = fun(*args)
+           ^^^^^^^^^^
+TypeError: dot_general requires contracting dimensions to have the same shape, got (2,) and (1,).
+--------------------
+For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.

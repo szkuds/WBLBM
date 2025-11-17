@@ -1,0 +1,52 @@
+Configuration saved to results/2025-12-05/12-29-40_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10000 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 148, in run
+    f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/simulations/multiphase.py", line 131, in run_timestep
+    f_next = self.update(f_prev, force=force_ext)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/update/update_multiphase.py", line 80, in __call__
+    source = self.source_term(rho_prev, u, force_tot)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/collision/source.py", line 98, in __call__
+    source_3d = source_term(u_2d, force_2d, grad_rho_2d)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/operators/collision/source.py", line 90, in source_term
+    + 0.5
+      ^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/array_methods.py", line 604, in deferring_binary_op
+    return binary_op(*args)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/ufunc_api.py", line 183, in __call__
+    return call(*args)
+           ^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/numpy/ufuncs.py", line 1280, in multiply
+    return lax.mul(x, y) if x.dtype != bool else lax.bitwise_and(x, y)
+           ^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/lax/lax.py", line 1247, in mul
+    return mul_p.bind(x, y)
+           ^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 634, in bind
+    return self._true_bind(*args, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 650, in _true_bind
+    return self.bind_with_trace(prev_trace, args, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 662, in bind_with_trace
+    return trace.process_primitive(self, args, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/core.py", line 1189, in process_primitive
+    return primitive.impl(*args, **params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/jax/_src/dispatch.py", line 90, in apply_primitive
+    outs = fun(*args)
+           ^^^^^^^^^^
+KeyboardInterrupt

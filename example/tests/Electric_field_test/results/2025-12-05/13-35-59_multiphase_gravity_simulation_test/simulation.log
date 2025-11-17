@@ -1,0 +1,31 @@
+Configuration saved to results/2025-12-05/13-35-59_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Step 1/10: avg_rho=0.0143, max_u=0.000532
+Step 2/10: avg_rho=0.0143, max_u=0.000728
+Step 3/10: avg_rho=0.0143, max_u=0.000917
+Step 4/10: avg_rho=0.0143, max_u=0.001098
+Step 5/10: avg_rho=0.0143, max_u=0.001272
+Step 6/10: avg_rho=0.0143, max_u=0.001440
+Step 7/10: avg_rho=0.0143, max_u=0.001602
+Step 8/10: avg_rho=0.0143, max_u=0.001759
+Step 9/10: avg_rho=0.0143, max_u=0.001911
+Simulation completed!
+Results saved in: results/2025-12-05/13-35-59_multiphase_gravity_simulation_test
+
+=== Visualizing Results ===
+Saving plots to: results/2025-12-05/13-35-59_multiphase_gravity_simulation_test/plots
+Traceback (most recent call last):
+  File "/Applications/PyCharm.app/Contents/plugins/python/helpers/pydev/pydevd.py", line 1551, in _exec
+    pydev_imports.execfile(file, globals, locals)  # execute the script
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Applications/PyCharm.app/Contents/plugins/python/helpers/pydev/_pydev_imps/_pydev_execfile.py", line 18, in execfile
+    exec(compile(contents+"\n", file, 'exec'), glob, loc)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 81, in <module>
+    visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/utils/plotting.py", line 53, in visualise
+    final_rho = data["rho"]
+                ~~~~^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/numpy/lib/_npyio_impl.py", line 243, in __getitem__
+    raise KeyError(f"{key} is not a file in the archive") from None
+KeyError: 'rho is not a file in the archive'
