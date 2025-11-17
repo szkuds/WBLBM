@@ -47,12 +47,11 @@ class MultiphaseSimulation(BaseSimulation):
         self.multiphase = True
 
     def setup_operators(self):
-        self.wetting_enabled = any(
-            bc_type == 'wetting'
-            for bc_type in (self.bc_config or {}).values()
-        )
-        self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref) if self.bubble \
-            else Initialise(self.grid, self.lattice, self.bubble)
+        self.wetting_enabled = any(bc_type == 'wetting'for bc_type in (self.bc_config or {}).values())
+        if self.bubble:
+            self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref)
+        else:
+            Initialise(self.grid, self.lattice, self.bubble)
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -112,7 +111,7 @@ class MultiphaseSimulation(BaseSimulation):
         else:
             return self.initialise.initialise_standard()
 
-    def run_timestep(self, fprev, it):
+    def run_timestep(self, f_prev, it):
         force_ext = None
         # TODO: This is where the external force is added,
         #  since this will also be how I want to implement the electric force
@@ -121,12 +120,11 @@ class MultiphaseSimulation(BaseSimulation):
         #    As it will allow for multiple force to be dealt with in a similar manner.
         #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
         if self.force_enabled and self.force_obj:
-            rho = jnp.sum(fprev, axis=2, keepdims=True)
+            rho = jnp.sum(f_prev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
-        fnext = (
-            self.update(fprev, force=force_ext)
+        f_next = (
+            self.update(f_prev, force=force_ext)
             if self.force_enabled
-            else self.update(fprev)
+            else self.update(f_prev)
         )
-
-        return fnext
+        return f_next
