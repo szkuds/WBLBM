@@ -35,21 +35,21 @@ class Laplacian:
                 raise ValueError("Wetting boundary condition specified but 'wetting_params' not found in bc_config")
 
     @partial(jit, static_argnums=(0,))
-    def __call__(self, grid, padmode: list = None):
+    def __call__(self, grid, pad_mode: list = None):
         """
         Calculate the Laplacian of a 2D grid.
 
         Args:
             grid (jnp.ndarray): Input grid, shape (nx, ny, 1, 1)
-            padmode (list, optional): List of padding modes for each pad step
+            pad_mode (list, optional): List of padding modes for each pad step
 
         Returns:
             jnp.ndarray: Laplacian of the input grid, shape (nx, ny, 1, 1)
         """
         if self.wetting_params is not None:  # Only use wetting if params are available
-            return self._laplacian_wetting(grid, padmode)
+            return self._laplacian_wetting(grid, pad_mode)
         else:
-            return self._laplacian_standard(grid, padmode)
+            return self._laplacian_standard(grid, pad_mode)
 
     def _laplacian_standard(self, grid, pad_mode):
         """Standard laplacian calculation."""
@@ -135,8 +135,9 @@ class Laplacian:
         grid_padded = jnp.pad(grid_padded, ((0, 1), (0, 0)), mode=effective_pad_mode[2])
         grid_padded = jnp.pad(grid_padded, ((1, 0), (0, 0)), mode=effective_pad_mode[3])
 
-        grid_padded = apply_wetting_to_all_edges(self, grid_padded,
-            rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width)
+        grid_padded = apply_wetting_to_all_edges(
+            self, grid_padded, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_rho_right, width
+        )
 
         grid_ineg1_j0 = grid_padded[:-2, 1:-1]
         grid_ipos1_j0 = grid_padded[2:, 1:-1]

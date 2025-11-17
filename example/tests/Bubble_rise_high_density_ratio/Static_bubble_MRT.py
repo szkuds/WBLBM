@@ -21,12 +21,6 @@ def mrt_static_test():
     interface_width = 5
     tau = 0.9
 
-    force_g = 0.00000
-    inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
-    )
-
     bc_config = {
         "top": "periodic",
         "bottom": "periodic",
@@ -55,10 +49,7 @@ def mrt_static_test():
         interface_width=interface_width,
         save_interval=save_interval,
         skip_interval=skip_interval,
-        force_enabled=True,
-        bubble=True,
-        force_obj=gravity,
-        collision=collision,
+        collision="bgk",
         init_type="multiphase_bubble_bot",
         tau=tau,
         #bc_config=bc_config,
