@@ -100,7 +100,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             # Plot one vector every `skip` grid points
             skip = 10
 
-            # Plotting quiver requires transposing U and V to match the meshgrid and imshow orientation
+            # Plotting quiver requires transposing h_i and V to match the meshgrid and imshow orientation
             axes[1].quiver(
                 X[::skip, ::skip],
                 Y[::skip, ::skip],
