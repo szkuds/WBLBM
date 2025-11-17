@@ -2,37 +2,28 @@ from wblbm.run import Run
 from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 
-def droplet_periodic_top_bot_bc_test():
+# TODO: Nice to test the MRT operator with these parameters, since this is the pattern which often leads to a crash.
+def test_multiphase_gravity_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
-    grid_shape = (401, 401)
+    grid_shape = (201, 201)
     tau = 0.9
     nt = 40000
-    save_interval = 10
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-10-22/10-38-04_droplet_periodic_top_bot_bc_test/data/timestep_800.npz"
-
+    save_interval = 1000
     kappa = 0.08
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 10
+    interface_width = 4
 
-    force_g = 0.0000005
+    force_g = 0.000002
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
     )
-    # Specify MRT collision operator and its rates
-    collision = {
-        "collision_scheme": "mrt",
-        "kv": 1.05,
-        "kb": 1.0,
-        "k0": 0.0,
-        "k2": 1.0,
-        "k4": 0.9,
-    }
+
     bc_config = {
-        "top": "bounce-back",
+        "top": "symmetry",
         "bottom": "bounce-back",
         "left": "periodic",
         "right": "periodic",
@@ -50,11 +41,9 @@ def droplet_periodic_top_bot_bc_test():
         interface_width=interface_width,
         save_interval=save_interval,
         bc_config=bc_config,
-        collision=collision,
         force_enabled=True,
         force_obj=gravity,
-        init_type="init_from_file",
-        init_dir=init_file
+        init_type="multiphase_droplet",
     )
     sim.run(verbose=True)
     return sim
@@ -65,7 +54,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = droplet_periodic_top_bot_bc_test()
+    sim_multiphase_gravity = test_multiphase_gravity_simulation()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
