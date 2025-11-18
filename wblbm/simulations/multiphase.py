@@ -51,7 +51,7 @@ class MultiphaseSimulation(BaseSimulation):
         if self.bubble:
             self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref)
         else:
-            Initialise(self.grid, self.lattice, self.bubble)
+            self.initialise = Initialise(self.grid, self.lattice, self.bubble)
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -122,6 +122,7 @@ class MultiphaseSimulation(BaseSimulation):
         if self.force_enabled and self.force_obj:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
+        # TODO: Here I need to add the logic to update the electric field. Also need to add it to the single phase sim.
         f_next = (
             self.update(f_prev, force=force_ext)
             if self.force_enabled
