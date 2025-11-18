@@ -13,6 +13,7 @@
       <excludeFolder url="file://$MODULE_DIR$/example/tests/Bubble_rise_high_density_ratio_CS/results" />
       <excludeFolder url="file://$MODULE_DIR$/example/25-09-10_Examples_Orest" />
       <excludeFolder url="file://$MODULE_DIR$/example/tests/Isolde/results" />
+      <excludeFolder url="file://$MODULE_DIR$/example/tests/Electric_field_test/results" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.12" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />

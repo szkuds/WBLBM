@@ -13,6 +13,8 @@ class GravityForceMultiphase(Force):
         if d != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
+        self.name = 'GravitationalForce'
+
         force_x = force_g * -jnp.sin(jnp.deg2rad(inclination_angle_deg))
         force_y = force_g * jnp.cos(jnp.deg2rad(inclination_angle_deg))
 

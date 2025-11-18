@@ -80,7 +80,7 @@ def initialize_electric_potential(grid_shape, boundary_value=1.0):
     return jnp.tile(U[jnp.newaxis, :], (nx, 1))
 
 
-def test_multiphase_electric_field_simulation():
+def multiphase_electric_field_simulation_test():
     """
     Test a multiphase LBM simulation with electric field force on a central droplet.
     """
@@ -97,7 +97,11 @@ def test_multiphase_electric_field_simulation():
     tau = 0.9
 
     # Electric field parameters
-    permittivity = 1.0
+    permittivity_liquid = 1.0
+    permittivity_vapour = 1.0
+    conductivity_liquid = 1.0
+    conductivity_vapour = 1.0
+
     tau_e = 0.8  # Relaxation time for electrical distribution
     electric_potential_boundary = 1.0
 
@@ -109,7 +113,10 @@ def test_multiphase_electric_field_simulation():
         nx=grid_shape[0],
         ny=grid_shape[1],
         d=2,
-        permittivity=permittivity
+        permittivity_liquid=permittivity_liquid,
+        permittivity_vapour=permittivity_vapour,
+        conductivity_liquid=conductivity_liquid,
+        conductivity_vapour=conductivity_vapour
     )
 
     # Gravity (optional - set to zero for pure electric field test)
@@ -239,7 +246,7 @@ def test_electric_field_only():
     tau_e = 0.8
 
     from wblbm.lattice import Lattice
-    lattice = Lattice()
+    lattice = Lattice("D2Q9")
     w_i = lattice.w
     c_i = lattice.c
 
@@ -256,7 +263,7 @@ def test_electric_field_only():
     for it in range(nt):
         # Collision
         U = jnp.sum(h_i, axis=2)
-        h_i = collision_h_i(h_i, U, tau_e, w_i, 1.0/3.0)
+        h_i = collision_h_i(h_i, U, tau_e, w_i)
 
         # Streaming
         h_i = stream_h_i_vectorized(h_i, c_i)
@@ -385,7 +392,7 @@ if __name__ == "__main__":
     print("\n" + "=" * 70)
     print("TEST 2: Multiphase Droplet with Electric Field")
     print("=" * 70)
-    sim_electric, electric_field_data, h_i, electrical_force = test_multiphase_electric_field_simulation()
+    sim_electric, electric_field_data, h_i, electrical_force = multiphase_electric_field_simulation_test()
 
     # Visualize results
     print("\n=== Visualizing Results (Electric Field Only) ===")
