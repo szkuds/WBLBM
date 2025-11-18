@@ -171,21 +171,21 @@ class Gradient:
         grid_ipos1_jneg1 = grid_padded[2:, :-2]
 
         grad0 = (3 * (
-                weight[1] * c[0, 1] * grid_ipos1_j0 +
-                weight[3] * c[0, 3] * grid_ineg1_j0 +
-                weight[5] * c[0, 5] * grid_ipos1_jpos1 +
-                weight[6] * c[0, 6] * grid_ineg1_jpos1 +
-                weight[7] * c[0, 7] * grid_ineg1_jneg1 +
-                weight[8] * c[0, 8] * grid_ipos1_jneg1
+                weights[1] * c[0, 1] * grid_ipos1_j0 +
+                weights[3] * c[0, 3] * grid_ineg1_j0 +
+                weights[5] * c[0, 5] * grid_ipos1_jpos1 +
+                weights[6] * c[0, 6] * grid_ineg1_jpos1 +
+                weights[7] * c[0, 7] * grid_ineg1_jneg1 +
+                weights[8] * c[0, 8] * grid_ipos1_jneg1
         ))
 
         grad1 = (3 * (
-                weight[2] * c[1, 2] * grid_i0_jpos1 +
-                weight[4] * c[1, 4] * grid_i0_jneg1 +
-                weight[5] * c[1, 5] * grid_ipos1_jpos1 +
-                weight[6] * c[1, 6] * grid_ineg1_jpos1 +
-                weight[7] * c[1, 7] * grid_ineg1_jneg1 +
-                weight[8] * c[1, 8] * grid_ipos1_jneg1
+                weights[2] * c[1, 2] * grid_i0_jpos1 +
+                weights[4] * c[1, 4] * grid_i0_jneg1 +
+                weights[5] * c[1, 5] * grid_ipos1_jpos1 +
+                weights[6] * c[1, 6] * grid_ineg1_jpos1 +
+                weights[7] * c[1, 7] * grid_ineg1_jneg1 +
+                weights[8] * c[1, 8] * grid_ipos1_jneg1
         ))
 
         grad4d = jnp.zeros(grad0.shape + (1, 2))

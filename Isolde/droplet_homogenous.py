@@ -10,22 +10,22 @@ from wblbm import visualise
 #Simulation parameters
 grid_shape = (200,100) #nx, ny
 tau = 0.99
-nt = 500
-save_interval = 100
+nt = 10000
+save_interval = 1000
 kappa = 0.01
 rho_l = 1.0
 rho_v = 0.001
 interface_width = 5
 
 #Wetting parameters
-phi_value = 1.8
-d_rho_value = 0.0
+phi_value = 0.0
+d_rho_value = 0.46
 
 #Inclination angle constant
-inclination_angle = 0.0 #degrees
+inclination_angle = 20.0 #degrees
 
 #Gravity
-force_g = 0.00001
+force_g = 0.00000001
 gravity = GravityForceMultiphaseDroplet(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
 #Boundary conditions
@@ -76,7 +76,7 @@ sim.run(verbose=True)
 #check how to get latest result for plotting multiple calculations
 # (manual input not handy)
 #Load saved results
-#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-10-24/13-30-52/data/timestep_499.npz"
+#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-18/09-26-38/data/timestep_600.npz"
 latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
 data = np.load(latest_result)
 rho = data["rho"]
