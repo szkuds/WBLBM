@@ -19,6 +19,13 @@ class CompositeForce(Force):
             raise ValueError("At least one force must be provided")
 
         self.forces = forces
+
+        # Check if electrical force is present
+        self.electric_present = any(
+            getattr(force, 'name', None) == 'ElectricalForce'
+            for force in forces
+        )
+
         # Initialize with zeros; actual force is computed dynamically
         super().__init__(jnp.zeros_like(forces[0].force))
 
@@ -43,4 +50,3 @@ class CompositeForce(Force):
 
         self.force = total_force
         return total_force
-
