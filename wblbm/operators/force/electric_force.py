@@ -25,6 +25,8 @@ class ElectricForce(Force):
         if d != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
+        self.name = 'ElectricalForce'
+
         force_array = jnp.zeros((nx, ny, 1, d))
         super().__init__(force_array)
         self.permittivity_liquid = permittivity_liquid
@@ -45,7 +47,9 @@ class ElectricForce(Force):
     ) -> jnp.ndarray:
         """
         Compute electrical force from electric field gradient.
-        E = -∇h_i, F = q * E
+        U = sum_i h_i,
+        E = -∇U,
+        F = q * E - .5 * E^2 * ∇ ϵ
 
         Args:
             rho: Density field of shape (nx, ny, 1)

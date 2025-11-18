@@ -1,3 +1,5 @@
+# TODO: I have currently implemented the composite force in the setup script, I want it to be in the run
+
 import jax.numpy as jnp
 from wblbm.operators.force.force import Force
 

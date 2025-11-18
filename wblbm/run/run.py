@@ -2,6 +2,8 @@ import numpy as np
 import jax.numpy as jnp
 import inspect
 
+from wblbm.operators.force import CompositeForce
+
 
 class SimulationFactory:
     @staticmethod
@@ -84,24 +86,24 @@ class Run:
         # Simple config builder for demonstration; extend as needed
         return dict(**kwargs)
 
-    def _save_data(self, it, fprev):
+    def _save_data(self, it, f_prev):
         # Save data using the simulation's macroscopic operator
         force_ext = None
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
             try:
                 if self.config.get("force_enabled") and self.config.get("force_obj"):
-                    rho = jnp.sum(fprev, axis=2, keepdims=True)
-                    force = self.config.get("force_obj")
+                    rho = jnp.sum(f_prev, axis=2, keepdims=True)
+                    force = CompositeForce(*self.config.get("force_obj"))
                     if self.config.get("simulation_type") == "multiphase":
                         force_ext = force.compute_force(
                             rho, self.config.get("rho_l"), self.config.get("rho_v")
                         )
                     else:
                         force_ext = force.compute_force(rho)
-                    result = macroscopic(fprev, force_ext)
+                    result = macroscopic(f_prev, force_ext)
                 else:
-                    result = macroscopic(fprev)
+                    result = macroscopic(f_prev)
                 if isinstance(result, tuple) and len(result) == 3:
                     rho, u, force = result
                     data_to_save = {
@@ -109,19 +111,19 @@ class Run:
                         "u": np.array(u),
                         "force": np.array(force),
                         "force_ext": np.array(force_ext),
-                        "f": np.array(fprev),
+                        "f": np.array(f_prev),
                     }
                 else:
                     rho, u = result
                     data_to_save = {
                         "rho": np.array(rho),
                         "u": np.array(u),
-                        "f": np.array(fprev),
+                        "f": np.array(f_prev),
                     }
             except Exception:
-                data_to_save = {"f": np.array(fprev)}
+                data_to_save = {"f": np.array(f_prev)}
         else:
-            data_to_save = {"f": np.array(fprev)}
+            data_to_save = {"f": np.array(f_prev)}
         self.io_handler.save_data_step(it, data_to_save)
 
     def run(self, *, verbose=True):
