@@ -179,7 +179,7 @@ class Initialise:
             self, rho_l: float, rho_v: float, interface_width: int
     ):
         """
-        Initialises a multiphase simulation with a low-density bubble in the center.
+        Initialises a multiphase simulation with a droplet in the center.
 
         Args:
             rho_l (float): Liquid phase density.

@@ -1,3 +1,7 @@
+# TODO: need to check the boundary conditions since the velocity field
+#       as seen in results/2025-11-18/12-58-34_wetting_hysteresis_simulation_test
+#       is not symmetric
+
 import numpy as np
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
@@ -15,7 +19,7 @@ def wetting_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
     tau = 0.99  # Relaxation time
-    nt = 200000 # Number of time steps
+    nt = 200000  # Number of time steps
     save_interval = 10000  # Save every 500 steps
     kappa = 0.04  # Surface tension parameter
     rho_l = 1.0  # Liquid density
@@ -24,7 +28,7 @@ def wetting_simulation_test():
 
     # Wetting parameters
     phi_value = 1  # Wetting strength parameter
-    d_rho_value = 0 # Density adjustment parameter
+    d_rho_value = 0  # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
     force_g = 0.0000
@@ -62,7 +66,7 @@ def wetting_simulation_test():
         interface_width=interface_width,
         save_interval=save_interval,
         bc_config=bc_config,
-        force_enabled=True,
+        force_enabled=False,
         force_obj=gravity,
         phi_value=phi_value,
         d_rho_value=d_rho_value,
