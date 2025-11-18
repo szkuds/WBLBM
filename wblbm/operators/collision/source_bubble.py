@@ -4,12 +4,12 @@ from wblbm.lattice.lattice import Lattice
 from wblbm.operators.differential.gradient import Gradient
 
 
-class SourceTerm:
+class SourceTermBubble:
     """
     Callable class to calculate the source term for the LBM equation.
     """
 
-    def __init__(self, grid: Grid, lattice: Lattice, bc_config: dict = None):
+    def __init__(self, grid: Grid, lattice: Lattice, g: float, rho_ref: float, bc_config: dict = None):
         """
         Initialize the source term calculator.
 
@@ -27,6 +27,8 @@ class SourceTerm:
         self.cy = lattice.c[1]
         self.bc_config = bc_config
         self.gradient = Gradient(lattice, bc_config=bc_config)
+        self.g = g
+        self.rho_ref = rho_ref
 
     def __call__(
         self, rho: jnp.ndarray, u: jnp.ndarray, force: jnp.ndarray
@@ -74,7 +76,7 @@ class SourceTerm:
             grad_rho_x, grad_rho_y = grad_rho_2d_[:, :, 0], grad_rho_2d_[:, :, 1]
 
             fx_cor = fx + (grad_rho_x / 3)
-            fy_cor = fy + (grad_rho_y / 3)
+            fy_cor = fy + (grad_rho_y / 3) - self.rho_ref * self.g
             source_ = jnp.zeros((nx, ny, q))
 
             for i in range(q):
