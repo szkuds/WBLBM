@@ -1,6 +1,7 @@
 import numpy as np
 from wblbm.run import Run
 from wblbm import GravityForceSinglephase
+from wblbm import GravityForceMultiphase
 from wblbm import visualise
 import jax
 
@@ -9,7 +10,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 
-def test_single_phase_gravity_simulation():
+def single_phase_gravity_simulation_test():
     """Test a single-phase LBM simulation with gravity."""
     print("\n=== Single-Phase LBM Simulation with Gravity Test ===")
 
@@ -44,7 +45,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_single_phase_gravity = test_single_phase_gravity_simulation()
+    sim_single_phase_gravity = single_phase_gravity_simulation_test()
 
     # Visualize results
     print("\n=== Visualizing Results ===")

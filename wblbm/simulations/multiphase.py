@@ -40,6 +40,9 @@ class MultiphaseSimulation(BaseSimulation):
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
         self.kwargs = kwargs
+        self.bubble = kwargs.get('bubble', False)
+        self.rho_ref = self.kwargs.get('rho_ref', False)
+        self.g = self.kwargs.get('g', False)
         self.setup_operators()
         self.multiphase = True
 
@@ -48,10 +51,8 @@ class MultiphaseSimulation(BaseSimulation):
             bc_type == 'wetting'
             for bc_type in (self.bc_config or {}).values()
         )
-        self.initialise = Initialise(self.grid, self.lattice)
-        # Check if hysteresis parameters are present
-        # TODO: remove the UpdateMultiphaseHysteresis call here since it will be added
-        #  to the update_multiphase.py function.
+        self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref) if self.bubble \
+            else Initialise(self.grid, self.lattice, self.bubble)
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -59,8 +60,6 @@ class MultiphaseSimulation(BaseSimulation):
                 collision_scheme=self.collision_scheme, eos=self.eos,
                 k_diag=self.k_diag, **self.kwargs
             )
-
-
         else:
             self.update = UpdateMultiphase(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -98,15 +97,15 @@ class MultiphaseSimulation(BaseSimulation):
             return self.initialise.initialise_multiphase_bubble_bubble(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="multiphase_lateral_bubble_configuration":
+        elif init_type == "multiphase_lateral_bubble_configuration":
             return self.initialise.initialise_multiphase_lateral_bubble_configuration(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="wetting_chem_step":
+        elif init_type == "wetting_chem_step":
             return self.initialise.initialise_wetting_chemical_step(
                 self.rho_l, self.rho_v, self.interface_width
             )
-        elif init_type =="wetting":
+        elif init_type == "wetting":
             return self.initialise.initialise_wetting(
                 self.rho_l, self.rho_v, self.interface_width
             )

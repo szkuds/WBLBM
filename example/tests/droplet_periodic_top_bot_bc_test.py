@@ -7,14 +7,14 @@ def test_multiphase_gravity_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
-    grid_shape = (401, 401)
+    grid_shape = (201, 201)
     tau = 0.9
     nt = 40000
     save_interval = 1000
     kappa = 0.08
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 10
+    interface_width = 4
 
     force_g = 0.000002
     inclination_angle = 0

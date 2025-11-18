@@ -100,13 +100,13 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
         #Corners
         arr = arr.at[idx, 0].set(
             (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, 0] +
-             1 / 12 * arr[idx, -1] +
-             1 / 12 * arr[idx, 1]) / (1 / 3 + 1 / 12 + 1 / 12)
+             1 / 12 * arr[idx + 1 if idx == 0 else idx -1, -1] +
+             1 / 12 * arr[idx + 1 if idx == 0 else idx -1, 1]) / (1 / 3 + 1 / 12 + 1 / 12)
         )
         arr = arr.at[idx, -1].set(
             (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, -1] +
-             1 / 12 * arr[idx, 0] +
-             1 / 12 * arr[idx, -2]) / (1 / 3 + 1 / 12 + 1 / 12)
+             1 / 12 * arr[idx + 1 if idx == 0 else idx -1, 0] +
+             1 / 12 * arr[idx + 1 if idx == 0 else idx -1, -2]) / (1 / 3 + 1 / 12 + 1 / 12)
         )
         edge_slice = arr[idx, 1:-1]
 
@@ -120,8 +120,8 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
     diff_mask1 = jnp.diff(mask1_int)
 
     # Determining the transition index, the [0] is used to extract only the first value
-    transition_index_left_mask1 = jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + 2 * width
-    transition_index_right_mask1 = (jnp.where(diff_mask1 == 1, size=1, fill_value=0)[0]) - (2 * width + 1)
+    transition_index_left_mask1 = jnp.where(diff_mask1 == -1, size=1, fill_value=0)[0] + width
+    transition_index_right_mask1 = (jnp.where(diff_mask1 == 1, size=1, fill_value=0)[0]) - width
 
     # Here the mask_final is split into a left and a right mask to enable the CA of the left and right side to be
     # determined separately, the reason left uses the right mask is that it works as a cover.
@@ -144,8 +144,9 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
         ),
         (0.95 * rho_l + 0.05 * rho_v)
     )
-    updated_slice = jnp.where(mask_cover_left, new_values_left, edge_slice)
-    updated_slice = jnp.where(mask_cover_right, new_values_right, updated_slice)
+    updated_slice = jnp.where(mask_cover_right, new_values_right, edge_slice)
+    updated_slice = jnp.where(mask_cover_left, new_values_left, updated_slice)
+
 
     if axis == 1:
         arr = arr.at[1:-1, idx].set(updated_slice)

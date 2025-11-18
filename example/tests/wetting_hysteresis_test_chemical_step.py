@@ -4,26 +4,27 @@ from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_disable_jit", True)
 
-def test_wetting_hysteresis_simulation():
-    """Test LBM wetting implementation with hysteresis enabled."""
+
+def wetting_hysteresis_chem_step_simulation_test():
+    """Test LBM wetting implementation with hysteresis enabled including a chemical step."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (200, 100)
+    grid_shape = (400, 200)
     tau = 0.99
-    nt = 2000
-    save_interval = 200
+    nt = 20000
+    save_interval = 500
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
     interface_width = 5
 
     phi_value = 1.2
-    d_rho_value = 0.0
+    d_rho_value = 0.2
 
-    force_g = 0.00001
+    force_g = (1/4)*1e-5
     inclination_angle = 90
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
@@ -36,7 +37,12 @@ def test_wetting_hysteresis_simulation():
         'top': 'symmetry',
         'right': 'periodic',
         'chemical_step': {
-            'chemical_step_location': .5
+            'chemical_step_location': .5,
+            'chemical_step_edge': 'bottom',
+            'ca_advancing_pre_step': 110.0,
+            'ca_receding_pre_step': 90.0,
+            'ca_advancing_post_step': 70.0,
+            'ca_receding_post_step': 60.0,
         },
         'wetting_params': {
             'rho_l': rho_l,
@@ -72,8 +78,10 @@ def test_wetting_hysteresis_simulation():
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
-        hysteresis_params=bc_config['hysteresis_params'],
-        init_type="wetting",
+        init_type="wetting_chem_step",
+        force_g=force_g,
+        inclination_angle=inclination_angle,
+        #init_dir=""
     )
 
     sim.run(verbose=True)
@@ -81,7 +89,7 @@ def test_wetting_hysteresis_simulation():
 
 
 if __name__ == "__main__":
-    sim_wetting_hysteresis = wetting_hysteresis_chemstep_simulation_test()
+    sim_wetting_hysteresis = wetting_hysteresis_chem_step_simulation_test()
 
     # Visualize results
     print("\n=== Visualizing Wetting Hysteresis Test Results ===")
