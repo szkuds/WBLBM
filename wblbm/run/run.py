@@ -125,7 +125,7 @@ class Run:
         self.io_handler.save_data_step(it, data_to_save)
 
     def run(self, *, verbose=True):
-        fprev = self.simulation.initialize_fields(
+        f_prev = self.simulation.initialize_fields(
             self.init_type, init_dir=self.init_dir
         )
         nt = getattr(self.simulation, "nt", 1000)
@@ -135,17 +135,17 @@ class Run:
                 f"Config -> Grid: {self.simulation.grid_shape}, Multiphase: {self.simulation.multiphase}, Wetting: {self.simulation.wetting_enabled}, Force: {self.simulation.force_enabled}"
             )
         for it in range(nt):
-            fprev = self.simulation.run_timestep(fprev, it)
-            if jnp.isnan(fprev).any():
+            f_prev = self.simulation.run_timestep(f_prev, it)
+            if jnp.isnan(f_prev).any():
                 print(f"NaN encountered at timestep {it}. Stopping simulation.")
                 break
             # skip initial transients then save every `save_interval`
             if (it > self.skip_interval) and (
                 it % self.save_interval == 0 or it == nt - 1
             ):
-                self._save_data(it, fprev)
+                self._save_data(it, f_prev)
                 if verbose and hasattr(self.simulation, "macroscopic"):
-                    result = self.simulation.macroscopic(fprev)
+                    result = self.simulation.macroscopic(f_prev)
                     if isinstance(result, tuple) and len(result) >= 2:
                         rho, u = result[:2]
                         avg_rho = np.mean(rho)
