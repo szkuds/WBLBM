@@ -1,9 +1,14 @@
+from functools import partial
+from jax import jit
+
 from .base import BaseSimulation
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
 from wblbm.operators.update.update_multiphase_hysteresis import UpdateMultiphaseHysteresis
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
+
+from ..operators.force import CompositeForce
 
 
 class MultiphaseSimulation(BaseSimulation):
@@ -35,7 +40,7 @@ class MultiphaseSimulation(BaseSimulation):
         self.rho_v = rho_v
         self.interface_width = interface_width
         self.force_enabled = force_enabled
-        self.force_obj = force_obj
+        self.force_obj = CompositeForce(*force_obj)
         self.bc_config = bc_config
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
@@ -111,6 +116,7 @@ class MultiphaseSimulation(BaseSimulation):
         else:
             return self.initialise.initialise_standard()
 
+    @partial(jit, static_argnums=(0,))
     def run_timestep(self, f_prev, it):
         force_ext = None
         # TODO: This is where the external force is added,
@@ -119,7 +125,10 @@ class MultiphaseSimulation(BaseSimulation):
         #   At the moment I think the creation of a composite force class will be best
         #    As it will allow for multiple force to be dealt with in a similar manner.
         #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
-        if self.force_enabled and self.force_obj:
+        if self.force_enabled and self.force_obj and self.force_obj.electric_present:
+            rho = jnp.sum(f_prev, axis=2, keepdims=True)
+            force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
+        elif self.force_enabled and self.force_obj:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
         # TODO: Here I need to add the logic to update the electric field. Also need to add it to the single phase sim.
