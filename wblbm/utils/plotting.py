@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import json
 
 
+# TODO: Need to make a plotting config which will determine which plots are actually saved
+
+
 def visualise(sim_instance, title="LBM Simulation Results"):
     """
     Visualizes simulation results by loading and plotting every saved timestep.
