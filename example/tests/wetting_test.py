@@ -18,10 +18,10 @@ def wetting_simulation_test():
 
     # Simulation parameters
     grid_shape = (200, 100)  # nx, ny
-    tau = 0.99  # Relaxation time
-    nt = 200000  # Number of time steps
-    save_interval = 10000  # Save every 500 steps
-    kappa = 0.04  # Surface tension parameter
+    tau = 0.8  # Relaxation time
+    nt = 300000  # Number of time steps
+    save_interval = 30000  # Save every save_interval steps
+    kappa = 0.001  # Surface tension parameter
     rho_l = 1.0  # Liquid density
     rho_v = 0.001  # Vapor density
     interface_width = 5  # Interface width for smooth transition
@@ -52,6 +52,15 @@ def wetting_simulation_test():
             'width': interface_width
         }
     }
+    # Specify MRT collision operator and its rates
+    collision = {
+        "collision_scheme": "mrt",
+        "kv": 1.05,
+        "kb": 1.0,
+        "k0": 0.0,
+        "k2": 1.0,
+        "k4": 0.9,
+    }
 
     # Initialize and run simulation with wetting enabled
     sim = Run(
@@ -67,14 +76,15 @@ def wetting_simulation_test():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=False,
-        force_obj=gravity,
+        force_obj=[gravity],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
         hysteresis_params=None,
-        init_type="wetting_chem_step",
+        init_type="wetting",
         force_g=force_g,
-        inclination_angle=inclination_angle
+        inclination_angle=inclination_angle,
+        collision=collision
     )
 
     # Run with wetting initialization

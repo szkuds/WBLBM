@@ -40,7 +40,7 @@ class MultiphaseSimulation(BaseSimulation):
         self.rho_v = rho_v
         self.interface_width = interface_width
         self.force_enabled = force_enabled
-        self.force_obj = CompositeForce(*force_obj)
+        self.force_obj = CompositeForce(*force_obj) if force_obj is not None else None
         self.bc_config = bc_config
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
@@ -127,7 +127,9 @@ class MultiphaseSimulation(BaseSimulation):
         #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
         if self.force_enabled and self.force_obj and self.force_obj.electric_present:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
+
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
+
         elif self.force_enabled and self.force_obj:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
             force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
