@@ -1,4 +1,4 @@
-# TODO: I have currently implemented the composite force in the setup script, I want it to be in the run
+# TODO: I want the composite force to pass whatever is required, I think this should be done with kwargs.
 
 import jax.numpy as jnp
 from wblbm.operators.force.force import Force
