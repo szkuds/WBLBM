@@ -69,7 +69,7 @@ def mrt_static_cs_test():
         interface_width=interface_width,
         save_interval=save_interval,
         skip_interval=skip_interval,
-        collision='bgk',
+        collision=collision,
         init_type="multiphase_bubble",
         tau=tau,
         ##bc_config=bc_config,
