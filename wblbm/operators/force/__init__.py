@@ -4,5 +4,5 @@ from .gravitational_force_standard import GravityForceSinglephase
 from .gravitational_force_droplet import GravityForceMultiphaseDroplet
 from .gravitational_force import GravityForceMultiphase
 from .composite_force import CompositeForce
-from .electric_force import ElectricForce, collision_h_i, equilibrium_h
+from .electric_force import ElectricForce
 
