@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphase, ElectricForce, CompositeForce
+from wblbm.operators.force import GravityForceMultiphase, ElectricForce
 from wblbm.utils.plotting import visualise
 import jax
 
@@ -50,9 +50,6 @@ def multiphase_gravity_simulation_test():
         conductivity_vapour=conductivity_vapour
     )
 
-    # composite force (gravity + electrical)
-    combined_force = CompositeForce(gravity, electric)
-
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
@@ -65,7 +62,7 @@ def multiphase_gravity_simulation_test():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=[gravity, electric],  #
+        force_obj=[gravity, electric],
         init_type="multiphase_droplet",
     )
     sim.run(verbose=True)

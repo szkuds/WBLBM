@@ -42,9 +42,7 @@ class ElectricForce(Force):
         self.h_i = jnp.zeros((nx, ny, 9))
         self.U = jnp.zeros((nx, ny))  # Electric potential field
 
-    def compute_force(
-        self, rho: jnp.ndarray, charge_density: jnp.ndarray
-    ) -> jnp.ndarray:
+    def compute_force(self, rho: jnp.ndarray) -> jnp.ndarray:
         """
         Compute electrical force from electric field gradient.
         U = sum_i h_i,
@@ -53,24 +51,12 @@ class ElectricForce(Force):
 
         Args:
             rho: Density field of shape (nx, ny, 1)
-            charge_density: Charge density field of shape (nx, ny)
 
         Returns:
             Force array of shape (nx, ny, 1, 2)
         """
-        # Compute electric field from potential gradient
-        E_x = -jnp.gradient(self.U, axis=0)
-        E_y = -jnp.gradient(self.U, axis=1)
 
-        force_x = charge_density * E_x
-        force_y = charge_density * E_y
-
-        force_array = jnp.zeros((rho.shape[0], rho.shape[1], 1, 2))
-        force_array = force_array.at[:, :, 0, 0].set(force_x)
-        force_array = force_array.at[:, :, 0, 1].set(force_y)
-
-        self.force = force_array
-        return -self.force * rho
+        return electric_force
 
     def update_potential(self, h_i: jnp.ndarray) -> None:
         """
@@ -83,37 +69,19 @@ class ElectricForce(Force):
         self.h_i = h_i
         self.U = jnp.sum(h_i, axis=2)
 
+    def equilibrium_h(self, h_i: jnp.ndarray, w_i: jnp.ndarray) -> jnp.ndarray:
+        """
+        Equilibrium distribution for electric potential.
+        h_i^eq = w_i * U
 
-def collision_h_i(h_i: jnp.ndarray, U: jnp.ndarray, tau_e: float,
-                   w_i: jnp.ndarray) -> jnp.ndarray:
-    """
-    Collision step for electrical potential distribution.
-    Relaxes h_i towards equilibrium with relaxation time tau_e.
+        Args:
+            h_i: Electric potential field, shape (nx, ny, q)
+            w_i: Lattice weights, shape (9,)
 
-    Args:
-        h_i: Distribution function for electric potential, shape (nx, ny, q)
-        U: Electric potential field, shape (nx, ny)
-        tau_e: Relaxation time for electrical collision
-        w_i: Lattice weights, shape (q,)
-        c_s_sq: Lattice sound speed squared
+        Returns:
+            Equilibrium distribution, shape (nx, ny, 9)
+        """
+        return w_i[:, jnp.newaxis, jnp.newaxis] * h_i
 
-    Returns:
-        Updated distribution function after collision
-    """
-    h_eq = equilibrium_h(U, w_i)
-    return h_i - (1.0 / tau_e) * (h_i - h_eq)
-
-
-def equilibrium_h(h_i: jnp.ndarray, w_i: jnp.ndarray) -> jnp.ndarray:
-    """
-    Equilibrium distribution for electric potential.
-    h_i^eq = w_i * U
-
-    Args:
-        h_i: Electric potential field, shape (nx, ny, q)
-        w_i: Lattice weights, shape (9,)
-
-    Returns:
-        Equilibrium distribution, shape (nx, ny, 9)
-    """
-    return w_i[:, jnp.newaxis, jnp.newaxis] * h_i
+    def conductivity(self, rho: jnp.ndarray):
+        pass
