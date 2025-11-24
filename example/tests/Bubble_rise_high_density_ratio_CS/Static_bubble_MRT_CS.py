@@ -14,12 +14,12 @@ def mrt_static_cs_test():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 100000
-    save_interval = 1000
+    nt = 500000
+    save_interval = 50000
     skip_interval = 0
     kappa = 0.008
     rho_l = 12.18
-    rho_v = 0.01669
+    rho_v = 0.015
     interface_width = 5
     tau = 0.9
 

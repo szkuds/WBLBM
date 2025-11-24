@@ -208,32 +208,19 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             plt.close(fig_dp)
             # ---- End density profile analysis (per timestep) ----
 
-        # ---- Density ratio summary plot (after all timesteps) ----
-        if iter_nums:
-            fig_summary, ax_summary = plt.subplots(1, 1, figsize=(8, 4))
-            ax_summary.scatter(iter_nums, ratio_rhos, s=10)
-            ax_summary.set_xlabel("Iteration number")
-            ax_summary.set_ylabel("Density ratio (max/min)")
-            ax_summary.set_title("Density ratio vs iteration number")
-            ax_summary.grid(True)
-            summary_path = os.path.join(plot_dir, "density_ratio_vs_iter.png")
-            fig_summary.savefig(summary_path)
-            plt.close(fig_summary)
-        # ---- End summary ----
-
-        # ---- Parse simulation.log for max_u vs iteration and plot ----
+        # ---- Combined simulation analysis plot ----
         log_path = os.path.join(run_dir, "simulation.log")
+        iters_log = []
+        umax_log = []
+        avg_rho_log = []
+
         if os.path.isfile(log_path):
-            iters_log = []
-            umax_log = []
-            avg_rho_log = []  # NEW: track average density
             try:
                 with open(log_path, "r") as lf:
                     for line in lf:
-                        # Expect lines like: Step 100/10000: avg_rho=0.0502, max_u=0.004477
                         if line.startswith("Step ") and "max_u=" in line and "avg_rho=" in line:
                             step_part, rest = line.split(":", 1)
-                            step_str = step_part.split()[1]  # "100/10000"
+                            step_str = step_part.split()[1]
                             iter_cur = int(step_str.split("/")[0])
                             avg_rho_val = None
                             umax_val = None
@@ -247,32 +234,42 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                                 iters_log.append(iter_cur)
                                 avg_rho_log.append(avg_rho_val)
                                 umax_log.append(umax_val)
-                if iters_log:
-                    # max_u scatter plot
-                    fig_umax, ax_umax = plt.subplots(1, 1, figsize=(8, 4))
-                    ax_umax.scatter(iters_log, umax_log, s=10)
-                    ax_umax.set_xlabel("Iteration")
-                    ax_umax.set_ylabel("max_u")
-                    ax_umax.set_title("Max velocity vs iteration (scatter)")
-                    ax_umax.grid(True, alpha=0.3)
-                    umax_path = os.path.join(plot_dir, "umax_vs_iteration.png")
-                    fig_umax.savefig(umax_path)
-                    plt.close(fig_umax)
-                    # avg_rho scatter plot
-                    fig_rho, ax_rho = plt.subplots(1, 1, figsize=(8, 4))
-                    ax_rho.scatter(iters_log, avg_rho_log, s=10, color="tab:green")
-                    ax_rho.set_xlabel("Iteration")
-                    ax_rho.set_ylabel("avg_rho")
-                    ax_rho.set_title("Average density vs iteration (scatter)")
-                    ax_rho.grid(True, alpha=0.3)
-                    avg_rho_path = os.path.join(plot_dir, "avg_rho_vs_iteration.png")
-                    fig_rho.savefig(avg_rho_path)
-                    plt.close(fig_rho)
             except Exception as e:
-                print(f"Failed to parse simulation.log for umax/avg_rho plots: {e}")
+                print(f"Failed to parse simulation.log: {e}")
         else:
-            print("simulation.log not found, skipping umax/avg_rho vs iteration plots.")
-        # ---- End umax/avg_rho plot section ----
+            print("simulation.log not found, skipping log-based plots.")
+
+        # Create combined figure with 3 subplots
+        if iters_log and iter_nums:
+            fig_analysis, axes_analysis = plt.subplots(3, 1, figsize=(10, 12))
+
+            # Subplot 1: max_u vs iteration
+            axes_analysis[0].scatter(iters_log, umax_log, s=10, color='tab:blue')
+            axes_analysis[0].set_xlabel("Iteration")
+            axes_analysis[0].set_ylabel("max_u")
+            axes_analysis[0].set_title("Max velocity vs iteration")
+            axes_analysis[0].grid(True, alpha=0.3)
+
+            # Subplot 2: avg_rho vs iteration
+            axes_analysis[1].scatter(iters_log, avg_rho_log, s=10, color='tab:green')
+            axes_analysis[1].set_xlabel("Iteration")
+            axes_analysis[1].set_ylabel("avg_rho")
+            axes_analysis[1].set_title("Average density vs iteration")
+            axes_analysis[1].grid(True, alpha=0.3)
+
+            # Subplot 3: density_ratio vs iteration
+            axes_analysis[2].scatter(iter_nums, ratio_rhos, s=10, color='tab:orange')
+            axes_analysis[2].set_xlabel("Iteration")
+            axes_analysis[2].set_ylabel("Density ratio (max/min)")
+            axes_analysis[2].set_title("Density ratio vs iteration")
+            axes_analysis[2].grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            analysis_path = os.path.join(plot_dir, "simulation_analysis.png")
+            fig_analysis.savefig(analysis_path, dpi=150)
+            plt.close(fig_analysis)
+            print(f"Combined simulation analysis plot saved to: {analysis_path}")
+        # ---- End combined simulation analysis ----
 
         print(f"Finished generating plots for all {len(files)} timesteps.")
     except ImportError:
