@@ -8,22 +8,22 @@ import jax.numpy as jnp
 
 class MultiphaseSimulation(BaseSimulation):
     def __init__(
-            self,
-            grid_shape,
-            lattice_type="D2Q9",
-            tau=1.0,
-            nt=1000,
-            kappa=0.1,
-            rho_l=1.0,
-            rho_v=0.1,
-            interface_width=4,
-            force_enabled=False,
-            force_obj=None,
-            bc_config=None,
-            collision_scheme="bgk",
-            k_diag=None,
-            eos="double-well",
-            **kwargs
+        self,
+        grid_shape,
+        lattice_type="D2Q9",
+        tau=1.0,
+        nt=1000,
+        kappa=0.1,
+        rho_l=1.0,
+        rho_v=0.1,
+        interface_width=4,
+        force_enabled=False,
+        force_obj=None,
+        bc_config=None,
+        collision_scheme="bgk",
+        k_diag=None,
+        eos="double-well",
+        **kwargs
     ):
         super().__init__(grid_shape, lattice_type, tau, nt)
         self.update = None
@@ -40,6 +40,9 @@ class MultiphaseSimulation(BaseSimulation):
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
         self.kwargs = kwargs
+        self.bubble = kwargs.get('bubble', False)
+        self.rho_ref = self.kwargs.get('rho_ref', False)
+        self.g = self.kwargs.get('g', False)
         self.setup_operators()
         self.multiphase = True
 
@@ -48,8 +51,8 @@ class MultiphaseSimulation(BaseSimulation):
             bc_type == 'wetting'
             for bc_type in (self.bc_config or {}).values()
         )
-        self.initialise = Initialise(self.grid, self.lattice)
-        # Check if hysteresis parameters are present
+        self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref) if self.bubble \
+            else Initialise(self.grid, self.lattice, self.bubble)
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,

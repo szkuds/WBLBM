@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphase
+from wblbm.operators.force import GravityForceMultiphaseBubble
 from wblbm.utils.plotting import visualise
 import jax
 
@@ -7,25 +7,26 @@ import jax
 # jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
+
 def mrt_rising_cs_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (201, 201)
     nt = 3000
-    save_interval = 100
+    save_interval = 1
     skip_interval = 0
     kappa = 0.0002
     rho_l = 12.18
     rho_v = 0.01669
     interface_width = 10
     tau = 0.8
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-09-08/09-51-43/data/timestep_49999.npz"
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-10-22/12-50-14_mrt_rising_cs_test/data/timestep_70.npz"
 
     force_g = 0.000000075
     inclination_angle = 0
-    gravity = GravityForceMultiphase(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+    gravity = GravityForceMultiphaseBubble(
+        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle, rho_l
     )
 
     bc_config = {
@@ -65,16 +66,19 @@ def mrt_rising_cs_test():
         kappa=kappa,
         rho_l=rho_l,
         rho_v=rho_v,
+        bubble=True,
         interface_width=interface_width,
         save_interval=save_interval,
         skip_interval=skip_interval,
         force_enabled=True,
         force_obj=gravity,
         collision=collision,
-        init_type="multiphase_bubble",
+        init_type="init_from_file",
         init_dir=init_file,
         tau=tau,
         bc_config=bc_config,
+        rho_ref=rho_l,
+        g=force_g,
         eos="carnahan-starling",
         a_eos=a_eos,
         b_eos=b_eos,
