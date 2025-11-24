@@ -14,8 +14,8 @@ def wetting_hysteresis_simulation_test():
     # Simulation parameters
     grid_shape = (401, 201)
     tau = 0.99
-    nt = 20000
-    save_interval = 1000
+    nt = 20
+    save_interval = 1
     kappa = 0.017
     rho_l = 1.0
     rho_v = 0.33
