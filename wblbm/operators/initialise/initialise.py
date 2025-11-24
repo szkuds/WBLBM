@@ -295,7 +295,7 @@ class Initialise:
             jnp.ndarray: Initial distribution function.
         """
         # Radius of the droplet (adapted from user query)
-        r = (self.ny) / 4
+        r = (self.ny) / 6.73333
 
         # Initialize velocity (zero) and density fields with correct shapes
         u = jnp.zeros((self.nx, self.ny, 1, 2))
