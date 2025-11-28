@@ -17,15 +17,16 @@ rho_v = 0.001
 interface_width = 5
 
 #Wetting parameters
-phi_value = 1.1
-d_rho_value = 0.3
+phi_value = 1.2
+d_rho_value = 0.2
 
 #Inclination angle constant
 inclination_angle = 40.0 #degrees
 
 #Gravity
-force_g = 0.0000001
-gravity = GravityForceMultiphaseDroplet(grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
+force_g = 1e-5
+gravity = GravityForceMultiphaseDroplet(
+    grid_shape[0], grid_shape[1], 2, force_g, inclination_angle)
 
 #Boundary conditions with chem step and hysteresis
 bc_config = {
