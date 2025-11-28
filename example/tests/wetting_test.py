@@ -27,7 +27,7 @@ def wetting_simulation_test():
     d_rho_value = 0 # Density adjustment parameter
 
     # Gravity setup (downward force for droplet settling)
-    force_g = 0.0000
+    force_g = 0.000001
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
