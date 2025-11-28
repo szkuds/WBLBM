@@ -107,8 +107,6 @@ def center_of_mass(rho):
     cm_y = (rho2d * Y).sum() / mass
     return cm_x, cm_y
 
-#Compute velocity v(t)
-
 #Loop through saved timesteps while calculating CA's and CM for each timestep
 data_dir = sim.io_handler.data_dir
 
@@ -142,6 +140,19 @@ save_times = np.array(save_times)
 theta_left_list = np.array(theta_left_list)
 theta_right_list = np.array(theta_right_list)
 
+#Compute velocity v(t) and acceleration a(t)
+dt = save_interval
+
+#Velocity as a derivative of CM position
+vx = np.gradient(cm_x_list, dt) #x
+vy = np.gradient(cm_y_list, dt) #y
+v = np.sqrt(vx**2 + vy**2) #vector v(t)
+
+#Acceleration as a derivative of velocity v(t)
+ax = np.gradient(vx, dt)
+ay = np.gradient(vy, dt)
+a = np.sqrt(ax**2 + ay**2)
+
 #Plotting CA's vs timesteps
 plt.plot(save_times, theta_left_list, label="θ_receding")
 plt.plot(save_times, theta_right_list, label="θ_advancing")
@@ -169,6 +180,27 @@ plt.grid(True)
 plt.show()
 
 #--------- Plotting velocity v(t) (and acceleration a(t) vs time ---------
+plt.subplot(1, 2, 1)
+plt.plot(save_times, vx, label='v_x(t)')
+plt.plot(save_times, vy, label='v_y(t)')
+plt.plot(save_times, v, label='|v(t)|')
+plt.xlabel("Timestep")
+plt.ylabel("Velocity (lattice units / timestep)")
+plt.title("Droplet Velocity vs Time")
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(save_times, ax, label='a_x(t)')
+plt.plot(save_times, ay, label='a_y(t)')
+plt.plot(save_times, a, label='|a(t)|')
+plt.xlabel("Timestep")
+plt.ylabel("Acceleration")
+plt.title("Droplet Acceleration vs Time")
+plt.legend()
+
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 
 #Load saved results
 #latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-21/15-55-27/data/timestep_9999.npz"
