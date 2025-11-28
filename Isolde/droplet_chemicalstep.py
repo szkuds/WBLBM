@@ -83,14 +83,33 @@ sim = Run(
 sim.run(verbose=True)
 
 #Extract data for each timestep
-save_times = []
-theta_left_list = []
-theta_right_list = []
+save_times = [] #timesteps
+theta_left_list = [] #receding CA
+theta_right_list = [] #advancing Ca
+cm_x_list = [] #CM x
+cm_y_list = [] #CM y
 
+#Compute contact angles (CA's)
 rho_mean = 0.5 * (rho_l + rho_v)
 angle_calc = ContactAngle(rho_mean)
 
-#Loop through saved timesteps
+#Compute Center of Mass (CM)
+def center_of_mass(rho):
+    rho2d = rho[:, :, 0, 0]          # (nx, ny)
+    nx, ny = rho2d.shape
+
+    x = np.arange(nx)
+    y = np.arange(ny)
+    X, Y = np.meshgrid(x, y, indexing='ij')
+
+    mass = rho2d.sum()
+    cm_x = (rho2d * X).sum() / mass
+    cm_y = (rho2d * Y).sum() / mass
+    return cm_x, cm_y
+
+#Compute velocity v(t)
+
+#Loop through saved timesteps while calculating CA's and CM for each timestep
 data_dir = sim.io_handler.data_dir
 
 for t in range (0,nt, save_interval):
@@ -101,29 +120,55 @@ for t in range (0,nt, save_interval):
     except FileNotFoundError:
         continue #skip missing files
 
-    #Calculate CA's for each timestep
     rho_t = data["rho"]
+
+    #Calculate CA's for each timestep
     theta_L, theta_R = angle_calc.compute(rho_t)
 
     save_times.append(t)
     theta_left_list.append(theta_L)
     theta_right_list.append(theta_R)
 
-#Save calculated CA's in arrays
+    #Calculate CM for each timestep
+    cm_x, cm_y = center_of_mass(rho_t)
+    cm_x_list.append(cm_x)
+    cm_y_list.append(cm_y)
+
+#Save timesteps in array
 save_times = np.array(save_times)
+
+#-------- Plotting CA's vs time ----------
+#Save calculated CA's in arrays
 theta_left_list = np.array(theta_left_list)
 theta_right_list = np.array(theta_right_list)
 
-#Plot CA (receding and advancing) vs time
+#Plotting CA's vs timesteps
 plt.plot(save_times, theta_left_list, label="θ_receding")
 plt.plot(save_times, theta_right_list, label="θ_advancing")
 plt.xlabel("Timestep")
 plt.ylabel("Contact angle (°)")
-plt.title("Droplet moving over a Chemical step: Contact angle vs Time ")
-plt.axvline(len(save_times)/2, linestyle="--", color="red")
+plt.title("Droplet moving over a Chemical step: Contact angle vs Time\n"
+          f"E = 0,  g = {force_g},  Incline = {inclination_angle}°")
 plt.legend()
 plt.grid(True)
 plt.show()
+
+#--------- Plotting position x(t) vs time ---------
+#Save calculated CM's in arrays
+cm_x_list = np.array(cm_x_list) #x(t)
+cm_y_list = np.array(cm_y_list)
+
+#Plotting x(t) vs timesteps
+plt.plot(save_times, cm_x_list, label='x(t)')
+plt.xlabel("Timestep")
+plt.ylabel("Center of mass position x(t)")
+plt.title("Droplet Center of Mass vs Time\n"
+          f"E = 0,  g = {force_g}, Incline = {inclination_angle}°")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+#--------- Plotting velocity v(t) (and acceleration a(t) vs time ---------
 
 #Load saved results
 #latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-21/15-55-27/data/timestep_9999.npz"
@@ -152,9 +197,12 @@ plt.show()
 #plt.text(100, rho_2d.shape[1]-20, f'Incline angle = {inclination_angle:.1f}°', color='white', fontsize=12, weight='bold')
 
 #plt.show()
+#Calculate location of chem step
+chem_step_x = grid_shape[0] / 2
 
 #Plot droplet density field
 visualise(
     sim,
-    title=f"Equilibrium droplet (E = 0)" #θ_left={theta_left:.1f}°, θ_right={theta_right:.1f}°, Gravity= {force_g:.1e} N, Incline= {inclination_angle:.1f}°)"
+    title=f"Equilibrium droplet (E = 0, Gravity= {force_g:.1e} N, Incline= {inclination_angle:.1f}°)"
 )
+plt.axvline(chem_step_x, color='red', linestyle="--", label="Chemical step")
