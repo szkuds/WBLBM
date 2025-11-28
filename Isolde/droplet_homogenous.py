@@ -19,7 +19,7 @@ interface_width = 5
 
 #Wetting parameters
 phi_value = 0.0
-d_rho_value = 0.46
+d_rho_value = 0.6
 
 #Inclination angle constant
 inclination_angle = 20.0 #degrees
@@ -76,7 +76,7 @@ sim.run(verbose=True)
 #check how to get latest result for plotting multiple calculations
 # (manual input not handy)
 #Load saved results
-#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-18/09-26-38/data/timestep_600.npz"
+#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-21/11-30-30/data/timestep_9000.npz"
 latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
 data = np.load(latest_result)
 rho = data["rho"]

@@ -12,7 +12,7 @@ def wetting_hysteresis_chem_step_simulation_test():
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (400, 200)
+    grid_shape = (200, 100)
     tau = 0.99
     nt = 20000
     save_interval = 500
@@ -24,7 +24,7 @@ def wetting_hysteresis_chem_step_simulation_test():
     phi_value = 1.2
     d_rho_value = 0.2
 
-    force_g = (1/4)*1e-5
+    force_g = 1e-5
     inclination_angle = 90
     gravity = GravityForceMultiphaseDroplet(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
