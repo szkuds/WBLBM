@@ -182,53 +182,29 @@ plt.show()
 #--------- Plotting velocity v(t) (and acceleration a(t) vs time ---------
 plt.subplot(1, 2, 1)
 plt.plot(save_times, vx, label='v_x(t)')
-plt.plot(save_times, vy, label='v_y(t)')
-plt.plot(save_times, v, label='|v(t)|')
+#plt.plot(save_times, vy, label='v_y(t)')
+plt.plot(save_times, v, label='v(t)')
 plt.xlabel("Timestep")
 plt.ylabel("Velocity (lattice units / timestep)")
-plt.title("Droplet Velocity vs Time")
+plt.title("Droplet Velocity vs Time\n"
+          f"E = 0,  g = {force_g}, Incline = {inclination_angle}°")
 plt.legend()
+plt.grid(True)
 
 plt.subplot(1, 2, 2)
 plt.plot(save_times, ax, label='a_x(t)')
-plt.plot(save_times, ay, label='a_y(t)')
-plt.plot(save_times, a, label='|a(t)|')
+#plt.plot(save_times, ay, label='a_y(t)')
+#plt.plot(save_times, a, label='a(t)')
 plt.xlabel("Timestep")
 plt.ylabel("Acceleration")
-plt.title("Droplet Acceleration vs Time")
+plt.title("Droplet Acceleration vs Time\n"
+          f"E = 0,  g = {force_g}, Incline = {inclination_angle}°")
 plt.legend()
 
 plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-#Load saved results
-#latest_result = "/Users/isoldeholweg/PycharmProjects/WBLBM/Isolde/results/2025-11-21/15-55-27/data/timestep_9999.npz"
-#latest_result = sim.io_handler.data_dir + f"/timestep_{nt-1}.npz"
-#data = np.load(latest_result)
-#rho = data['rho']
-
-#Compute contact angle
-#rho_mean = 0.5 * (rho_l + rho_v)
-#angle_calc = ContactAngle(rho_mean)
-#theta_left, theta_right = angle_calc.compute(rho)
-
-#Extract and squeeze density field to 2D
-#rho_2d = rho[:,:,0,0]  # removes dimensions of size 1
-#print("rho shape after squeeze:", rho_2d.shape)  # should print (100, 200)
-
-# Check with a quick plot
-#plt.imshow(rho_2d.T, origin="lower", cmap="jet")
-#plt.colorbar(label="Density")
-#plt.title("Droplet density field at equilibrium", weight="bold")
-
-#Add calculated angles and parameters to the plot for info
-#plt.text(1, rho_2d.shape[1]-10, f'θ_left = {theta_left:.1f}°', color='white', fontsize=12, weight='bold')
-#plt.text(70, rho_2d.shape[1]-10, f'θ_right = {theta_right:.1f}°', color='white', fontsize=12, weight='bold')
-#plt.text(1, rho_2d.shape[1]-20, f'Gravity= {force_g:.1e} N', color='white', fontsize=12, weight='bold')
-#plt.text(100, rho_2d.shape[1]-20, f'Incline angle = {inclination_angle:.1f}°', color='white', fontsize=12, weight='bold')
-
-#plt.show()
 #Calculate location of chem step
 chem_step_x = grid_shape[0] / 2
 
