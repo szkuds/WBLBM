@@ -12,7 +12,7 @@ def wetting_hysteresis_simulation_test():
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (401, 201)
+    grid_shape = (401, 101)
     tau = 0.99
     nt = 20000
     save_interval = 1000
