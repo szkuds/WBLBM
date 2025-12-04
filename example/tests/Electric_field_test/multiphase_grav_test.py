@@ -37,17 +37,16 @@ def multiphase_gravity_simulation_test():
 
     # setting up the forces
     gravity = GravityForceMultiphase(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+        force_g, inclination_angle, grid_shape
     )
 
     electric = ElectricForce(
-        nx=grid_shape[0],
-        ny=grid_shape[1],
-        d=2,
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
-        conductivity_vapour=conductivity_vapour
+        conductivity_vapour=conductivity_vapour,
+        grid_shape=grid_shape,
+
     )
 
     sim = Run(

@@ -2,8 +2,8 @@ import jax.numpy as jnp
 
 from wblbm import Gradient
 from wblbm.operators.force.force import Force
-from wblbm.grid import Grid
 from wblbm.lattice import Lattice
+
 from numpy import ndarray
 from wblbm.operators.wetting.wetting_util import determine_padding_modes
 
@@ -16,7 +16,7 @@ class ElectricForce(Force):
 
     def __init__(self, permittivity_liquid: float, permittivity_vapour: float,
                  conductivity_liquid: float, conductivity_vapour: float,
-                 grid: Grid, lattice: Lattice, bc_config: dict = None):
+                 grid_shape: tuple, lattice_type: str, bc_config: dict = None):
         """
         Initialize electrical force.
 
@@ -30,22 +30,22 @@ class ElectricForce(Force):
             conductivity_liquid: Electrical conductivity of the liquid phase
             conductivity_vapour: Electrical conductivity of the vapour phase
         """
-        if lattice.d != 2:
+        if grid_shape.__len__() != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
         self.name = 'ElectricalForce'
 
-        force_array = jnp.zeros((grid.nx, grid.ny, 1, lattice.d))
+        force_array = jnp.zeros((grid_shape[0], grid_shape[1], 1, grid_shape.__len__()))
         super().__init__(force_array)
         self.permittivity_liquid = permittivity_liquid
         self.permittivity_vapour = permittivity_vapour
         self.conductivity_liquid = conductivity_liquid
         self.conductivity_vapour = conductivity_vapour
-        self.nx = grid.nx
-        self.ny = grid.ny
-        self.d = lattice.d
-        self.w = lattice.w
-        self.gradient = Gradient(lattice, bc_config=bc_config)
+        self.nx = grid_shape[0]
+        self.ny = grid_shape[1]
+        self.d = grid_shape.__len__()
+        self.lattice = Lattice(lattice_type)
+        self.gradient = Gradient(self.lattice, bc_config=bc_config)
         self.bc_config = bc_config
 
     def compute_force(self, rho: jnp.ndarray, h_i: jnp.ndarray) -> jnp.ndarray:
@@ -93,7 +93,7 @@ class ElectricForce(Force):
         return U
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
-        h_i_eq = self.equilibrium_h(h_i_prev, self.w)
+        h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
         h_i_next = self
         # TODO: This is where I get stuck late, thing is that in the current bgk collision tau is initlised as a float, which will need to be changed.
         return h_i_next
