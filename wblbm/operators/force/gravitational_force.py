@@ -25,10 +25,8 @@ class GravityForceMultiphase(Force):
 
         super().__init__(force_array)
 
-    def compute_force(
-        self, rho: jnp.ndarray, rho_l: float, rho_v: float
-    ) -> jnp.ndarray:
-        """
-        Implementation of the force in which both phases experience acceleration.
-        """
-        return - self.force * rho
+    def compute_force(self, **kwargs) -> jnp.ndarray:
+        rho = kwargs.get('rho')
+        if rho is None:
+            raise ValueError("GravityForceMultiphase requires 'rho' in kwargs")
+        return -self.force * rho

@@ -68,11 +68,11 @@ class SinglePhaseSimulation(BaseSimulation):
         # existing options preserved
         return self.initialiser.initialise_standard()
 
-    def run_timestep(self, f_prev, it):
+    def run_timestep(self, f_prev, it, **kwargs):
         force_ext = None
         if self.force_enabled and self.force_obj:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
-            force_ext = self.force_obj.compute_force(rho)
+            force_ext = self.force_obj.compute_force(rho=rho)
         f_next = (
             self.update(f_prev, force=force_ext) if self.force_enabled
             else self.update(f_prev)
