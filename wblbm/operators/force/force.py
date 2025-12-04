@@ -14,9 +14,17 @@ class Force(ABC):
         self.force = force_array
 
     @abstractmethod
-    def compute_force(self, *args, **kwargs) -> jnp.ndarray:
+    @abstractmethod
+    def compute_force(self, **kwargs) -> jnp.ndarray:
         """
-        Compute the force field based on the density field rho.
-        Must return an array of shape (nx, ny, 1, d).
+        Compute the force field.
+
+        Each force extracts only required parameters from kwargs.
+        Must return array of shape (nx, ny, 1, d).
+
+        Common kwargs:
+            rho: Density field (nx, ny, 1, 1)
+            rho_l, rho_v: Phase densities (float)
+            hi: Electric potential distribution (nx, ny, q, 1)
         """
         pass

@@ -130,6 +130,12 @@ class Run:
         f_prev = self.simulation.initialize_fields(
             self.init_type, init_dir=self.init_dir
         )
+        h_prev = None
+        electric_present = self.simulation.force_obj.electric_present
+        if electric_present:
+            h_prev = self.simulation.force_obj.get_component_by_name(
+                self.simulation.force_obj.forces,
+                'ElectricalForce').init_h()
         nt = getattr(self.simulation, "nt", 1000)
         if verbose:
             print(f"Starting LBM simulation with {nt} time steps...")
@@ -137,7 +143,10 @@ class Run:
                 f"Config -> Grid: {self.simulation.grid_shape}, Multiphase: {self.simulation.multiphase}, Wetting: {self.simulation.wetting_enabled}, Force: {self.simulation.force_enabled}"
             )
         for it in range(nt):
-            f_prev = self.simulation.run_timestep(f_prev, it)
+            if electric_present:
+                f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+            else:
+                f_prev = self.simulation.run_timestep(f_prev, it)
             if jnp.isnan(f_prev).any():
                 print(f"NaN encountered at timestep {it}. Stopping simulation.")
                 break
