@@ -13,6 +13,7 @@ def multiphase_gravity_simulation_test():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
     grid_shape = (200, 800)
+    lattice_type = "D2Q9"
     nt = 10000
     save_interval = 1000
 
@@ -37,23 +38,21 @@ def multiphase_gravity_simulation_test():
 
     # setting up the forces
     gravity = GravityForceMultiphase(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+        force_g, inclination_angle, grid_shape
     )
 
     electric = ElectricForce(
-        nx=grid_shape[0],
-        ny=grid_shape[1],
-        d=2,
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
-        conductivity_vapour=conductivity_vapour
+        conductivity_vapour=conductivity_vapour,
+        grid_shape=grid_shape
     )
 
     sim = Run(
         simulation_type="multiphase",
         grid_shape=grid_shape,
-        lattice_type="D2Q9",
+        lattice_type=lattice_type,
         tau=tau,
         nt=nt,
         kappa=kappa,

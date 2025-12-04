@@ -7,7 +7,7 @@ jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_disable_jit", True)
 
 
-def wetting_hysteresis_simulation_test():
+def wetting_hysteresis_pinning_test():
     """Test LBM wetting implementation with hysteresis enabled."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
@@ -21,7 +21,7 @@ def wetting_hysteresis_simulation_test():
     rho_v = 0.33
     interface_width = 4
 
-    phi_value = 1.2
+    phi_value = 1
     d_rho_value = 0.0
 
     force_g = 2e-6
@@ -34,7 +34,7 @@ def wetting_hysteresis_simulation_test():
     bc_config = {
         'left': 'periodic',
         'bottom': 'wetting',
-        'top': 'symmetry',
+        'top': 'bounce-back',
         'right': 'periodic',
         'wetting_params': {
             'rho_l': rho_l,
@@ -79,7 +79,7 @@ def wetting_hysteresis_simulation_test():
 
 
 if __name__ == "__main__":
-    sim_wetting_hysteresis = wetting_hysteresis_simulation_test()
+    sim_wetting_hysteresis = wetting_hysteresis_pinning_test()
 
     # Visualize results
     print("\n=== Visualizing Wetting Hysteresis Test Results ===")
