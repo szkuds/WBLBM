@@ -6,8 +6,8 @@ from wblbm.operators.wetting.contact_angle import ContactAngle
 from wblbm.operators.wetting.contact_line_location import ContactLineLocation
 
 # Paths
-folder = "results/2025-11-24/15-15-45_wetting_hysteresis_simulation_test"
-base_dir = os.path.join("/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/", folder)
+folder = "results/2025-11-25/13-50-27_wetting_init"
+base_dir = os.path.join("/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Rebuttal_checks/", folder)
 data_dir = os.path.join(base_dir, "data")
 config_path = os.path.join(base_dir, "config.json")
 output_path = os.path.join(base_dir, "wetting_analysis.txt")
