@@ -22,12 +22,15 @@ class GravityForceMultiphaseDroplet(Force):
 
         super().__init__(force_array)
 
-    def compute_force(
-        self, rho: jnp.ndarray, rho_l: float, rho_v: float
-    ) -> jnp.ndarray:
-        """
-        Returns the constant gravitational force field.
-        Ignores rho as gravity is density-independent.
-        """
-        mask = rho > 0.95 * rho_v + 0.05 * rho_l
+    def compute_force(self, **kwargs) -> jnp.ndarray:
+        rho = kwargs.get('rho')
+        rho_l = kwargs.get('rho_l')
+        rho_v = kwargs.get('rho_v')
+
+        required = ['rho', 'rhol', 'rhov']
+        missing = [p for p in required if kwargs.get(p) is None]
+        if missing:
+            raise ValueError(f"GravityForceMultiphaseDroplet requires: {missing}")
+
+        mask = (rho - 0.95 * rho_v) / (0.05 * rho_l)
         return self.force * rho * mask

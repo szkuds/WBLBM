@@ -48,7 +48,7 @@ class ElectricForce(Force):
         self.gradient = Gradient(self.lattice, bc_config=bc_config)
         self.bc_config = bc_config
 
-    def compute_force(self, rho: jnp.ndarray, h_i: jnp.ndarray) -> jnp.ndarray:
+    def compute_force(self, **kwargs) -> jnp.ndarray:
         """
         Compute electrical force from electric field gradient.
         U = sum_i h_i_prev,
@@ -63,25 +63,31 @@ class ElectricForce(Force):
         Returns:
             Force array of shape (nx, ny, 1, 2)
         """
+        rho = kwargs.get('rho')
+        h_i = kwargs.get('h_i')
+        if rho is None or h_i is None:
+            raise ValueError("ElectricForce requires 'rho' and 'h_i' in kwargs")
         conductivity_field = self.conductivity(rho,
                                                conductivity_liquid=self.conductivity_liquid,
                                                conductivity_vapour=self.conductivity_vapour)
         permittivity_field = self.permittivity(rho,
                                                permittivity_liquid=self.permittivity_liquid,
                                                permittivity_vapour=self.permittivity_vapour)
-        potential = self.update_potential(h_i)
+        potential = self.electric_potential(h_i)
         electric_field = self.gradient(potential)
         # TODO: This is ugly here would be better to make function within the gradient class to do this operation.
         # TODO: Apart from the divergence it is also good to make the standard gradient more accessible, really the density with wetting is the exception and not the rule/
-        eE_x = (permittivity_field*electric_field)[:,:,:,0]
-        eE_y = (permittivity_field*electric_field)[:,:,:,1]
-        eE_x_grad_x = self.gradient._gradient_standard(eE_x, determine_padding_modes(self.bc_config))[:,:,:,0]
-        eE_y_grad_y = self.gradient._gradient_standard(eE_y, determine_padding_modes(self.bc_config))[:,:,:,1]
+        eE_x = (permittivity_field * electric_field)[:, :, :, 0]
+        eE_y = (permittivity_field * electric_field)[:, :, :, 1]
+        eE_x_grad_x = self.gradient._gradient_standard(eE_x, determine_padding_modes(self.bc_config))[:, :, :, 0]
+        eE_y_grad_y = self.gradient._gradient_standard(eE_y, determine_padding_modes(self.bc_config))[:, :, :, 1]
         q = eE_x_grad_x + eE_y_grad_y
-        electric_force = q*electric_field - 0.5 * jnp.dot(electric_field, electric_field) * self.gradient._gradient_standard(permittivity_field, determine_padding_modes(self.bc_config))
+        electric_force = q * electric_field - 0.5 * jnp.dot(electric_field,
+                                                            electric_field) * self.gradient._gradient_standard(
+            permittivity_field, determine_padding_modes(self.bc_config))
         return electric_force
 
-    def update_potential(self, h_i: jnp.ndarray) -> jnp.ndarray:
+    def electric_potential(self, h_i: jnp.ndarray) -> jnp.ndarray:
         """
         Update electric potential from h_i distribution.
         h_i = Σ h_i
@@ -94,10 +100,10 @@ class ElectricForce(Force):
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
         h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
-        h_i_next = self
+        tau_e = 3 * conductivity + .5
+        h_i_next = (1 - (1 / tau_e)) * h_i_prev - (1 / tau_e) * h_i_eq
         # TODO: This is where I get stuck late, thing is that in the current bgk collision tau is initlised as a float, which will need to be changed.
         return h_i_next
-
 
     def equilibrium_h(self, h_i: jnp.ndarray, w_i: ndarray) -> jnp.ndarray:
         """
@@ -123,5 +129,9 @@ class ElectricForce(Force):
         rho_max = jnp.max(rho)
         rho_min = jnp.min(rho)
         phi = ((rho - rho_min) / (rho_max - rho_min)) * phi_liquid + (
-                    1 - ((rho - rho_min) / (rho_max - rho_min))) * phi_gas
+                1 - ((rho - rho_min) / (rho_max - rho_min))) * phi_gas
         return phi
+
+    def init_h(self):
+        h_i = jnp.zeros((self.nx, self.ny, 1, self.d))
+        return h_i
