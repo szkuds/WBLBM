@@ -44,7 +44,7 @@ class CompositeForce(Force):
         total_force = None
 
         for force in self.forces:
-            force_contribution = force.compute_force(*args, **kwargs)
+            force_contribution = force.compute_force(**kwargs)
             if total_force is None:
                 total_force = force_contribution
             else:
@@ -52,3 +52,9 @@ class CompositeForce(Force):
 
         self.force = total_force
         return total_force
+
+    def get_component_by_name(self, forces: tuple, target_name: str):
+        for f in forces:
+            if f.name == target_name:
+                return f
+        raise KeyError(f"No force with name {target_name!r}")

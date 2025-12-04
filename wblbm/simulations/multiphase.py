@@ -117,26 +117,30 @@ class MultiphaseSimulation(BaseSimulation):
             return self.initialise.initialise_standard()
 
     @partial(jit, static_argnums=(0,))
-    def run_timestep(self, f_prev, it):
+    def run_timestep(self, f_prev, it, **kwargs):
         force_ext = None
-        # TODO: This is where the external force is added,
-        #  since this will also be how I want to implement the electric force
-        #  I will need to look at how I can best extend this.
-        #   At the moment I think the creation of a composite force class will be best
-        #    As it will allow for multiple force to be dealt with in a similar manner.
-        #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
         if self.force_enabled and self.force_obj and self.force_obj.electric_present:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
-
-            force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
+            h_prev = kwargs.get('h_i')
+            force_ext = self.force_obj.compute_force(
+                rho=rho,
+                rho_l=self.rho_l,
+                rho_v=self.rho_v,
+                h_i=h_prev
+            )
+            f_next = self.update(f_prev, force=force_ext)
+            h_next = ...
+            return f_next, h_next
 
         elif self.force_enabled and self.force_obj:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
-            force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
+            force_ext = self.force_obj.compute_force(
+                rho=rho,
+                rho_l=self.rho_l,
+                rho_v=self.rho_v
+            )
+            f_next = self.update(f_prev, force=force_ext)
+            return f_next
+        else:
+            return self.update(f_prev)
         # TODO: Here I need to add the logic to update the electric field. Also need to add it to the single phase sim.
-        f_next = (
-            self.update(f_prev, force=force_ext)
-            if self.force_enabled
-            else self.update(f_prev)
-        )
-        return f_next

@@ -46,7 +46,8 @@ def multiphase_gravity_simulation_test():
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
         conductivity_vapour=conductivity_vapour,
-        grid_shape=grid_shape
+        grid_shape=grid_shape,
+        lattice_type=lattice_type
     )
 
     sim = Run(

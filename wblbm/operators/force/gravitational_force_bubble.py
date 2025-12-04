@@ -24,11 +24,8 @@ class GravityForceMultiphaseBubble(Force):
         # This ensures that the array has the correct size
         super().__init__(force_array)
 
-    def compute_force(
-        self, rho: jnp.ndarray, rho_l: float, rho_v: float
-    ) -> jnp.ndarray:
-        """
-        Returns the constant gravitational force field.
-        Ignores rho as gravity is density-independent.
-        """
-        return - self.force * (rho - self.rho_ref)
+    def compute_force(self, **kwargs) -> jnp.ndarray:
+        rho = kwargs.get('rho')
+        if rho is None:
+            raise ValueError("GravityForceMultiphaseBubble requires 'rho' in kwargs")
+        return -self.force * (rho - self.rho_ref)

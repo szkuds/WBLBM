@@ -61,7 +61,7 @@ def rising_bubble_mrt():
         bubble=True,
         rho_ref=rho_l,
         g=force_g,
-        force_obj=gravity,
+        force_obj=[gravity],
         init_type="multiphase_bubble",
         init_dir=init_file,
         collision=collision,
