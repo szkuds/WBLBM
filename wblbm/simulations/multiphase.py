@@ -129,7 +129,14 @@ class MultiphaseSimulation(BaseSimulation):
                 h_i=h_prev
             )
             f_next = self.update(f_prev, force=force_ext)
-            h_next = ...
+            electric_force = self.force_obj.get_component_by_name(
+                self.force_obj.forces, 'ElectricalForce'
+            )
+            conductivity = electric_force.conductivity(
+                rho, electric_force.conductivity_liquid,
+                electric_force.conductivity_vapour
+            )
+            h_next = electric_force.update_h_i(h_prev, conductivity)
             return f_next, h_next
 
         elif self.force_enabled and self.force_obj:

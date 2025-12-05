@@ -70,21 +70,24 @@ class ElectricForce(Force):
         conductivity_field = self.conductivity(rho,
                                                conductivity_liquid=self.conductivity_liquid,
                                                conductivity_vapour=self.conductivity_vapour)
-        permittivity_field = self.permittivity(rho,
-                                               permittivity_liquid=self.permittivity_liquid,
-                                               permittivity_vapour=self.permittivity_vapour)
+        permittivity = self.permittivity(rho,
+                                         permittivity_liquid=self.permittivity_liquid,
+                                         permittivity_vapour=self.permittivity_vapour)
         potential = self.electric_potential(h_i)
-        electric_field = self.gradient(potential)
+        electric_field = - self.gradient(potential)
         # TODO: This is ugly here would be better to make function within the gradient class to do this operation.
         # TODO: Apart from the divergence it is also good to make the standard gradient more accessible, really the density with wetting is the exception and not the rule/
-        eE_x = (permittivity_field * electric_field)[:, :, :, 0]
-        eE_y = (permittivity_field * electric_field)[:, :, :, 1]
-        eE_x_grad_x = self.gradient._gradient_standard(eE_x, determine_padding_modes(self.bc_config))[:, :, :, 0]
-        eE_y_grad_y = self.gradient._gradient_standard(eE_y, determine_padding_modes(self.bc_config))[:, :, :, 1]
-        q = eE_x_grad_x + eE_y_grad_y
-        electric_force = q * electric_field - 0.5 * jnp.dot(electric_field,
-                                                            electric_field) * self.gradient._gradient_standard(
-            permittivity_field, determine_padding_modes(self.bc_config))
+        eE_x = jnp.zeros(rho.shape)
+        eE_y = jnp.zeros(rho.shape)
+        q = jnp.zeros(rho.shape)
+        eE_x = eE_x.at[:, :, :, 0].set((permittivity * electric_field)[:, :, :, 0])
+        eE_y = eE_y.at[:, :, :, 1].set((permittivity * electric_field)[:, :, :, 1])
+        eE_x_grad_x = self.gradient.standard(eE_x, determine_padding_modes(self.bc_config))[:, :, :, 0]
+        eE_y_grad_y = self.gradient.standard(eE_y, determine_padding_modes(self.bc_config))[:, :, :, 1]
+        q = q.at[:, :, :, 0].set(eE_x_grad_x + eE_y_grad_y)
+        EE = jnp.expand_dims(jnp.einsum('...i,...i->...', electric_field, electric_field), axis=-1)
+        electric_force = q * electric_field - 0.5 * EE * self.gradient.standard(
+            permittivity, determine_padding_modes(self.bc_config))
         return electric_force
 
     def electric_potential(self, h_i: jnp.ndarray) -> jnp.ndarray:
@@ -95,14 +98,13 @@ class ElectricForce(Force):
         Args:
             h_i_prev: Distribution function for electric potential, shape (nx, ny, q)
         """
-        U = jnp.sum(h_i, axis=2)
+        U = jnp.sum(h_i, axis=2, keepdims=True)
         return U
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
         h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
         tau_e = 3 * conductivity + .5
         h_i_next = (1 - (1 / tau_e)) * h_i_prev - (1 / tau_e) * h_i_eq
-        # TODO: This is where I get stuck late, thing is that in the current bgk collision tau is initlised as a float, which will need to be changed.
         return h_i_next
 
     def equilibrium_h(self, h_i: jnp.ndarray, w_i: ndarray) -> jnp.ndarray:
@@ -117,7 +119,7 @@ class ElectricForce(Force):
         Returns:
             Equilibrium distribution, shape (nx, ny, 9)
         """
-        return w_i[:, jnp.newaxis, jnp.newaxis] * h_i
+        return w_i[jnp.newaxis, jnp.newaxis, :, jnp.newaxis] * h_i
 
     def conductivity(self, rho: jnp.ndarray, conductivity_liquid: float, conductivity_vapour: float) -> jnp.ndarray:
         return self.rho_to_phi(rho, conductivity_liquid, conductivity_vapour)
@@ -133,5 +135,5 @@ class ElectricForce(Force):
         return phi
 
     def init_h(self):
-        h_i = jnp.zeros((self.nx, self.ny, 1, self.d))
+        h_i = jnp.zeros((self.nx, self.ny, self.lattice.q, 1))
         return h_i
