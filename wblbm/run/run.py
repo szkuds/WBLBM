@@ -143,7 +143,9 @@ class Run:
             self.init_type, init_dir=self.init_dir
         )
         h_prev = None
-        electric_present = self.simulation.force_obj.electric_present
+        electric_present = None
+        if self.simulation.force_enabled:
+            electric_present = self.simulation.force_obj.electric_present
         if electric_present:
             electric_force = self.simulation.force_obj.get_component_by_name(
                 self.simulation.force_obj.forces,
