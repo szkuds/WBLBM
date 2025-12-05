@@ -13,6 +13,7 @@ def multiphase_gravity_simulation_test():
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
     grid_shape = (200, 800)
+    lattice_type = "D2Q9"
     nt = 10000
     save_interval = 1000
 
@@ -46,7 +47,7 @@ def multiphase_gravity_simulation_test():
         conductivity_liquid=conductivity_liquid,
         conductivity_vapour=conductivity_vapour,
         grid_shape=grid_shape,
-
+        lattice_type=lattice_type
     )
 
     sim = Run(

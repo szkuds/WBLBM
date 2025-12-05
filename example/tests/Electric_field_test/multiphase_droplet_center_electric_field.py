@@ -4,7 +4,7 @@ from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-#jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
@@ -12,10 +12,10 @@ def multiphase_gravity_simulation_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
-    grid_shape = (200, 800)
+    grid_shape = (200, 200)
     lattice_type = "D2Q9"
-    nt = 10000
-    save_interval = 1000
+    nt = 10
+    save_interval = 1
 
     # multiphase config
     kappa = 0.04
@@ -62,7 +62,7 @@ def multiphase_gravity_simulation_test():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=[gravity, electric],
+        force_obj=[electric],
         init_type="multiphase_droplet",
     )
     sim.run(verbose=True)
