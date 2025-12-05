@@ -1,0 +1,14 @@
+Configuration saved to results/2025-12-05/13-40-25_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10 time steps...
+Config -> Grid: (200, 800), Multiphase: True, Wetting: False, Force: True
+Step 1/10: avg_rho=0.0143, max_u=0.000532
+Traceback (most recent call last):
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 77, in <module>
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Electric_field_test/multiphase_droplet_center_electric_field.py", line 68, in multiphase_gravity_simulation_test
+    sim.run(verbose=True)
+  File "/Users/sbszkudlarek/PycharmProjects/WBLBM/wblbm/run/run.py", line 159, in run
+    if verbose and hasattr(self.simulation, "macroscopic"):
+       ^^^^^^^
+KeyboardInterrupt

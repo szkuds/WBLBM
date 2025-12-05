@@ -2,6 +2,8 @@ import numpy as np
 import jax.numpy as jnp
 import inspect
 
+from wblbm.operators.force import CompositeForce
+
 
 class SimulationFactory:
     @staticmethod
@@ -84,50 +86,69 @@ class Run:
         # Simple config builder for demonstration; extend as needed
         return dict(**kwargs)
 
-    def _save_data(self, it, fprev):
+    def _save_data(self, it, f_prev, **kwargs):
         # Save data using the simulation's macroscopic operator
         force_ext = None
+        h_prev = None
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
-            try:
-                if self.config.get("force_enabled") and self.config.get("force_obj"):
-                    rho = jnp.sum(fprev, axis=2, keepdims=True)
-                    force = self.config.get("force_obj")
-                    if self.config.get("simulation_type") == "multiphase":
-                        force_ext = force.compute_force(
-                            rho, self.config.get("rho_l"), self.config.get("rho_v")
-                        )
-                    else:
-                        force_ext = force.compute_force(rho)
-                    result = macroscopic(fprev, force_ext)
+
+            if (self.simulation.force_obj.electric_present and
+                    self.config.get("force_enabled") and
+                    self.config.get("force_obj")):
+                rho = jnp.sum(f_prev, axis=2, keepdims=True)
+                h_prev = kwargs.get('h_i')
+                force_ext = self.simulation.force_obj.compute_force(rho=rho,
+                                                                    rho_l=self.config.get('rho_l'),
+                                                                    rho_v=self.config.get('rho_l'),
+                                                                    h_i=h_prev)
+                result = macroscopic(f_prev, force_ext)
+                pass
+            elif self.config.get("force_enabled") and self.config.get("force_obj"):
+                rho = jnp.sum(f_prev, axis=2, keepdims=True)
+                force = CompositeForce(*self.config.get("force_obj"))
+                if self.config.get("simulation_type") == "multiphase":
+                    force_ext = force.compute_force(
+                        rho=rho, rho_l=self.config.get("rho_l"), rho_v=self.config.get("rho_v")
+                    )
                 else:
-                    result = macroscopic(fprev)
-                if isinstance(result, tuple) and len(result) == 3:
-                    rho, u, force = result
-                    data_to_save = {
-                        "rho": np.array(rho),
-                        "u": np.array(u),
-                        "force": np.array(force),
-                        "force_ext": np.array(force_ext),
-                        "f": np.array(fprev),
-                    }
-                else:
-                    rho, u = result
-                    data_to_save = {
-                        "rho": np.array(rho),
-                        "u": np.array(u),
-                        "f": np.array(fprev),
-                    }
-            except Exception:
-                data_to_save = {"f": np.array(fprev)}
+                    force_ext = force.compute_force(rho)
+                result = macroscopic(f_prev, force_ext)
+            else:
+                result = macroscopic(f_prev)
+            if isinstance(result, tuple) and len(result) == 3:
+                rho, u, force = result
+                data_to_save = {
+                    "rho": np.array(rho),
+                    "u": np.array(u),
+                    "force": np.array(force),
+                    "force_ext": np.array(force_ext),
+                    "f": np.array(f_prev),
+                    "h": np.array(h_prev)
+                }
+
+            else:
+                rho, u = result
+                data_to_save = {
+                    "rho": np.array(rho),
+                    "u": np.array(u),
+                    "f": np.array(f_prev),
+                }
         else:
-            data_to_save = {"f": np.array(fprev)}
+            data_to_save = {"f": np.array(f_prev)}
         self.io_handler.save_data_step(it, data_to_save)
 
     def run(self, *, verbose=True):
-        fprev = self.simulation.initialize_fields(
+        f_prev = self.simulation.initialize_fields(
             self.init_type, init_dir=self.init_dir
         )
+        h_prev = None
+        electric_present = self.simulation.force_obj.electric_present
+        if electric_present:
+            electric_force = self.simulation.force_obj.get_component_by_name(
+                self.simulation.force_obj.forces,
+                'ElectricalForce')
+            h_prev = electric_force.init_h()
         nt = getattr(self.simulation, "nt", 1000)
         if verbose:
             print(f"Starting LBM simulation with {nt} time steps...")
@@ -135,17 +156,23 @@ class Run:
                 f"Config -> Grid: {self.simulation.grid_shape}, Multiphase: {self.simulation.multiphase}, Wetting: {self.simulation.wetting_enabled}, Force: {self.simulation.force_enabled}"
             )
         for it in range(nt):
-            fprev = self.simulation.run_timestep(fprev, it)
-            if jnp.isnan(fprev).any():
+            if electric_present:
+                f_prev, h_prev = self.simulation.run_timestep(f_prev, it, h_i=h_prev)
+            else:
+                f_prev = self.simulation.run_timestep(f_prev, it)
+            if jnp.isnan(f_prev).any():
                 print(f"NaN encountered at timestep {it}. Stopping simulation.")
                 break
             # skip initial transients then save every `save_interval`
             if (it > self.skip_interval) and (
                 it % self.save_interval == 0 or it == nt - 1
             ):
-                self._save_data(it, fprev)
+                if electric_present:
+                    self._save_data(it, f_prev, h_i=h_prev)
+                else:
+                    self._save_data(it, f_prev)
                 if verbose and hasattr(self.simulation, "macroscopic"):
-                    result = self.simulation.macroscopic(fprev)
+                    result = self.simulation.macroscopic(f_prev)
                     if isinstance(result, tuple) and len(result) >= 2:
                         rho, u = result[:2]
                         avg_rho = np.mean(rho)

@@ -49,9 +49,9 @@ def mrt_static_test():
         interface_width=interface_width,
         save_interval=save_interval,
         skip_interval=skip_interval,
-        collision="bgk",
-        init_type="multiphase_bubble_bot",
+        init_type="multiphase_droplet",
         tau=tau,
+        collision=collision,
         #bc_config=bc_config,
     )
     sim.run(verbose=True)

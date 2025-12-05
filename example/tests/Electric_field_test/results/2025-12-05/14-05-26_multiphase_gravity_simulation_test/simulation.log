@@ -1,0 +1,25 @@
+Configuration saved to results/2025-12-05/14-05-26_multiphase_gravity_simulation_test/config.json
+Starting LBM simulation with 10 time steps...
+Config -> Grid: (200, 200), Multiphase: True, Wetting: False, Force: True
+Step 1/10: avg_rho=0.0542, max_u=0.000528
+Step 2/10: avg_rho=0.0542, max_u=0.000723
+Step 3/10: avg_rho=0.0542, max_u=0.000909
+Step 4/10: avg_rho=0.0542, max_u=0.001088
+Step 5/10: avg_rho=0.0542, max_u=0.001260
+Step 6/10: avg_rho=0.0542, max_u=0.001426
+Step 7/10: avg_rho=0.0542, max_u=0.001587
+Step 8/10: avg_rho=0.0542, max_u=0.001741
+Step 9/10: avg_rho=0.0542, max_u=0.001891
+Simulation completed!
+Results saved in: results/2025-12-05/14-05-26_multiphase_gravity_simulation_test
+
+=== Visualizing Results ===
+Saving plots to: results/2025-12-05/14-05-26_multiphase_gravity_simulation_test/plots
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/matplotlib/quiver.py:695: RuntimeWarning: divide by zero encountered in scalar divide
+  length = a * (widthu_per_lenu / (self.scale * self.width))
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/matplotlib/quiver.py:695: RuntimeWarning: invalid value encountered in multiply
+  length = a * (widthu_per_lenu / (self.scale * self.width))
+Combined simulation analysis plot saved to: results/2025-12-05/14-05-26_multiphase_gravity_simulation_test/plots/simulation_analysis.png
+Finished generating plots for all 9 timesteps.
+
+Test completed!
