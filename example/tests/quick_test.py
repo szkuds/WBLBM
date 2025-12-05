@@ -66,11 +66,7 @@ def wetting_hysteresis_simulation_test():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=True,
-<<<<<<< HEAD
-        force_obj=gravity,
-=======
         force_obj=[gravity],
->>>>>>> 669c200 (Noticed that the wetting hysteresis is very slow with the new force implementation.)
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
