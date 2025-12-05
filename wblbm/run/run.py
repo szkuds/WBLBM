@@ -92,28 +92,25 @@ class Run:
         h_prev = None
         if hasattr(self.simulation, "macroscopic"):
             macroscopic = self.simulation.macroscopic
-
-            if (self.simulation.force_obj.electric_present and
-                    self.config.get("force_enabled") and
-                    self.config.get("force_obj")):
-                rho = jnp.sum(f_prev, axis=2, keepdims=True)
-                h_prev = kwargs.get('h_i')
-                force_ext = self.simulation.force_obj.compute_force(rho=rho,
-                                                                    rho_l=self.config.get('rho_l'),
-                                                                    rho_v=self.config.get('rho_l'),
-                                                                    h_i=h_prev)
-                result = macroscopic(f_prev, force_ext)
-                pass
-            elif self.config.get("force_enabled") and self.config.get("force_obj"):
-                rho = jnp.sum(f_prev, axis=2, keepdims=True)
-                force = CompositeForce(*self.config.get("force_obj"))
-                if self.config.get("simulation_type") == "multiphase":
-                    force_ext = force.compute_force(
-                        rho=rho, rho_l=self.config.get("rho_l"), rho_v=self.config.get("rho_v")
-                    )
+            if self.config.get("force_enabled") and self.config.get("force_obj"):
+                if self.simulation.force_obj.electric_present:
+                    rho = jnp.sum(f_prev, axis=2, keepdims=True)
+                    h_prev = kwargs.get('h_i')
+                    force_ext = self.simulation.force_obj.compute_force(rho=rho,
+                                                                        rho_l=self.config.get('rho_l'),
+                                                                        rho_v=self.config.get('rho_l'),
+                                                                        h_i=h_prev)
+                    result = macroscopic(f_prev, force_ext)
                 else:
-                    force_ext = force.compute_force(rho)
-                result = macroscopic(f_prev, force_ext)
+                    rho = jnp.sum(f_prev, axis=2, keepdims=True)
+                    force = CompositeForce(*self.config.get("force_obj"))
+                    if self.config.get("simulation_type") == "multiphase":
+                        force_ext = force.compute_force(
+                            rho=rho, rho_l=self.config.get("rho_l"), rho_v=self.config.get("rho_v")
+                        )
+                    else:
+                        force_ext = force.compute_force(rho)
+                    result = macroscopic(f_prev, force_ext)
             else:
                 result = macroscopic(f_prev)
             if isinstance(result, tuple) and len(result) == 3:
@@ -143,7 +140,7 @@ class Run:
             self.init_type, init_dir=self.init_dir
         )
         h_prev = None
-        electric_present = None
+        electric_present = False
         if self.simulation.force_enabled:
             electric_present = self.simulation.force_obj.electric_present
         if electric_present:
