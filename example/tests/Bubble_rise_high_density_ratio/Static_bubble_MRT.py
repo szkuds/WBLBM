@@ -5,15 +5,15 @@ import jax
 
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
-
+jax.config.update("jax_enable_x64", True)
 
 def mrt_static_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
-    grid_shape = (401, 401)
-    nt = 5000
-    save_interval = 1000
+    grid_shape = (201, 801)
+    nt = 50000
+    save_interval = 10000
     skip_interval = 0
     kappa = 0.01
     rho_l = 1

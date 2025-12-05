@@ -12,26 +12,26 @@ def mrt_rising_cs_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
-    grid_shape = (201, 201)
-    nt = 3000
-    save_interval = 1
+    grid_shape = (401, 401)
+    nt = 300000
+    save_interval = 10000
     skip_interval = 0
-    kappa = 0.0002
+    kappa = 0.008
     rho_l = 12.18
     rho_v = 0.01669
     interface_width = 10
     tau = 0.8
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-10-22/12-50-14_mrt_rising_cs_test/data/timestep_70.npz"
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-11-20/00-08-38_mrt_static_cs_test/data/timestep_499999.npz"
 
-    force_g = 0.000000075
+    force_g = 1e-7
     inclination_angle = 0
     gravity = GravityForceMultiphaseBubble(
         grid_shape[0], grid_shape[1], 2, force_g, inclination_angle, rho_l
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
         "left": "periodic",
         "right": "periodic",
     }
@@ -71,7 +71,7 @@ def mrt_rising_cs_test():
         save_interval=save_interval,
         skip_interval=skip_interval,
         force_enabled=True,
-        force_obj=gravity,
+        force_obj=[gravity],
         collision=collision,
         init_type="init_from_file",
         init_dir=init_file,

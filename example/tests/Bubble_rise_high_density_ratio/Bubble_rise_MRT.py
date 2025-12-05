@@ -13,26 +13,26 @@ def rising_bubble_mrt():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a rising bubble ===")
 
-    grid_shape = (201, 201)
-    nt = 5000
-    save_interval = 100
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-08-05/16-24-37/data/timestep_45000.npz"
+    grid_shape = (201, 801)
+    nt = 50000
+    save_interval = 1000
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-12-05/15-26-55_rising_bubble_mrt/data/timestep_49999.npz"
 
-    kappa = 0.01
+    kappa = 0.02
     rho_l = 1
     rho_v = .001
     interface_width = 5
 
     rho_ref = rho_l
-    force_g = 0.0000001
+    force_g = 1e-6
     inclination_angle = 0
     gravity = GravityForceMultiphase(
         force_g, inclination_angle, grid_shape
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
         "left": "periodic",
         "right": "periodic",
     }
@@ -58,7 +58,6 @@ def rising_bubble_mrt():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        bubble=True,
         rho_ref=rho_l,
         g=force_g,
         force_obj=[gravity],
