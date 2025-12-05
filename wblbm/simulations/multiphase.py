@@ -1,9 +1,14 @@
+from functools import partial
+from jax import jit
+
 from .base import BaseSimulation
 from wblbm.operators.update.update_multiphase import UpdateMultiphase
 from wblbm.operators.update.update_multiphase_hysteresis import UpdateMultiphaseHysteresis
 from wblbm.operators.macroscopic.macroscopic_multiphase_dw import MacroscopicMultiphaseDW
 from wblbm.operators.initialise.initialise import Initialise
 import jax.numpy as jnp
+
+from ..operators.force import CompositeForce
 
 
 class MultiphaseSimulation(BaseSimulation):
@@ -35,7 +40,7 @@ class MultiphaseSimulation(BaseSimulation):
         self.rho_v = rho_v
         self.interface_width = interface_width
         self.force_enabled = force_enabled
-        self.force_obj = force_obj
+        self.force_obj = CompositeForce(*force_obj) if force_obj is not None else None
         self.bc_config = bc_config
         self.collision_scheme = collision_scheme
         self.k_diag = k_diag
@@ -47,12 +52,11 @@ class MultiphaseSimulation(BaseSimulation):
         self.multiphase = True
 
     def setup_operators(self):
-        self.wetting_enabled = any(
-            bc_type == 'wetting'
-            for bc_type in (self.bc_config or {}).values()
-        )
-        self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref) if self.bubble \
-            else Initialise(self.grid, self.lattice, self.bubble)
+        self.wetting_enabled = any(bc_type == 'wetting'for bc_type in (self.bc_config or {}).values())
+        if self.bubble:
+            self.initialise = Initialise(self.grid, self.lattice, self.bubble, self.g, self.rho_ref)
+        else:
+            self.initialise = Initialise(self.grid, self.lattice, self.bubble)
         if self.bc_config and "hysteresis_params" in self.bc_config:
             self.update = UpdateMultiphaseHysteresis(
                 self.grid, self.lattice, self.tau, self.kappa, self.interface_width,
@@ -112,21 +116,38 @@ class MultiphaseSimulation(BaseSimulation):
         else:
             return self.initialise.initialise_standard()
 
-    def run_timestep(self, fprev, it):
+    @partial(jit, static_argnums=(0,))
+    def run_timestep(self, f_prev, it, **kwargs):
         force_ext = None
-        # TODO: This is where the external force is added,
-        #  since this will also be how I want to implement the electric force
-        #  I will need to look at how I can best extend this.
-        #   At the moment I think the creation of a composite force class will be best
-        #    As it will allow for multiple force to be dealt with in a similar manner.
-        #   https://www.perplexity.ai/search/in-the-case-of-the-electric-fi-tsEeMkPcQzecNfNYtcWVsw
-        if self.force_enabled and self.force_obj:
-            rho = jnp.sum(fprev, axis=2, keepdims=True)
-            force_ext = self.force_obj.compute_force(rho, self.rho_l, self.rho_v)
-        fnext = (
-            self.update(fprev, force=force_ext)
-            if self.force_enabled
-            else self.update(fprev)
-        )
+        if self.force_enabled and self.force_obj and self.force_obj.electric_present:
+            rho = jnp.sum(f_prev, axis=2, keepdims=True)
+            h_prev = kwargs.get('h_i')
+            force_ext = self.force_obj.compute_force(
+                rho=rho,
+                rho_l=self.rho_l,
+                rho_v=self.rho_v,
+                h_i=h_prev
+            )
+            f_next = self.update(f_prev, force=force_ext)
+            electric_force = self.force_obj.get_component_by_name(
+                self.force_obj.forces, 'ElectricalForce'
+            )
+            conductivity = electric_force.conductivity(
+                rho, electric_force.conductivity_liquid,
+                electric_force.conductivity_vapour
+            )
+            h_next = electric_force.update_h_i(h_prev, conductivity)
+            return f_next, h_next
 
-        return fnext
+        elif self.force_enabled and self.force_obj:
+            rho = jnp.sum(f_prev, axis=2, keepdims=True)
+            force_ext = self.force_obj.compute_force(
+                rho=rho,
+                rho_l=self.rho_l,
+                rho_v=self.rho_v
+            )
+            f_next = self.update(f_prev, force=force_ext)
+            return f_next
+        else:
+            return self.update(f_prev)
+        # TODO: Here I need to add the logic to update the electric field. Also need to add it to the single phase sim.

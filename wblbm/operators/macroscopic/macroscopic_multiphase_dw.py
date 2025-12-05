@@ -104,7 +104,7 @@ class MacroscopicMultiphaseDW(Macroscopic):
         density. This work because the values of the chemical potential are different to the rho_v and rho_l values.
         If these where to match it would fail, but that will often not happen.
         """
-        grad_chem_pot = self.gradient._gradient_standard(self.chem_pot(rho), determine_padding_modes(self.bc_config))
+        grad_chem_pot = self.gradient.standard(self.chem_pot(rho), determine_padding_modes(self.bc_config))
         return -rho * grad_chem_pot
 
     @partial(jit, static_argnums=(0,))

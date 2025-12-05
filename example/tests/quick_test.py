@@ -12,7 +12,7 @@ def wetting_hysteresis_simulation_test():
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (401, 201)
+    grid_shape = (401, 101)
     tau = 0.99
     nt = 20
     save_interval = 1
@@ -21,7 +21,7 @@ def wetting_hysteresis_simulation_test():
     rho_v = 0.33
     interface_width = 4
 
-    phi_value = 1.2
+    phi_value = 1.0
     d_rho_value = 0.0
 
     force_g = 2e-6
@@ -66,7 +66,7 @@ def wetting_hysteresis_simulation_test():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=True,
-        force_obj=gravity,
+        force_obj=[gravity],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,

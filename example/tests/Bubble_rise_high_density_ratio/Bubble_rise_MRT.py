@@ -27,7 +27,7 @@ def rising_bubble_mrt():
     force_g = 0.0000001
     inclination_angle = 0
     gravity = GravityForceMultiphase(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+        force_g, inclination_angle, grid_shape
     )
 
     bc_config = {
@@ -61,7 +61,7 @@ def rising_bubble_mrt():
         bubble=True,
         rho_ref=rho_l,
         g=force_g,
-        force_obj=gravity,
+        force_obj=[gravity],
         init_type="multiphase_bubble",
         init_dir=init_file,
         collision=collision,

@@ -3,21 +3,23 @@ from wblbm.operators.force import GravityForceMultiphaseDroplet
 from wblbm.utils.plotting import visualise
 import jax
 
+
 # this line is added for debugging
 # jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_enable_x64", True)
 
 
-def test_mrt_static_cs():
+def mrt_static_cs_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (401, 401)
-    nt = 50000
-    save_interval = 5000
+    nt = 500000
+    save_interval = 50000
     skip_interval = 0
-    kappa = 0.01
+    kappa = 0.008
     rho_l = 12.18
-    rho_v = 0.01669
+    rho_v = 0.015
     interface_width = 5
     tau = 0.9
 
@@ -67,12 +69,10 @@ def test_mrt_static_cs():
         interface_width=interface_width,
         save_interval=save_interval,
         skip_interval=skip_interval,
-        force_enabled=True,
-        force_obj=gravity,
-        collision="bgk",
+        collision=collision,
         init_type="multiphase_bubble",
         tau=tau,
-        #bc_config=bc_config,
+        ##bc_config=bc_config,
         eos="carnahan-starling",
         a_eos=a_eos,
         b_eos=b_eos,
@@ -88,10 +88,10 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = test_mrt_static_cs()
+    sim_multiphase_gravity = mrt_static_cs_test()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
-    visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
+    visualise(sim_multiphase_gravity, "Multiphase LBM Simulation of a static bubble")
 
     print("\nTest completed!")

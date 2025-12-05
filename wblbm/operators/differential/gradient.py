@@ -49,11 +49,11 @@ class Gradient:
             jnp.ndarray: Gradient field, shape (nx, ny, 1, 2)
         """
         if self.wetting_params is not None:  # Only use wetting if params are available
-            return self._gradient_wetting(grid, pad_mode)
+            return self.wetting(grid, pad_mode)
         else:
-            return self._gradient_standard(grid, pad_mode)
+            return self.standard(grid, pad_mode)
 
-    def _gradient_standard(self, grid, pad_mode):
+    def standard(self, grid, pad_mode):
         """Standard gradient calculation."""
         # Use provided pad_mode or fall back to self.pad_mode
         effective_pad_mode = pad_mode if pad_mode is not None else self.pad_mode
@@ -118,7 +118,7 @@ class Gradient:
 
         return grad_4d
 
-    def _gradient_wetting(self, grid, pad_mode):
+    def wetting(self, grid, pad_mode):
         rho_l = self.wetting_params['rho_l']
         rho_v = self.wetting_params['rho_v']
         width = self.wetting_params['width']

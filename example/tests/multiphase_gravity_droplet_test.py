@@ -4,11 +4,11 @@ from wblbm.utils.plotting import visualise
 import jax
 
 # this line is added for debugging
-jax.config.update("jax_disable_jit", True)
+#jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
-def test_multiphase_gravity_simulation():
+def multiphase_gravity_simulation_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
 
@@ -24,7 +24,7 @@ def test_multiphase_gravity_simulation():
     force_g = 0.000002
     inclination_angle = 0
     gravity = GravityForceMultiphase(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+        force_g, inclination_angle, grid_shape
     )
 
     sim = Run(
@@ -39,7 +39,7 @@ def test_multiphase_gravity_simulation():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=gravity,
+        force_obj=[gravity],
         init_type="multiphase_droplet",
     )
     sim.run(verbose=True)
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = test_multiphase_gravity_simulation()
+    sim_multiphase_gravity = multiphase_gravity_simulation_test()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
