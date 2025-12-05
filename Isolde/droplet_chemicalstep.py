@@ -21,7 +21,7 @@ phi_value = 1.2
 d_rho_value = 0.2
 
 #Inclination angle constant
-inclination_angle = 40.0 #degrees
+inclination_angle = 60.0 #degrees
 
 #Gravity
 force_g = 1e-5
@@ -85,7 +85,7 @@ sim.run(verbose=True)
 #Extract data for each timestep
 save_times = [] #timesteps
 theta_left_list = [] #receding CA
-theta_right_list = [] #advancing Ca
+theta_right_list = [] #advancing CA
 cm_x_list = [] #CM x
 cm_y_list = [] #CM y
 
@@ -135,12 +135,11 @@ for t in range (0,nt, save_interval):
 #Save timesteps in array
 save_times = np.array(save_times)
 
-#-------- Plotting CA's vs time ----------
 #Save calculated CA's in arrays
 theta_left_list = np.array(theta_left_list)
 theta_right_list = np.array(theta_right_list)
 
-#Compute velocity v(t) and acceleration a(t)
+#------- Compute velocity v(t) and acceleration a(t) -------
 dt = save_interval
 
 #Velocity as a derivative of CM position
@@ -153,7 +152,7 @@ ax = np.gradient(vx, dt)
 ay = np.gradient(vy, dt)
 a = np.sqrt(ax**2 + ay**2)
 
-#Plotting CA's vs timesteps
+#------- Plotting CA's vs timesteps ---------
 plt.plot(save_times, theta_left_list, label="θ_receding")
 plt.plot(save_times, theta_right_list, label="θ_advancing")
 plt.xlabel("Timestep")
@@ -169,7 +168,6 @@ plt.show()
 cm_x_list = np.array(cm_x_list) #x(t)
 cm_y_list = np.array(cm_y_list)
 
-#Plotting x(t) vs timesteps
 plt.plot(save_times, cm_x_list, label='x(t)')
 plt.xlabel("Timestep")
 plt.ylabel("Center of mass position x(t)")
@@ -179,7 +177,7 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-#--------- Plotting velocity v(t) (and acceleration a(t) vs time ---------
+#--------- Plotting velocity v(t) and acceleration a(t) vs time ---------
 plt.subplot(1, 2, 1)
 plt.plot(save_times, vx, label='v_x(t)')
 #plt.plot(save_times, vy, label='v_y(t)')
