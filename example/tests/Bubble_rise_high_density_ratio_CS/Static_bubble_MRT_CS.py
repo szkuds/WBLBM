@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseDroplet
+from wblbm.operators.force import GravityForceMultiphase
 from wblbm.utils.plotting import visualise
 import jax
 
@@ -13,28 +13,15 @@ def mrt_static_cs_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
-    grid_shape = (401, 401)
-    nt = 500000
-    save_interval = 50000
+    grid_shape = (201, 801)
+    nt = 100000
+    save_interval = 1000
     skip_interval = 0
+    init_file = '/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-12-09/00-02-25_mrt_static_cs_test/data/timestep_35000.npz'
     kappa = 0.008
     rho_l = 12.18
     rho_v = 0.015
-    interface_width = 5
-    tau = 0.9
-
-    force_g = 0.00000
-    inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
-    )
-
-    bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
-    }
+    interface_width = 8
 
     # Specify MRT collision operator and its rates
     collision = {
@@ -71,8 +58,7 @@ def mrt_static_cs_test():
         skip_interval=skip_interval,
         collision=collision,
         init_type="multiphase_bubble",
-        tau=tau,
-        ##bc_config=bc_config,
+        init_dir=init_file,
         eos="carnahan-starling",
         a_eos=a_eos,
         b_eos=b_eos,

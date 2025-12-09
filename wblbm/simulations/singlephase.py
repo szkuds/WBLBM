@@ -68,6 +68,7 @@ class SinglePhaseSimulation(BaseSimulation):
         # existing options preserved
         return self.initialiser.initialise_standard()
 
+    # TODO: Need to implement the changed electric field logic
     def run_timestep(self, f_prev, it, **kwargs):
         force_ext = None
         if self.force_enabled and self.force_obj:
