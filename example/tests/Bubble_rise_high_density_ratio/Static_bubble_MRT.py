@@ -12,8 +12,8 @@ def mrt_static_test():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (201, 801)
-    nt = 10000
-    save_interval = 10000
+    nt = 5000
+    save_interval = 500
     skip_interval = 0
     kappa = 0.01
     rho_l = 1
@@ -22,10 +22,10 @@ def mrt_static_test():
     tau = 0.9
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "bounce-back",
-        "right": "bounce-back",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "periodic",
+        "right": "periodic",
     }
 
     # Specify MRT collision operator and its rates
@@ -52,7 +52,7 @@ def mrt_static_test():
         init_type="multiphase_droplet",
         tau=tau,
         collision=collision,
-        #bc_config=bc_config,
+        bc_config=bc_config,
     )
     sim.run(verbose=True)
     return sim

@@ -16,7 +16,7 @@ def rising_bubble_mrt():
     grid_shape = (201, 801)
     nt = 50000
     save_interval = 1000
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-12-05/15-26-55_rising_bubble_mrt/data/timestep_49999.npz"
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio/results/2025-12-08/12-09-28_mrt_static_test/data/timestep_499999.npz"
 
     kappa = 0.02
     rho_l = 1

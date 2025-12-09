@@ -224,7 +224,7 @@ class Initialise:
         # Create a density field with a bubble in the center
         x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
         center_x, center_y = self.nx // 2, self.ny // 6
-        radius = min(self.nx, self.ny) // 8
+        radius = min(self.nx, self.ny) // 4
 
         # Use tanh for a smooth, stable interface
         distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
