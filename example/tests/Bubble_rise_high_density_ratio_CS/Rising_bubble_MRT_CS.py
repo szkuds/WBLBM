@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphaseBubble
+from wblbm.operators.force import GravityForceMultiphase
 from wblbm.utils.plotting import visualise
 import jax
 
@@ -14,26 +14,27 @@ def mrt_rising_cs_test():
 
     grid_shape = (201, 801)
     nt = 100000
-    save_interval = 5000
+    save_interval = 1000
     skip_interval = 0
     kappa = 0.008
     rho_l = 12.18
     rho_v = 0.015
     interface_width = 8
-    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-12-09/00-38-49_mrt_static_cs_test/data/timestep_99999.npz"
+    init_file = "/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-12-11/12-06-48_mrt_static_cs_test/data/timestep_199999.npz"
 
-    force_g = 1e-8
+    force_g = 1e-6
     inclination_angle = 0
-    gravity = GravityForceMultiphaseBubble(
+    gravity = GravityForceMultiphase(
         force_g, inclination_angle, grid_shape
     )
 
     bc_config = {
-        "top": "periodic",
-        "bottom": "periodic",
-        "left": "periodic",
-        "right": "periodic",
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "bounce-back",
+        "right": "bounce-back",
     }
+
 
     # Specify MRT collision operator and its rates
     collision = {

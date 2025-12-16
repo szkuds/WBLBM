@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-from wblbm import Gradient
+from wblbm import Gradient, Streaming
 from wblbm.operators.force.force import Force
 from wblbm.lattice import Lattice
 
@@ -47,6 +47,7 @@ class ElectricForce(Force):
         self.lattice = Lattice(lattice_type)
         self.gradient = Gradient(self.lattice, bc_config=bc_config)
         self.bc_config = bc_config
+        self.stream = Streaming(self.lattice)
 
     def compute_force(self, **kwargs) -> jnp.ndarray:
         """
@@ -104,7 +105,8 @@ class ElectricForce(Force):
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
         h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
         tau_e = 3 * conductivity + .5
-        h_i_next = (1 - (1 / tau_e)) * h_i_prev - (1 / tau_e) * h_i_eq
+        h_i_col = (1 - (1 / tau_e)) * h_i_prev - (1 / tau_e) * h_i_eq
+        h_i_next = self.stream(h_i_col)
         return h_i_next
 
     def equilibrium_h(self, h_i: jnp.ndarray, w_i: ndarray) -> jnp.ndarray:

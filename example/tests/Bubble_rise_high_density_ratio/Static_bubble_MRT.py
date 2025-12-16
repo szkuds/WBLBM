@@ -12,8 +12,8 @@ def mrt_static_test():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (201, 801)
-    nt = 5000
-    save_interval = 500
+    nt = 100000
+    save_interval = 10000
     skip_interval = 0
     kappa = 0.01
     rho_l = 1
