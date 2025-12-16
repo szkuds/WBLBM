@@ -26,6 +26,7 @@ class GravityForceMultiphaseBubble(Force):
     def compute_force(self, **kwargs) -> jnp.ndarray:
         rho = kwargs.get('rho')
         rho_max = jnp.max(rho)
+        rho_min = jnp.min(rho)
         if rho is None:
             raise ValueError("GravityForceMultiphaseBubble requires 'rho' in kwargs")
-        return -self.force * (rho - rho_max)
+        return -self.force * (rho - rho_max) * rho_min

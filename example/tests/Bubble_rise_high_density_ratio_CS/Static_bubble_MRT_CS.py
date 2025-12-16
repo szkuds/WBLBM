@@ -14,23 +14,26 @@ def mrt_static_cs_test():
     print("\n=== Multiphase LBM Simulation of a static bubble ===")
 
     grid_shape = (201, 801)
-    nt = 100000
+    nt = 200000
     save_interval = 1000
     skip_interval = 0
     init_file = '/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/Bubble_rise_high_density_ratio_CS/results/2025-12-09/00-02-25_mrt_static_cs_test/data/timestep_35000.npz'
-    kappa = 0.008
-    rho_l = 12.18
-    rho_v = 0.015
-    interface_width = 8
 
     # Specify MRT collision operator and its rates
     collision = {
         "collision_scheme": "mrt",
-        "kv": 1.05,
-        "kb": 1.0,
+        "kv": 1.1,
+        "kb": 0.5,
         "k0": 0.0,
-        "k2": 1.0,
-        "k4": 0.9,
+        "k2": .6,
+        "k4": 1.2,
+    }
+
+    bc_config = {
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "bounce-back",
+        "right": "bounce-back",
     }
 
     # Maxwell construction for Carnahan-Starling EOS
@@ -64,6 +67,7 @@ def mrt_static_cs_test():
         b_eos=b_eos,
         r_eos=R_eos,
         t_eos=T_eos,
+        bc_config=bc_config
     )
     sim.run(verbose=True)
     return sim

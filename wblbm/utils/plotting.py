@@ -88,10 +88,10 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                     cmap="viridis",
                     norm=plt.matplotlib.colors.LogNorm(),
                 )
-                axes[0].set_title(f"Density (Log Scale) - t={timestep}")
+                axes[0].set_title("Density (Log Scale)")
             else:
                 im1 = axes[0].imshow(final_rho[:, :, 0, 0].T, origin="lower", cmap="viridis")
-                axes[0].set_title(f"Density - t={timestep}")
+                axes[0].set_title("Density")
 
             plt.colorbar(im1, ax=axes[0], label="Density")
 
@@ -100,7 +100,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             # 1. Plot velocity magnitude heatmap
             vel_mag = np.sqrt(final_u[:, :, 0, 0] ** 2 + final_u[:, :, 0, 1] ** 2)
             im2 = axes[1].imshow(vel_mag.T, origin="lower", cmap="plasma")
-            axes[1].set_title("Velocity Magnitude & Vectors")
+            axes[1].set_title("Velocity")
             plt.colorbar(im2, ax=axes[1], label="Velocity Magnitude")
 
             # 2. Overlay velocity vector plot (quiver)
@@ -115,7 +115,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
 
             # Downsample the vectors to avoid a cluttered plot
             # Plot one vector every `skip` grid points
-            skip = 10
+            skip = min(nx, ny)//10
 
             # Plotting quiver requires transposing h_i_prev and V to match the meshgrid and imshow orientation
             axes[1].quiver(
@@ -137,7 +137,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                     final_force[:, :, 0, 0] ** 2 + final_force[:, :, 0, 1] ** 2
                 )
                 im3 = axes[2].imshow(force_mag.T, origin="lower", cmap="cividis")
-                axes[2].set_title("Force Magnitude & Vectors")
+                axes[2].set_title("Total Force")
                 plt.colorbar(im3, ax=axes[2], label="Force Magnitude")
                 U_force = final_force[:, :, 0, 0]
                 V_force = final_force[:, :, 0, 1]
@@ -158,7 +158,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
                     final_force_ext[:, :, 0, 0] ** 2 + final_force_ext[:, :, 0, 1] ** 2
                 )
                 im3 = axes[3].imshow(force_mag.T, origin="lower", cmap="cividis")
-                axes[3].set_title("Force Magnitude & Vectors")
+                axes[3].set_title("External Force")
                 plt.colorbar(im3, ax=axes[3], label="Force Magnitude")
                 U_force = final_force_ext[:, :, 0, 0]
                 V_force = final_force_ext[:, :, 0, 1]
