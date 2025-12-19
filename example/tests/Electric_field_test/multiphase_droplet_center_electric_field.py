@@ -2,6 +2,8 @@ from wblbm.run import Run
 from wblbm.operators.force import GravityForceMultiphase, ElectricForce
 from wblbm.utils.plotting import visualise
 import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
 
 # this line is added for debugging
 #jax.config.update("jax_disable_jit", True)
@@ -12,10 +14,10 @@ def multiphase_gravity_simulation_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
-    grid_shape = (200, 200)
+    grid_shape = (200, 300)
     lattice_type = "D2Q9"
-    nt = 10
-    save_interval = 1
+    nt = 1000
+    save_interval = 100
 
     # multiphase config
     kappa = 0.04
@@ -64,6 +66,11 @@ def multiphase_gravity_simulation_test():
         force_enabled=True,
         force_obj=[electric],
         init_type="multiphase_droplet",
+        permittivity_liquid=permittivity_liquid,
+        permittivity_vapour=permittivity_vapour,
+        conductivity_liquid=conductivity_liquid,
+        conductivity_vapour=conductivity_vapour
+
     )
     sim.run(verbose=True)
     return sim
@@ -81,3 +88,39 @@ if __name__ == "__main__":
     visualise(sim_multiphase_gravity, "Multiphase with Gravity Force")
 
     print("\nTest completed!")
+#
+# #Check to see if U correct
+#extract h_i from data
+data_dir = sim_multiphase_gravity.io_handler.data_dir
+print(data_dir)
+
+t = 999  # last saved timestep (nt=100, save_interval=10)
+file = f"{data_dir}/timestep_{t}.npz"
+
+data = jnp.load(file)
+print(data.files)
+
+h_i = data["h"]  # (nx, ny, q, 1)
+U = jnp.sum(h_i, axis=2)[:, :, 0]  # (nx, ny)
+print("U=", U)
+
+#ny = U.shape[1]
+#y_mid= ny//2
+#U_line = U[:,y_mid]
+
+plt.plot(U)
+plt.xlabel("x (lattice units)")
+plt.ylabel("Electric potential U")
+plt.title("Electric potential U along x")
+plt.grid()
+plt.show()
+#
+# #Check to see if E is correct
+# #E = -jnp.gradient(U_line)
+#
+# #plt.plot(E)
+# #plt.xlabel("x (lattice units)")
+# #plt.ylabel("Electric potential E")
+# #plt.title("Electric potential E along x")
+# #plt.grid()
+# #plt.show()
