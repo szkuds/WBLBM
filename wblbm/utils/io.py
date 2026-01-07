@@ -41,7 +41,8 @@ class SimulationIO:
             config (Dict, optional): A dictionary containing the simulation configuration to save.
             simulation_name (str, optional): Name of the simulation to include in the results directory.
         """
-        self.base_dir = base_dir
+        root = os.path.expanduser("~/TUD_LBM")
+        self.base_dir = os.path.join(root, base_dir)
         self.simulation_name = simulation_name
         self.run_dir = self._create_timestamped_directory()
         self.data_dir = os.path.join(self.run_dir, "data")

@@ -2,7 +2,7 @@ import numpy as np
 
 from wblbm.operators.force import CompositeForce
 from wblbm.run import Run
-from wblbm import GravityForceMultiphaseDroplet, visualise
+from wblbm import GravityForceMultiphase, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
@@ -14,22 +14,22 @@ def wetting_hysteresis_chem_step_simulation_test():
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
-    grid_shape = (100, 50)
+    grid_shape = (200, 100)
     tau = 0.99
-    nt = 10
-    save_interval = 1
-    kappa = 0.04
+    nt = 100000
+    save_interval = 100
+    kappa = 0.01
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 5
+    interface_width = 4
 
     phi_value = 1.2
     d_rho_value = 0.2
 
-    force_g = (1/4)*1e-5
-    inclination_angle = 90
-    gravity = GravityForceMultiphaseDroplet(
-        grid_shape[0], grid_shape[1], 2, force_g, inclination_angle
+    force_g = 1e-6
+    inclination_angle = 45
+    gravity = GravityForceMultiphase(
+        force_g, inclination_angle, grid_shape
     )
 
     # Add hysteresis parameters to bc_config

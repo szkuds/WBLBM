@@ -118,7 +118,6 @@ class MultiphaseSimulation(BaseSimulation):
 
     @partial(jit, static_argnums=(0,))
     def run_timestep(self, f_prev, it, **kwargs):
-        force_ext = None
         if self.force_enabled and self.force_obj and self.force_obj.electric_present:
             rho = jnp.sum(f_prev, axis=2, keepdims=True)
             h_prev = kwargs.get('h_i')
