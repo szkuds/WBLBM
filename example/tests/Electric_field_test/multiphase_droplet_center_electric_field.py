@@ -16,23 +16,30 @@ def multiphase_gravity_simulation_test():
     # simulation config
     grid_shape = (200, 300)
     lattice_type = "D2Q9"
-    nt = 1000
-    save_interval = 100
+    nt = 200000
+    save_interval = 10000
 
     # multiphase config
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 8
+    interface_width = 5
 
     # BGK config
     tau = 0.9
 
     # Electric field config
-    permittivity_liquid = 1.0
-    permittivity_vapour = 1.0
-    conductivity_liquid = 1.0
-    conductivity_vapour = 1.0
+    permittivity_liquid = 0.02
+    permittivity_vapour = 0.01
+    conductivity_liquid = 0.1
+    conductivity_vapour = 0.05
+
+    bc_config = {
+        "top": "bounce-back",
+        "bottom": "bounce-back",
+        "left": "bounce-back",
+        "right": "bounce-back",
+    }
 
     # Gravitational force config
     force_g = 0.000002
@@ -69,7 +76,9 @@ def multiphase_gravity_simulation_test():
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
-        conductivity_vapour=conductivity_vapour
+        conductivity_vapour=conductivity_vapour,
+        bc_config=bc_config
+
 
     )
     sim.run(verbose=True)
@@ -94,7 +103,7 @@ if __name__ == "__main__":
 data_dir = sim_multiphase_gravity.io_handler.data_dir
 print(data_dir)
 
-t = 999  # last saved timestep (nt=100, save_interval=10)
+t = 199999  # last saved timestep (nt=100, save_interval=10)
 file = f"{data_dir}/timestep_{t}.npz"
 
 data = jnp.load(file)
@@ -115,12 +124,19 @@ plt.title("Electric potential U along x")
 plt.grid()
 plt.show()
 #
-# #Check to see if E is correct
-# #E = -jnp.gradient(U_line)
-#
-# #plt.plot(E)
-# #plt.xlabel("x (lattice units)")
-# #plt.ylabel("Electric potential E")
-# #plt.title("Electric potential E along x")
-# #plt.grid()
-# #plt.show()
+# plt.plot(U_line)
+# plt.xlabel("x (lattice units)")
+# plt.ylabel("Electric potential U")
+# plt.title("Electric potential U along x")
+# plt.grid()
+# plt.show()
+# #
+# # #Check to see if E is correct
+# # #E = -jnp.gradient(U_line)
+# #
+# # #plt.plot(E)
+# # #plt.xlabel("x (lattice units)")
+# # #plt.ylabel("Electric potential E")
+# # #plt.title("Electric potential E along x")
+# # #plt.grid()
+# # #plt.show()

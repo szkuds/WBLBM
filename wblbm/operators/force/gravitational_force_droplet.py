@@ -27,7 +27,7 @@ class GravityForceMultiphaseDroplet(Force):
         rho_l = kwargs.get('rho_l')
         rho_v = kwargs.get('rho_v')
 
-        required = ['rho', 'rhol', 'rhov']
+        required = ['rho', 'rho_l', 'rho_v']
         missing = [p for p in required if kwargs.get(p) is None]
         if missing:
             raise ValueError(f"GravityForceMultiphaseDroplet requires: {missing}")

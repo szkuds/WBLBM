@@ -52,45 +52,69 @@ class ElectricForce(Force):
 
     def compute_force(self, **kwargs) -> jnp.ndarray:
         """
-        Compute electrical force from electric field gradient.
-        U = sum_i h_i_prev,
-        E = -∇U,
-        F = q * E - .5 * E^2 * ∇ ϵ
-        q = ∇*(ϵE)
+        Compute electrical force for leaky dielectric model.
 
-        Args:
-            rho: Density field of shape (nx, ny, 1, 1)
-            h_i: Distribution for potential (nx, ny, q, 1)
-
-        Returns:
-            Force array of shape (nx, ny, 1, 2)
+        Complete formula: F = rho_e * E - 0.5 * E_sq * grad_epsilon
+        where rho_e = div(epsilon * E)
         """
         rho = kwargs.get('rho')
         h_i = kwargs.get('h_i')
+
         if rho is None or h_i is None:
-            raise ValueError("ElectricForce requires 'rho' and 'h_i' in kwargs")
-        conductivity_field = self.conductivity(rho,
-                                               conductivity_liquid=self.conductivity_liquid,
-                                               conductivity_vapour=self.conductivity_vapour)
-        permittivity = self.permittivity(rho,
-                                         permittivity_liquid=self.permittivity_liquid,
-                                         permittivity_vapour=self.permittivity_vapour)
+            raise ValueError("ElectricForce requires 'rho' and 'hi' in kwargs")
+
+        # Get permittivity field
+        epsilon = self.permittivity(
+            rho,
+            permittivity_liquid=self.permittivity_liquid,
+            permittivity_vapour=self.permittivity_vapour
+        )
+
+        # Compute electric potential: U = sum_i(hi)
         potential = self.electric_potential(h_i)
-        electric_field_ = jnp.stack(jnp.gradient(-potential[:,:,0,0]), axis=-1)
-        electric_field = electric_field_[:,:,jnp.newaxis, :]
-        # TODO: This is ugly here would be better to make function within the gradient class to do this operation.
-        # TODO: Apart from the divergence it is also good to make the standard gradient more accessible, really the density with wetting is the exception and not the rule/
-        eE_x = jnp.zeros(rho.shape)
-        eE_y = jnp.zeros(rho.shape)
-        q = jnp.zeros(rho.shape)
-        eE_x = eE_x.at[:, :, :, 0].set((permittivity * electric_field)[:, :, :, 0])
-        eE_y = eE_y.at[:, :, :, 1].set((permittivity * electric_field)[:, :, :, 1])
-        eE_x_grad_x = self.gradient.standard(eE_x, determine_padding_modes(self.bc_config))[:, :, :, 0]
-        eE_y_grad_y = self.gradient.standard(eE_y, determine_padding_modes(self.bc_config))[:, :, :, 1]
-        q = q.at[:, :, :, 0].set(eE_x_grad_x + eE_y_grad_y)
-        EE = jnp.expand_dims(jnp.einsum('...i,...i->...', electric_field, electric_field), axis=-1)
-        electric_force = q * electric_field - 0.5 * EE * self.gradient.standard(
-            permittivity, determine_padding_modes(self.bc_config))
+
+        # Compute electric field: E = -grad(U)
+        e_x = -jnp.gradient(potential[:, :, 0, 0], axis=0)
+        e_y = -jnp.gradient(potential[:, :, 0, 0], axis=1)
+
+        # Reshape to (nx, ny, 1, 1)
+        e_x = e_x[:, :, jnp.newaxis, jnp.newaxis]
+        e_y = e_y[:, :, jnp.newaxis, jnp.newaxis]
+
+        # Compute E_sq = e_x^2 + e_y^2
+        e_sq = e_x ** 2 + e_y ** 2
+
+        # Compute epsilon * E components
+        epsilon_e_x = epsilon * e_x
+        epsilon_e_y = epsilon * e_y
+
+        # Compute divergence of (epsilon * E) = charge density rho_e
+        # rho_e = d(epsilon*e_x)/dx + d(epsilon*e_y)/dy
+        d_epsilon_e_x_dx = jnp.gradient(epsilon_e_x[:, :, 0, 0], axis=0)
+        d_epsilon_e_y_dy = jnp.gradient(epsilon_e_y[:, :, 0, 0], axis=1)
+
+        rho_e = (d_epsilon_e_x_dx + d_epsilon_e_y_dy)[:, :, jnp.newaxis, jnp.newaxis]
+
+        # Compute gradient of permittivity: grad_epsilon
+        grad_epsilon_x = jnp.gradient(epsilon[:, :, 0, 0], axis=0)[:, :, jnp.newaxis, jnp.newaxis]
+        grad_epsilon_y = jnp.gradient(epsilon[:, :, 0, 0], axis=1)[:, :, jnp.newaxis, jnp.newaxis]
+
+        # Compute complete force: F = rho_e * E - 0.5 * E_sq * grad_epsilon
+        # Term 1: Coulombic force (charge density × electric field)
+        f_x_coulomb = rho_e * e_x
+        f_y_coulomb = rho_e * e_y
+
+        # Term 2: Dielectric force (E_sq × gradient of permittivity)
+        f_x_dielectric = -0.5 * e_sq * grad_epsilon_x
+        f_y_dielectric = -0.5 * e_sq * grad_epsilon_y
+
+        # Total force
+        f_x = f_x_coulomb + f_x_dielectric
+        f_y = f_y_coulomb + f_y_dielectric
+
+        # Combine into single force array (nx, ny, 1, 2)
+        electric_force = jnp.concatenate([f_x, f_y], axis=-1)
+
         return electric_force
 
     def electric_potential(self, h_i: jnp.ndarray) -> jnp.ndarray:
@@ -122,20 +146,21 @@ class ElectricForce(Force):
 
     def boundary_condition(self, f_col, U_0) -> jnp.ndarray:
 
-        grid_pad_ = jnp.pad(f_col, ((0, 0), (1, 1),  (0, 0),  (0, 0)), mode='edge')
+        grid_pad_ = jnp.pad(f_col, ((0, 0), (1, 1), (0, 0), (0, 0)), mode='edge')
         grid_pad = jnp.pad(grid_pad_, ((1, 1), (0, 0), (0, 0), (0, 0)), mode='empty')
-        grid_pad = grid_pad.at[0,:,:,:].set(self.equilibrium_h(U_0, self.lattice.w)[0,:,:,:])
+        grid_pad = grid_pad.at[0, :, :, :].set(self.equilibrium_h(U_0, self.lattice.w)[0, :, :, :])
         return grid_pad
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
-        h_i_eq = self.equilibrium_h(h_i_prev, self.lattice.w)
+        potential = self.electric_potential(h_i_prev)
+        h_i_eq = self.equilibrium_h(potential, self.lattice.w)
         tau_e = 3 * conductivity + .5
-        h_i_col = (1 - (1 / tau_e)) * h_i_prev - (1 / tau_e) * h_i_eq
-        h_i_bc = self.boundary_condition(h_i_col, U_0=1e-2)
-        h_i_next = self.stream(h_i_bc)[1:-1, 1:-1, :,  :]
-        return h_i_next
+        h_i_col = (1 - (1 / tau_e)) * h_i_prev + (1 / tau_e) * h_i_eq
+        h_i_bc = self.boundary_condition(h_i_col, U_0=1e-1)
+        h_i_next = self.stream(h_i_bc)
+        return h_i_next[1:-1, 1:-1, :, :]
 
-    def equilibrium_h(self, h_i: jnp.ndarray, w_i: ndarray) -> jnp.ndarray:
+    def equilibrium_h(self, potential: jnp.ndarray, w_i: ndarray) -> jnp.ndarray:
         """
         Equilibrium distribution for electric potential.
         h_i_prev^eq = w_i * U
@@ -147,7 +172,7 @@ class ElectricForce(Force):
         Returns:
             Equilibrium distribution, shape (nx, ny, 9)
         """
-        return w_i[jnp.newaxis, jnp.newaxis, :, jnp.newaxis] * h_i
+        return w_i[jnp.newaxis, jnp.newaxis, :, jnp.newaxis] * potential
 
     def conductivity(self, rho: jnp.ndarray, conductivity_liquid: float, conductivity_vapour: float) -> jnp.ndarray:
         return self.rho_to_phi(rho, conductivity_liquid, conductivity_vapour)
