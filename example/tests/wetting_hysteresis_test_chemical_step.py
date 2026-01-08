@@ -2,7 +2,7 @@ import numpy as np
 
 from wblbm.operators.force import CompositeForce
 from wblbm.run import Run
-from wblbm import GravityForceMultiphase, visualise
+from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
@@ -16,19 +16,19 @@ def wetting_hysteresis_chem_step_simulation_test():
     # Simulation parameters
     grid_shape = (200, 100)
     tau = 0.99
-    nt = 100000
-    save_interval = 100
-    kappa = 0.01
+    nt = 25000
+    save_interval = 500
+    kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
-    interface_width = 4
+    interface_width = 5
 
     phi_value = 1.2
     d_rho_value = 0.2
 
     force_g = 1e-6
     inclination_angle = 45
-    gravity = GravityForceMultiphase(
+    gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
     )
 
@@ -80,10 +80,10 @@ def wetting_hysteresis_chem_step_simulation_test():
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
-        init_type="wetting_chem_step",
         force_g=force_g,
         inclination_angle=inclination_angle,
-        #init_dir=""
+        init_type="wetting_chem_step",
+        init_dir="/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-11-03_chemical_step_example/12-15-56_wetting_simulation_test/data/timestep_199999.npz",
     )
 
     sim.run(verbose=True)

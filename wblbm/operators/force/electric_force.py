@@ -144,11 +144,17 @@ class ElectricForce(Force):
     #      f_bc = f_bc.at[:, -1, 6, 0].set(f_pad_1[:self.nx, 0, 8, 0])
     #      return f_bc
 
-    def boundary_condition(self, f_col, U_0) -> jnp.ndarray:
+    def boundary_condition_parallel_plate(self, f_col, U_0) -> jnp.ndarray:
 
         grid_pad_ = jnp.pad(f_col, ((0, 0), (1, 1), (0, 0), (0, 0)), mode='edge')
         grid_pad = jnp.pad(grid_pad_, ((1, 1), (0, 0), (0, 0), (0, 0)), mode='empty')
         grid_pad = grid_pad.at[0, :, :, :].set(self.equilibrium_h(U_0, self.lattice.w)[0, :, :, :])
+        return grid_pad
+
+    def boundary_condition_coplanar_electrode(self, f_col: jnp.ndarray, U_0) -> jnp.ndarray:
+        grid_pad_ = jnp.pad(f_col, ((1, 1), (0, 1), (0, 0), (0, 0)), mode='edge')
+        grid_pad = jnp.pad(grid_pad_, ((0, 0), (1, 0), (0, 0), (0, 0)), mode='empty')
+        grid_pad = grid_pad.at[:self.nx//2, 0, :, :].set(self.equilibrium_h(U_0, self.lattice.w)[:self.nx//2, 0, :, :])
         return grid_pad
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
@@ -156,7 +162,7 @@ class ElectricForce(Force):
         h_i_eq = self.equilibrium_h(potential, self.lattice.w)
         tau_e = 3 * conductivity + .5
         h_i_col = (1 - (1 / tau_e)) * h_i_prev + (1 / tau_e) * h_i_eq
-        h_i_bc = self.boundary_condition(h_i_col, U_0=1e-1)
+        h_i_bc = self.boundary_condition_coplanar_electrode(h_i_col, U_0=1e-1)
         h_i_next = self.stream(h_i_bc)
         return h_i_next[1:-1, 1:-1, :, :]
 

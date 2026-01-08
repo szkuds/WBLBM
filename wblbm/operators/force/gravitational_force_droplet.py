@@ -8,15 +8,15 @@ class GravityForceMultiphaseDroplet(Force):
     """
 
     def __init__(
-        self, nx: int, ny: int, d: int, force_g: float, inclination_angle_deg: float
+        self, force_g: float, inclination_angle_deg: float, grid_shape: tuple
     ):
-        if d != 2:
+        if grid_shape.__len__() != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
         force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
         force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
 
-        force_array = jnp.zeros((nx, ny, 1, d))
+        force_array = jnp.zeros((grid_shape[0], grid_shape[1], 1, grid_shape.__len__()))
         force_array = force_array.at[:, :, 0, 0].set(force_x)
         force_array = force_array.at[:, :, 0, 1].set(force_y)
 
