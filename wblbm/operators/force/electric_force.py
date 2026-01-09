@@ -21,7 +21,7 @@ class ElectricForce(Force):
                  conductivity_liquid: float, conductivity_vapour: float,
                  grid_shape: tuple, lattice_type: str, U_0: float, bc_config: dict = None):
         """
-        Initialize electrical force.
+        Initialise electrical force.
 
         Args:
             Grid contains:

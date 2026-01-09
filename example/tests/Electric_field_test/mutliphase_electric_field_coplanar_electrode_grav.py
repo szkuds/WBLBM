@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 # this line is added for debugging
-#jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
 jax.config.update("jax_enable_x64", True)
 
 
@@ -16,8 +16,8 @@ def multiphase_gravity_electric_field_simulation():
     # simulation config
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
-    nt = 30000
-    save_interval = 1000
+    nt = 300000
+    save_interval = 2000
 
     # multiphase config
     kappa = 0.04
@@ -33,7 +33,7 @@ def multiphase_gravity_electric_field_simulation():
     permittivity_vapour = .01
     conductivity_liquid = 1
     conductivity_vapour = .001
-    U_0 = 1e-1
+    U_0 = 6e-2
 
     bc_config = {
         "top": "bounce-back",
@@ -43,7 +43,7 @@ def multiphase_gravity_electric_field_simulation():
     }
 
     # Gravitational force config
-    force_g = 1e-6
+    force_g = 1e-7
     inclination_angle = 45
 
     # setting up the forces
@@ -75,7 +75,7 @@ def multiphase_gravity_electric_field_simulation():
         force_enabled=True,
         force_obj=[gravity, electric],
         init_type="init_from_file",
-        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/13-17-31_multiphase_gravity_simulation_test/data/timestep_19999.npz',
+        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_working_example_low_grav/14-35-19_multiphase_gravity_simulation_test/data/timestep_19999.npz',
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
@@ -107,7 +107,7 @@ if __name__ == "__main__":
 data_dir = sim_multiphase_gravity.io_handler.data_dir
 print(data_dir)
 
-t = 19999  # last saved timestep (nt=100, save_interval=10)
+t = 29999  # last saved timestep (nt=100, save_interval=10)
 file = f"{data_dir}/timestep_{t}.npz"
 
 data = jnp.load(file)

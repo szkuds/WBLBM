@@ -33,7 +33,7 @@ def multiphase_gravity_simulation_test():
     permittivity_vapour = .01
     conductivity_liquid = 1
     conductivity_vapour = .001
-    U_0 = 1e-1
+    U_0 = 6e-2
 
     bc_config = {
         "top": "bounce-back",
@@ -43,7 +43,7 @@ def multiphase_gravity_simulation_test():
     }
 
     # Gravitational force config
-    force_g = 1e-6
+    force_g = 1e-7
     inclination_angle = 0
 
     # setting up the forces
@@ -75,7 +75,7 @@ def multiphase_gravity_simulation_test():
         force_enabled=True,
         force_obj=[gravity, electric],
         init_type="init_from_file",
-        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/11-42-14_multiphase_gravity_simulation_test/data/timestep_199999.npz',
+        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_working_example_low_grav/14-24-58_multiphase_gravity_simulation_test/data/timestep_199999.npz',
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,

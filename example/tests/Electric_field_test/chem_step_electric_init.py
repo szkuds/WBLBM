@@ -18,8 +18,8 @@ def init_for_coplanar_chem_step_0_inc():
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
     tau = 0.99
-    nt = 20000
-    save_interval = 1000
+    nt = 375
+    save_interval = 20
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -28,18 +28,18 @@ def init_for_coplanar_chem_step_0_inc():
     phi_value = 1.2
     d_rho_value = 0.2
 
-    force_g = 1e-6
+    force_g = 1e-7
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
     )
 
     # Electric field config
-    permittivity_liquid = 0.01
+    permittivity_liquid = 1
     permittivity_vapour = 0.01
-    conductivity_liquid = 0.1
-    conductivity_vapour = 0.1
-    U_0 = 1e-1
+    conductivity_liquid = 1
+    conductivity_vapour = 0.001
+    U_0 = 5e-2
     electric = ElectricForce(
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
@@ -101,7 +101,7 @@ def init_for_coplanar_chem_step_0_inc():
         force_g=force_g,
         inclination_angle=inclination_angle,
         init_type="wetting_chem_step",
-        init_dir="/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-11-03_chemical_step_example/12-15-56_wetting_simulation_test/data/timestep_199999.npz",
+        init_dir="//Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_with_hysteresis_high_grav/12-34-04_init_for_chem_step_0_inc/data/timestep_19999.npz",
     )
 
     sim.run(verbose=True)
