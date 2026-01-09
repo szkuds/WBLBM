@@ -16,8 +16,8 @@ def multiphase_gravity_simulation_test():
     # simulation config
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
-    nt = 20000
-    save_interval = 1000
+    nt = 200000
+    save_interval = 10000
 
     # multiphase config
     kappa = 0.04
@@ -33,7 +33,7 @@ def multiphase_gravity_simulation_test():
     permittivity_vapour = .01
     conductivity_liquid = 1
     conductivity_vapour = .001
-    U_0 = 6e-2
+    U_0 = 8e-2
 
     bc_config = {
         "top": "bounce-back",
@@ -73,9 +73,9 @@ def multiphase_gravity_simulation_test():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=[gravity, electric],
-        init_type="init_from_file",
-        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_working_example_low_grav/14-24-58_multiphase_gravity_simulation_test/data/timestep_199999.npz',
+        force_obj=[gravity],
+        init_type="wetting_chem_step",
+        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_working_example_high_grav/11-42-14_multiphase_gravity_simulation_test/data/timestep_199999.npz',
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,

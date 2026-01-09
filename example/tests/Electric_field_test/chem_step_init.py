@@ -26,7 +26,7 @@ def init_for_chem_step_0_inc():
     phi_value = 1.2
     d_rho_value = 0.2
 
-    force_g = 1e-6
+    force_g = 1e-7
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
