@@ -16,8 +16,8 @@ def multiphase_gravity_simulation_test():
     # simulation config
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
-    nt = 5200
-    save_interval = 200
+    nt = 20000
+    save_interval = 1000
 
     # multiphase config
     kappa = 0.04
@@ -80,6 +80,7 @@ def multiphase_gravity_simulation_test():
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
         conductivity_vapour=conductivity_vapour,
+        U_0=U_0,
         bc_config=bc_config
 
 
@@ -106,7 +107,7 @@ if __name__ == "__main__":
 data_dir = sim_multiphase_gravity.io_handler.data_dir
 print(data_dir)
 
-t = 5199  # last saved timestep (nt=100, save_interval=10)
+t = 19999  # last saved timestep (nt=100, save_interval=10)
 file = f"{data_dir}/timestep_{t}.npz"
 
 data = jnp.load(file)
