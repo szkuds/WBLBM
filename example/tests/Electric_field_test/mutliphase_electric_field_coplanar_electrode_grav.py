@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 jax.config.update("jax_enable_x64", True)
 
 
-def multiphase_gravity_simulation_test():
+def multiphase_gravity_electric_field_simulation():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
-    nt = 20000
+    nt = 30000
     save_interval = 1000
 
     # multiphase config
@@ -44,7 +44,7 @@ def multiphase_gravity_simulation_test():
 
     # Gravitational force config
     force_g = 1e-6
-    inclination_angle = 0
+    inclination_angle = 45
 
     # setting up the forces
     gravity = GravityForceMultiphaseDroplet(
@@ -75,7 +75,7 @@ def multiphase_gravity_simulation_test():
         force_enabled=True,
         force_obj=[gravity, electric],
         init_type="init_from_file",
-        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/11-42-14_multiphase_gravity_simulation_test/data/timestep_199999.npz',
+        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/13-17-31_multiphase_gravity_simulation_test/data/timestep_19999.npz',
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     # Run simulation
-    sim_multiphase_gravity = multiphase_gravity_simulation_test()
+    sim_multiphase_gravity = multiphase_gravity_electric_field_simulation()
 
     # Visualize results
     print("\n=== Visualizing Results ===")
