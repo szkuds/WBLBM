@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 
-
 # TODO: Need to make a plotting config which will determine which plots are actually saved
 
 
@@ -55,6 +54,9 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             final_force = data.get("force", None)
             if sim_instance.config.get('force_enabled', False):
                 final_force_ext = data.get("force_ext")
+            elif sim_instance.config.get('force_enabled', False) and sim_instance.simulation.force_obj.electric_present:
+                final_force_ext = data.get("force_ext")
+                h_i = data["h_i"]
             else:
                 final_force_ext = None
 

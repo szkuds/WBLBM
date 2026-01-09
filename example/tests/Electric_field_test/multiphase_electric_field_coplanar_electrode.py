@@ -1,5 +1,5 @@
 from wblbm.run import Run
-from wblbm.operators.force import GravityForceMultiphase, ElectricForce
+from wblbm.operators.force import GravityForceMultiphaseDroplet, ElectricForce
 from wblbm.utils.plotting import visualise
 import jax
 import jax.numpy as jnp
@@ -14,10 +14,10 @@ def multiphase_gravity_simulation_test():
     """Test a multiphase LBM simulation with gravity and a central droplet."""
     print("\n=== Multiphase LBM Simulation with Gravity Test ===")
     # simulation config
-    grid_shape = (300, 150)
+    grid_shape = (201, 101)
     lattice_type = "D2Q9"
-    nt = 2000
-    save_interval = 100
+    nt = 5200
+    save_interval = 200
 
     # multiphase config
     kappa = 0.04
@@ -26,13 +26,14 @@ def multiphase_gravity_simulation_test():
     interface_width = 5
 
     # BGK config
-    tau = 0.9
+    tau = 0.99
 
     # Electric field config
-    permittivity_liquid = 0.01
-    permittivity_vapour = 0.01
-    conductivity_liquid = 0.1
-    conductivity_vapour = 0.1
+    permittivity_liquid = 1
+    permittivity_vapour = .01
+    conductivity_liquid = 1
+    conductivity_vapour = .001
+    U_0 = 1e-1
 
     bc_config = {
         "top": "bounce-back",
@@ -42,11 +43,11 @@ def multiphase_gravity_simulation_test():
     }
 
     # Gravitational force config
-    force_g = 0.000002
+    force_g = 1e-6
     inclination_angle = 0
 
     # setting up the forces
-    gravity = GravityForceMultiphase(
+    gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
     )
 
@@ -56,7 +57,8 @@ def multiphase_gravity_simulation_test():
         conductivity_liquid=conductivity_liquid,
         conductivity_vapour=conductivity_vapour,
         grid_shape=grid_shape,
-        lattice_type=lattice_type
+        lattice_type=lattice_type,
+        U_0=U_0
     )
 
     sim = Run(
@@ -71,8 +73,9 @@ def multiphase_gravity_simulation_test():
         interface_width=interface_width,
         save_interval=save_interval,
         force_enabled=True,
-        force_obj=[electric],
-        init_type="wetting",
+        force_obj=[gravity, electric],
+        init_type="init_from_file",
+        init_dir='/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/11-42-14_multiphase_gravity_simulation_test/data/timestep_199999.npz',
         permittivity_liquid=permittivity_liquid,
         permittivity_vapour=permittivity_vapour,
         conductivity_liquid=conductivity_liquid,
@@ -103,7 +106,7 @@ if __name__ == "__main__":
 data_dir = sim_multiphase_gravity.io_handler.data_dir
 print(data_dir)
 
-t = 1999  # last saved timestep (nt=100, save_interval=10)
+t = 5199  # last saved timestep (nt=100, save_interval=10)
 file = f"{data_dir}/timestep_{t}.npz"
 
 data = jnp.load(file)

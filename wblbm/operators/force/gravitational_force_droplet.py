@@ -13,6 +13,8 @@ class GravityForceMultiphaseDroplet(Force):
         if grid_shape.__len__() != 2:
             raise ValueError("Currently supports 2D (d=2) only")
 
+        self.name = 'GravitationalForceDroplet'
+
         force_x = force_g * jnp.sin(jnp.deg2rad(inclination_angle_deg))
         force_y = force_g * -jnp.cos(jnp.deg2rad(inclination_angle_deg))
 

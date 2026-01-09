@@ -1,5 +1,7 @@
 import jax.numpy as jnp
+from jax import jit
 from wblbm.lattice.lattice import Lattice
+from functools import partial
 from wblbm.utils.timing import time_function, TIMING_ENABLED
 
 
@@ -13,6 +15,7 @@ class Streaming:
         self.q = lattice.q
 
     @time_function(enable_timing=TIMING_ENABLED)
+    @partial(jit, static_argnums=(0,))
     def __call__(self, f):
         """
         Perform the streaming step of the LBM.
