@@ -1,4 +1,6 @@
 import jax.numpy as jnp
+from jax import jit
+from functools import partial
 from fontTools.misc.bezierTools import epsilon
 
 from wblbm import Gradient, Streaming
@@ -17,7 +19,7 @@ class ElectricForce(Force):
 
     def __init__(self, permittivity_liquid: float, permittivity_vapour: float,
                  conductivity_liquid: float, conductivity_vapour: float,
-                 grid_shape: tuple, lattice_type: str, bc_config: dict = None):
+                 grid_shape: tuple, lattice_type: str, U_0: float, bc_config: dict = None):
         """
         Initialize electrical force.
 
@@ -49,7 +51,9 @@ class ElectricForce(Force):
         self.gradient = Gradient(self.lattice, bc_config=bc_config)
         self.bc_config = bc_config
         self.stream = Streaming(self.lattice)
+        self.U = U_0
 
+    @partial(jit, static_argnums=(0,))
     def compute_force(self, **kwargs) -> jnp.ndarray:
         """
         Compute electrical force for leaky dielectric model.
@@ -144,7 +148,7 @@ class ElectricForce(Force):
     #      f_bc = f_bc.at[:, -1, 6, 0].set(f_pad_1[:self.nx, 0, 8, 0])
     #      return f_bc
 
-    def boundary_condition_parallel_plate(self, f_col, U_0) -> jnp.ndarray:
+    def boundary_condition_parallel_plate(self, f_col: jnp.ndarray, U_0) -> jnp.ndarray:
 
         grid_pad_ = jnp.pad(f_col, ((0, 0), (1, 1), (0, 0), (0, 0)), mode='edge')
         grid_pad = jnp.pad(grid_pad_, ((1, 1), (0, 0), (0, 0), (0, 0)), mode='empty')
@@ -162,7 +166,7 @@ class ElectricForce(Force):
         h_i_eq = self.equilibrium_h(potential, self.lattice.w)
         tau_e = 3 * conductivity + .5
         h_i_col = (1 - (1 / tau_e)) * h_i_prev + (1 / tau_e) * h_i_eq
-        h_i_bc = self.boundary_condition_coplanar_electrode(h_i_col, U_0=1e-1)
+        h_i_bc = self.boundary_condition_coplanar_electrode(h_i_col, self.U)
         h_i_next = self.stream(h_i_bc)
         return h_i_next[1:-1, 1:-1, :, :]
 
@@ -172,7 +176,7 @@ class ElectricForce(Force):
         h_i_prev^eq = w_i * U
 
         Args:
-            h_i: Electric potential field, shape (nx, ny, q)
+            U: Electric potential field, shape (nx, ny, q)
             w_i: Lattice weights, shape (9,)
 
         Returns:

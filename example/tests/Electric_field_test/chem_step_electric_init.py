@@ -3,18 +3,20 @@ import numpy as np
 from wblbm.operators.force import CompositeForce
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
+from wblbm.operators.force import ElectricForce
 import jax
 
 jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_disable_jit", True)
 
 
-def wetting_hysteresis_chem_step_simulation_test():
+def init_for_coplanar_chem_step_0_inc():
     """Test LBM wetting implementation with hysteresis enabled including a chemical step."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
     # Simulation parameters
     grid_shape = (201, 101)
+    lattice_type = "D2Q9"
     tau = 0.99
     nt = 20000
     save_interval = 1000
@@ -30,6 +32,22 @@ def wetting_hysteresis_chem_step_simulation_test():
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
+    )
+
+    # Electric field config
+    permittivity_liquid = 0.01
+    permittivity_vapour = 0.01
+    conductivity_liquid = 0.1
+    conductivity_vapour = 0.1
+    U_0 = 1e-1
+    electric = ElectricForce(
+        permittivity_liquid=permittivity_liquid,
+        permittivity_vapour=permittivity_vapour,
+        conductivity_liquid=conductivity_liquid,
+        conductivity_vapour=conductivity_vapour,
+        grid_shape=grid_shape,
+        lattice_type=lattice_type,
+        U_0=U_0
     )
 
     # Add hysteresis parameters to bc_config
@@ -76,7 +94,7 @@ def wetting_hysteresis_chem_step_simulation_test():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=True,
-        force_obj=[gravity],
+        force_obj=[gravity, electric],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
@@ -91,7 +109,7 @@ def wetting_hysteresis_chem_step_simulation_test():
 
 
 if __name__ == "__main__":
-    sim_wetting_hysteresis = wetting_hysteresis_chem_step_simulation_test()
+    sim_wetting_hysteresis = init_for_coplanar_chem_step_0_inc()
 
     # Visualize results
     print("\n=== Visualizing Wetting Hysteresis Test Results ===")

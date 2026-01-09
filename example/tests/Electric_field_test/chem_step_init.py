@@ -9,7 +9,7 @@ jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_disable_jit", True)
 
 
-def wetting_hysteresis_chem_step_simulation_test():
+def init_for_chem_step_0_inc():
     """Test LBM wetting implementation with hysteresis enabled including a chemical step."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
@@ -91,7 +91,7 @@ def wetting_hysteresis_chem_step_simulation_test():
 
 
 if __name__ == "__main__":
-    sim_wetting_hysteresis = wetting_hysteresis_chem_step_simulation_test()
+    sim_wetting_hysteresis = init_for_chem_step_0_inc()
 
     # Visualize results
     print("\n=== Visualizing Wetting Hysteresis Test Results ===")
