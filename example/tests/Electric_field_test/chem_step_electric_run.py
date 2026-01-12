@@ -10,7 +10,7 @@ jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_disable_jit", True)
 
 
-def init_for_coplanar_chem_step_0_inc():
+def run_coplanar_chem_step_45_inc_hysteresis():
     """Test LBM wetting implementation with hysteresis enabled including a chemical step."""
     print("\n=== Testing LBM Wetting with Hysteresis ===")
 
@@ -18,8 +18,8 @@ def init_for_coplanar_chem_step_0_inc():
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
     tau = 0.99
-    nt = 20000
-    save_interval = 1000
+    nt = 80000
+    save_interval = 200
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
@@ -29,7 +29,7 @@ def init_for_coplanar_chem_step_0_inc():
     d_rho_value = 0.2
 
     force_g = 1e-7
-    inclination_angle = 0
+    inclination_angle = 45
     gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
     )
@@ -56,14 +56,14 @@ def init_for_coplanar_chem_step_0_inc():
         'bottom': 'wetting',
         'top': 'symmetry',
         'right': 'periodic',
-        # 'chemical_step': {
-        #     'chemical_step_location': .5,
-        #     'chemical_step_edge': 'bottom',
-        #     'ca_advancing_pre_step': 110.0,
-        #     'ca_receding_pre_step': 90.0,
-        #     'ca_advancing_post_step': 70.0,
-        #     'ca_receding_post_step': 60.0,
-        # },
+        'chemical_step': {
+            'chemical_step_location': .5,
+            'chemical_step_edge': 'bottom',
+            'ca_advancing_pre_step': 110.0,
+            'ca_receding_pre_step': 90.0,
+            'ca_advancing_post_step': 70.0,
+            'ca_receding_post_step': 60.0,
+        },
         'wetting_params': {
             'rho_l': rho_l,
             'rho_v': rho_v,
@@ -73,12 +73,12 @@ def init_for_coplanar_chem_step_0_inc():
             'd_rho_right': d_rho_value,
             'width': interface_width
         },
-        # 'hysteresis_params': {
-        #     'ca_advancing': 90.0,
-        #     'ca_receding': 80.0,
-        #     'learning_rate': 0.05,
-        #     'max_iterations': 10
-        # }
+        'hysteresis_params': {
+            'ca_advancing': 90.0,
+            'ca_receding': 80.0,
+            'learning_rate': 0.05,
+            'max_iterations': 10
+        }
     }
 
     sim = Run(
@@ -114,7 +114,7 @@ def init_for_coplanar_chem_step_0_inc():
 
 
 if __name__ == "__main__":
-    sim_wetting_hysteresis = init_for_coplanar_chem_step_0_inc()
+    sim_wetting_hysteresis = run_coplanar_chem_step_45_inc_hysteresis()
 
     # Visualize results
     print("\n=== Visualizing Wetting Hysteresis Test Results ===")
