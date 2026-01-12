@@ -33,7 +33,7 @@ def multiphase_gravity_simulation_test():
     permittivity_vapour = .01
     conductivity_liquid = 1
     conductivity_vapour = .001
-    U_0 = 8e-2
+    U_0 = 6e-2
 
     bc_config = {
         "top": "bounce-back",
