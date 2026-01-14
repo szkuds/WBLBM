@@ -16,7 +16,7 @@ def init_for_chem_step_0_inc():
     # Simulation parameters
     grid_shape = (201, 101)
     tau = 0.99
-    nt = 200000
+    nt = 300000
     save_interval = 10000
     kappa = 0.04
     rho_l = 1.0
@@ -24,7 +24,7 @@ def init_for_chem_step_0_inc():
     interface_width = 5
 
     phi_value = 1.1
-    d_rho_value = 0.2
+    d_rho_value = 0.1
 
     force_g = 1e-7
     inclination_angle = 0
@@ -36,7 +36,7 @@ def init_for_chem_step_0_inc():
     bc_config = {
         'left': 'periodic',
         'bottom': 'wetting',
-        'top': 'symmetry',
+        'top': 'bounce-back',
         'right': 'periodic',
         'wetting_params': {
             'rho_l': rho_l,

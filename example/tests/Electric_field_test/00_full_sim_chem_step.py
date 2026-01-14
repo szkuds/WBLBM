@@ -1,13 +1,10 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
 import jax
-import time
 from datetime import datetime
 import shutil
 
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
-from wblbm.operators.force import ElectricForce
 
 jax.config.update("jax_enable_x64", True)
 
@@ -27,14 +24,14 @@ RHO_V = 0.001
 INTERFACE_WIDTH = 5
 PHI_VALUE = 1.1
 D_RHO_VALUE = 0.1
-FORCE_G = 1e-7
+FORCE_G = 5e-7
 INCLINATION_ANGLE = 45
 
 # Iteration parameters
 WETTING_INIT_NT = 300000
 WETTING_INIT_SAVE = WETTING_INIT_NT/10
 
-CHEM_STEP_RUN_NT = 5000
+CHEM_STEP_RUN_NT = 50000
 CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT/100
 
 # Chemical step parameters
@@ -97,43 +94,29 @@ def visualize_stage(sim_obj, stage_name):
     print(f"✓ Visualization complete for {stage_name}")
 
 
-def find_and_move_results(pipeline_timestamp, stage_name, exclude_dirs=None):
+def move_results_to_pipeline(sim_obj, pipeline_timestamp, stage_name):
     """
-    Find the latest created directory and move it to pipeline structure.
-    This should be called only after visualize_stage is complete.
+    Move simulation results to pipeline structure using the simulation's own results directory.
 
     Args:
+        sim_obj: The Run simulation object (has io_handler.run_dir)
         pipeline_timestamp: The pipeline timestamp for organizing results
         stage_name: Name of the stage (e.g., "run_wetting_init")
-        exclude_dirs: List of directory names to exclude from search
 
     Returns:
         Path to the moved stage directory
     """
-    if exclude_dirs is None:
-        exclude_dirs = []
+    # Get the actual results directory from the simulation object
+    src_dir = sim_obj.io_handler.run_dir
 
-    # Always exclude the pipeline timestamp directory itself
-    exclude_dirs.append(pipeline_timestamp)
+    if not os.path.isdir(src_dir):
+        raise FileNotFoundError(f"Simulation results directory not found: {src_dir}")
 
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_dir = os.path.join(base_results, today)
+    # Move to pipeline structure
+    stage_dir = move_and_rename_results(src_dir, stage_name, pipeline_timestamp)
+    print(f"✓ {stage_name} results saved to: {stage_dir}")
 
-    if os.path.isdir(today_dir):
-        subdirs = [d for d in os.listdir(today_dir)
-                   if os.path.isdir(os.path.join(today_dir, d)) and d not in exclude_dirs]
-        if subdirs:
-            latest_subdir = sorted(subdirs)[-1]
-            src_dir = os.path.join(today_dir, latest_subdir)
-
-            # Move to pipeline structure
-            stage_dir = move_and_rename_results(src_dir, stage_name, pipeline_timestamp)
-            print(f"✓ {stage_name} results saved to: {stage_dir}")
-
-            return stage_dir
-
-    raise FileNotFoundError(f"Could not find {stage_name} simulation results")
+    return stage_dir
 
 
 # ============================================================================
@@ -192,98 +175,12 @@ def run_wetting_init(pipeline_timestamp):
     # Visualize before moving
     visualize_stage(sim, "Wetting Initialization")
 
-    # Wait for files to be written
-    time.sleep(5)
-
-    # Find the created directory and move it to pipeline structure
-    # This runs only after visualize_stage is complete
-    return find_and_move_results(pipeline_timestamp, "run_wetting_init")
+    # Move the simulation results to pipeline structure
+    return move_results_to_pipeline(sim, pipeline_timestamp, "run_wetting_init")
 
 
 # ============================================================================
-# STAGE 2: ELECTRIC FIELD INITIALIZATION
-# ============================================================================
-
-def run_electric_init(pipeline_timestamp, wetting_results_dir):
-    """Initialize with electric field (using wetting output)."""
-    print("\n" + "=" * 80)
-    print("STAGE 2: ELECTRIC FIELD INITIALIZATION")
-    print("=" * 80)
-
-    # Get the final timestep from wetting sim results
-    init_path = get_latest_timestep(wetting_results_dir)
-    print(f"Using wetting output: {init_path}")
-
-    inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(FORCE_G, inclination_angle, GRID_SHAPE)
-    electric = ElectricForce(
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        grid_shape=GRID_SHAPE,
-        lattice_type=LATTICE_TYPE,
-        U_0=U_0
-    )
-
-    bc_config = {
-        'left': 'periodic',
-        'bottom': 'wetting',
-        'top': 'symmetry',
-        'right': 'periodic',
-        'wetting_params': {
-            'rho_l': RHO_L,
-            'rho_v': RHO_V,
-            'phi_left': PHI_VALUE,
-            'phi_right': PHI_VALUE,
-            'd_rho_left': D_RHO_VALUE,
-            'd_rho_right': D_RHO_VALUE,
-            'width': INTERFACE_WIDTH
-        }
-    }
-
-    sim = Run(
-        simulation_type="multiphase",
-        grid_shape=GRID_SHAPE,
-        lattice_type=LATTICE_TYPE,
-        tau=TAU,
-        nt=ELECTRIC_INIT_NT,
-        kappa=KAPPA,
-        rho_l=RHO_L,
-        rho_v=RHO_V,
-        interface_width=INTERFACE_WIDTH,
-        save_interval=ELECTRIC_INIT_SAVE,
-        bc_config=bc_config,
-        force_enabled=True,
-        force_obj=[gravity, electric],
-        phi_value=PHI_VALUE,
-        d_rho_value=D_RHO_VALUE,
-        wetting_enabled=True,
-        force_g=FORCE_G,
-        inclination_angle=inclination_angle,
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        U_0=U_0,
-        init_type="init_from_file",
-        init_dir=init_path,
-    )
-
-    sim.run(verbose=True)
-
-    # Visualize before moving
-    visualize_stage(sim, "Electric Field Initialization")
-
-    # Wait for files to be written
-    time.sleep(5)
-
-    # Find and move results - runs only after visualize_stage is complete
-    return find_and_move_results(pipeline_timestamp, "run_electric_init")
-
-
-# ============================================================================
-# STAGE 3: PARALLEL EXECUTION (Chemical step + Electric run)
+# STAGE 2: CHEMICAL STEP EXECUTION
 # ============================================================================
 
 def run_chem_step(pipeline_timestamp, wetting_results_dir):
@@ -348,11 +245,6 @@ def run_chem_step(pipeline_timestamp, wetting_results_dir):
         wetting_enabled=True,
         force_g=FORCE_G,
         inclination_angle=inclination_angle,
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        U_0=U_0,
         init_type="init_from_file",
         init_dir=init_path,
     )
@@ -362,102 +254,8 @@ def run_chem_step(pipeline_timestamp, wetting_results_dir):
     # Visualize before moving
     visualize_stage(sim, "Chemical Step")
 
-    time.sleep(5)
-
-    # Find and move results - runs only after visualize_stage is complete
-    return find_and_move_results(pipeline_timestamp, "run_chem_step")
-
-
-def run_electric_step(pipeline_timestamp, electric_init_results_dir):
-    """Run with electric field (45 degree incline, with chemical step)."""
-    print("\n" + "=" * 80)
-    print("STAGE 3B: ELECTRIC FIELD RUN (45° incline)")
-    print("=" * 80)
-
-    # Get init path from electric init output
-    init_path = get_latest_timestep(electric_init_results_dir)
-    print(f"Using electric init output: {init_path}")
-
-    inclination_angle = INCLINATION_ANGLE
-    gravity = GravityForceMultiphaseDroplet(FORCE_G, inclination_angle, GRID_SHAPE)
-    electric = ElectricForce(
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        grid_shape=GRID_SHAPE,
-        lattice_type=LATTICE_TYPE,
-        U_0=U_0
-    )
-
-    bc_config = {
-        'left': 'periodic',
-        'bottom': 'wetting',
-        'top': 'symmetry',
-        'right': 'periodic',
-        'chemical_step': {
-            'chemical_step_location': CHEMICAL_STEP_LOCATION,
-            'chemical_step_edge': CHEMICAL_STEP_EDGE,
-            'ca_advancing_pre_step': CA_ADVANCING_PRE,
-            'ca_receding_pre_step': CA_RECEDING_PRE,
-            'ca_advancing_post_step': CA_ADVANCING_POST,
-            'ca_receding_post_step': CA_RECEDING_POST,
-        },
-        'wetting_params': {
-            'rho_l': RHO_L,
-            'rho_v': RHO_V,
-            'phi_left': PHI_VALUE,
-            'phi_right': PHI_VALUE,
-            'd_rho_left': D_RHO_VALUE,
-            'd_rho_right': D_RHO_VALUE,
-            'width': INTERFACE_WIDTH
-        },
-        'hysteresis_params': {
-            'ca_advancing': CA_ADVANCING,
-            'ca_receding': CA_RECEDING,
-            'learning_rate': LEARNING_RATE,
-            'max_iterations': MAX_ITERATIONS
-        }
-    }
-
-    sim = Run(
-        simulation_type="multiphase",
-        grid_shape=GRID_SHAPE,
-        lattice_type=LATTICE_TYPE,
-        tau=TAU,
-        nt=CHEM_STEP_RUN_NT,
-        kappa=KAPPA,
-        rho_l=RHO_L,
-        rho_v=RHO_V,
-        interface_width=INTERFACE_WIDTH,
-        save_interval=CHEM_STEP_RUN_SAVE,
-        bc_config=bc_config,
-        force_enabled=True,
-        force_obj=[gravity, electric],
-        phi_value=PHI_VALUE,
-        d_rho_value=D_RHO_VALUE,
-        wetting_enabled=True,
-        force_g=FORCE_G,
-        inclination_angle=inclination_angle,
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        U_0=U_0,
-        init_type="init_from_file",
-        init_dir=init_path,
-    )
-
-    sim.run(verbose=True)
-
-    # Visualize before moving
-    visualize_stage(sim, "Electric Field Run")
-
-    time.sleep(5)
-
-    # Find and move results - runs only after visualize_stage is complete
-    return find_and_move_results(pipeline_timestamp, "run_electric_step")
-
+    # Move the simulation results to pipeline structure
+    return move_results_to_pipeline(sim, pipeline_timestamp, "run_chem_step")
 
 # ============================================================================
 # MAIN EXECUTION
@@ -478,20 +276,12 @@ if __name__ == "__main__":
     # Stage 1: Wetting initialization
     wetting_dir = run_wetting_init(pipeline_timestamp)
 
-    # Stage 2: Electric initialization
-    electric_dir = run_electric_init(pipeline_timestamp, wetting_dir)
-
-    # Stage 3: Run both simulations in parallel
+    # Stage 2: Run chemical step simulation
     print("\n" + "=" * 80)
-    print("STAGE 3: RUNNING PARALLEL SIMULATIONS")
+    print("STAGE 2: RUNNING SIMULATION")
     print("=" * 80)
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        chem_future = executor.submit(run_chem_step, pipeline_timestamp, wetting_dir)
-        electric_future = executor.submit(run_electric_step, pipeline_timestamp, electric_dir)
-
-        chem_dir = chem_future.result()
-        electric_run_dir = electric_future.result()
+    chem_dir = run_chem_step(pipeline_timestamp, wetting_dir)
 
     print("\n" + "=" * 80)
     print("ALL SIMULATIONS COMPLETED AND VISUALIZED")
