@@ -1,11 +1,7 @@
-import numpy as np
 import os
-import glob
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import jax
 import time
-import re
 from datetime import datetime
 import shutil
 
@@ -30,27 +26,16 @@ RHO_L = 1.0
 RHO_V = 0.001
 INTERFACE_WIDTH = 5
 PHI_VALUE = 1.1
-D_RHO_VALUE = 0.2
-
-# Force parameters
+D_RHO_VALUE = 0.1
 FORCE_G = 1e-7
+INCLINATION_ANGLE = 45
 
 # Iteration parameters
-WETTING_INIT_NT = 20
-WETTING_INIT_SAVE = 10
+WETTING_INIT_NT = 300000
+WETTING_INIT_SAVE = WETTING_INIT_NT/10
 
-ELECTRIC_INIT_NT = 20
-ELECTRIC_INIT_SAVE = 10
-
-CHEM_STEP_RUN_NT = 20
-CHEM_STEP_RUN_SAVE = 10
-
-# Electric field config
-PERMITTIVITY_LIQUID = 1
-PERMITTIVITY_VAPOUR = 0.01
-CONDUCTIVITY_LIQUID = 1
-CONDUCTIVITY_VAPOUR = 0.001
-U_0 = 5e-2
+CHEM_STEP_RUN_NT = 5000
+CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT/100
 
 # Chemical step parameters
 CHEMICAL_STEP_LOCATION = 0.5
@@ -108,11 +93,47 @@ def move_and_rename_results(src_dir, target_stage_name, pipeline_timestamp):
 def visualize_stage(sim_obj, stage_name):
     """Visualize simulation results from Run object."""
     print(f"\nVisualizing {stage_name}...")
-    try:
-        visualise(sim_obj, f"{stage_name} Results")
-        print(f"✓ Visualization complete for {stage_name}")
-    except Exception as e:
-        print(f"⚠ Warning: Could not visualize {stage_name}: {e}")
+    visualise(sim_obj, f"{stage_name} Results")
+    print(f"✓ Visualization complete for {stage_name}")
+
+
+def find_and_move_results(pipeline_timestamp, stage_name, exclude_dirs=None):
+    """
+    Find the latest created directory and move it to pipeline structure.
+    This should be called only after visualize_stage is complete.
+
+    Args:
+        pipeline_timestamp: The pipeline timestamp for organizing results
+        stage_name: Name of the stage (e.g., "run_wetting_init")
+        exclude_dirs: List of directory names to exclude from search
+
+    Returns:
+        Path to the moved stage directory
+    """
+    if exclude_dirs is None:
+        exclude_dirs = []
+
+    # Always exclude the pipeline timestamp directory itself
+    exclude_dirs.append(pipeline_timestamp)
+
+    base_results = os.path.expanduser("~/TUD_LBM/results")
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_dir = os.path.join(base_results, today)
+
+    if os.path.isdir(today_dir):
+        subdirs = [d for d in os.listdir(today_dir)
+                   if os.path.isdir(os.path.join(today_dir, d)) and d not in exclude_dirs]
+        if subdirs:
+            latest_subdir = sorted(subdirs)[-1]
+            src_dir = os.path.join(today_dir, latest_subdir)
+
+            # Move to pipeline structure
+            stage_dir = move_and_rename_results(src_dir, stage_name, pipeline_timestamp)
+            print(f"✓ {stage_name} results saved to: {stage_dir}")
+
+            return stage_dir
+
+    raise FileNotFoundError(f"Could not find {stage_name} simulation results")
 
 
 # ============================================================================
@@ -172,27 +193,11 @@ def run_wetting_init(pipeline_timestamp):
     visualize_stage(sim, "Wetting Initialization")
 
     # Wait for files to be written
-    time.sleep(0.5)
+    time.sleep(5)
 
     # Find the created directory and move it to pipeline structure
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_dir = os.path.join(base_results, today)
-
-    if os.path.isdir(today_dir):
-        subdirs = [d for d in os.listdir(today_dir)
-                   if os.path.isdir(os.path.join(today_dir, d))]
-        if subdirs:
-            latest_subdir = sorted(subdirs)[-1]
-            src_dir = os.path.join(today_dir, latest_subdir)
-
-            # Move to pipeline structure
-            stage_dir = move_and_rename_results(src_dir, "run_wetting_init", pipeline_timestamp)
-            print(f"✓ Wetting init results saved to: {stage_dir}")
-
-            return stage_dir
-
-    raise FileNotFoundError("Could not find wetting simulation results")
+    # This runs only after visualize_stage is complete
+    return find_and_move_results(pipeline_timestamp, "run_wetting_init")
 
 
 # ============================================================================
@@ -271,54 +276,28 @@ def run_electric_init(pipeline_timestamp, wetting_results_dir):
     visualize_stage(sim, "Electric Field Initialization")
 
     # Wait for files to be written
-    time.sleep(0.5)
+    time.sleep(5)
 
-    # Find and move results
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_dir = os.path.join(base_results, today)
-
-    if os.path.isdir(today_dir):
-        subdirs = [d for d in os.listdir(today_dir)
-                   if os.path.isdir(os.path.join(today_dir, d)) and d != pipeline_timestamp]
-        if subdirs:
-            latest_subdir = sorted(subdirs)[-1]
-            src_dir = os.path.join(today_dir, latest_subdir)
-
-            # Move to pipeline structure
-            stage_dir = move_and_rename_results(src_dir, "run_electric_init", pipeline_timestamp)
-            print(f"✓ Electric init results saved to: {stage_dir}")
-
-            return stage_dir
-
-    raise FileNotFoundError("Could not find electric init simulation results")
+    # Find and move results - runs only after visualize_stage is complete
+    return find_and_move_results(pipeline_timestamp, "run_electric_init")
 
 
 # ============================================================================
 # STAGE 3: PARALLEL EXECUTION (Chemical step + Electric run)
 # ============================================================================
 
-def run_chem_step(pipeline_timestamp, electric_init_results_dir):
+def run_chem_step(pipeline_timestamp, wetting_results_dir):
     """Run chemical step with incline (45 degrees)."""
     print("\n" + "=" * 80)
     print("STAGE 3A: CHEMICAL STEP RUN (45° incline)")
     print("=" * 80)
 
     # Get init path from electric init output
-    init_path = get_latest_timestep(electric_init_results_dir)
+    init_path = get_latest_timestep(wetting_results_dir)
     print(f"Using electric init output: {init_path}")
 
-    inclination_angle = 45
+    inclination_angle = INCLINATION_ANGLE
     gravity = GravityForceMultiphaseDroplet(FORCE_G, inclination_angle, GRID_SHAPE)
-    electric = ElectricForce(
-        permittivity_liquid=PERMITTIVITY_LIQUID,
-        permittivity_vapour=PERMITTIVITY_VAPOUR,
-        conductivity_liquid=CONDUCTIVITY_LIQUID,
-        conductivity_vapour=CONDUCTIVITY_VAPOUR,
-        grid_shape=GRID_SHAPE,
-        lattice_type=LATTICE_TYPE,
-        U_0=U_0
-    )
 
     bc_config = {
         'left': 'periodic',
@@ -363,7 +342,7 @@ def run_chem_step(pipeline_timestamp, electric_init_results_dir):
         save_interval=CHEM_STEP_RUN_SAVE,
         bc_config=bc_config,
         force_enabled=True,
-        force_obj=[gravity, electric],
+        force_obj=[gravity],
         phi_value=PHI_VALUE,
         d_rho_value=D_RHO_VALUE,
         wetting_enabled=True,
@@ -383,25 +362,10 @@ def run_chem_step(pipeline_timestamp, electric_init_results_dir):
     # Visualize before moving
     visualize_stage(sim, "Chemical Step")
 
-    time.sleep(0.5)
+    time.sleep(5)
 
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_dir = os.path.join(base_results, today)
-
-    if os.path.isdir(today_dir):
-        subdirs = [d for d in os.listdir(today_dir)
-                   if os.path.isdir(os.path.join(today_dir, d)) and d != pipeline_timestamp]
-        if subdirs:
-            latest_subdir = sorted(subdirs)[-1]
-            src_dir = os.path.join(today_dir, latest_subdir)
-
-            stage_dir = move_and_rename_results(src_dir, "run_chem_step", pipeline_timestamp)
-            print(f"✓ Chemical step results saved to: {stage_dir}")
-
-            return stage_dir
-
-    raise FileNotFoundError("Could not find chemical step simulation results")
+    # Find and move results - runs only after visualize_stage is complete
+    return find_and_move_results(pipeline_timestamp, "run_chem_step")
 
 
 def run_electric_step(pipeline_timestamp, electric_init_results_dir):
@@ -414,7 +378,7 @@ def run_electric_step(pipeline_timestamp, electric_init_results_dir):
     init_path = get_latest_timestep(electric_init_results_dir)
     print(f"Using electric init output: {init_path}")
 
-    inclination_angle = 45
+    inclination_angle = INCLINATION_ANGLE
     gravity = GravityForceMultiphaseDroplet(FORCE_G, inclination_angle, GRID_SHAPE)
     electric = ElectricForce(
         permittivity_liquid=PERMITTIVITY_LIQUID,
@@ -489,25 +453,10 @@ def run_electric_step(pipeline_timestamp, electric_init_results_dir):
     # Visualize before moving
     visualize_stage(sim, "Electric Field Run")
 
-    time.sleep(0.5)
+    time.sleep(5)
 
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    today = datetime.now().strftime("%Y-%m-%d")
-    today_dir = os.path.join(base_results, today)
-
-    if os.path.isdir(today_dir):
-        subdirs = [d for d in os.listdir(today_dir)
-                   if os.path.isdir(os.path.join(today_dir, d)) and d != pipeline_timestamp]
-        if subdirs:
-            latest_subdir = sorted(subdirs)[-1]
-            src_dir = os.path.join(today_dir, latest_subdir)
-
-            stage_dir = move_and_rename_results(src_dir, "run_electric_step", pipeline_timestamp)
-            print(f"✓ Electric run results saved to: {stage_dir}")
-
-            return stage_dir
-
-    raise FileNotFoundError("Could not find electric step simulation results")
+    # Find and move results - runs only after visualize_stage is complete
+    return find_and_move_results(pipeline_timestamp, "run_electric_step")
 
 
 # ============================================================================
@@ -538,7 +487,7 @@ if __name__ == "__main__":
     print("=" * 80)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
-        chem_future = executor.submit(run_chem_step, pipeline_timestamp, electric_dir)
+        chem_future = executor.submit(run_chem_step, pipeline_timestamp, wetting_dir)
         electric_future = executor.submit(run_electric_step, pipeline_timestamp, electric_dir)
 
         chem_dir = chem_future.result()
@@ -549,7 +498,5 @@ if __name__ == "__main__":
     print("=" * 80)
     print(f"\n✓ Pipeline root directory: {pipeline_dir}")
     print(f"✓ Wetting init results: {wetting_dir}")
-    print(f"✓ Electric init results: {electric_dir}")
     print(f"✓ Chemical step results: {chem_dir}")
-    print(f"✓ Electric run results: {electric_run_dir}")
     print(f"\nPlots have been saved to each stage's plots/ directory")
