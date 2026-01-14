@@ -18,17 +18,17 @@ def init_for_coplanar_chem_step_0_inc():
     grid_shape = (201, 101)
     lattice_type = "D2Q9"
     tau = 0.99
-    nt = 20000
-    save_interval = 1000
+    nt = 200000
+    save_interval = nt/50
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
     interface_width = 5
 
     phi_value = 1.1
-    d_rho_value = 0.2
+    d_rho_value = 0.1
 
-    force_g = 1e-7
+    force_g = 1e-6
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(
         force_g, inclination_angle, grid_shape
@@ -94,7 +94,7 @@ def init_for_coplanar_chem_step_0_inc():
         save_interval=save_interval,
         bc_config=bc_config,
         force_enabled=True,
-        force_obj=[gravity, electric],
+        force_obj=[gravity],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
         wetting_enabled=True,
@@ -106,7 +106,7 @@ def init_for_coplanar_chem_step_0_inc():
         conductivity_vapour=conductivity_vapour,
         U_0=U_0,
         init_type="init_from_file",
-        init_dir="/Users/sbszkudlarek/TUD_LBM/results/2026-01-09/Electric_field_with_hysteresis_low_grav/16-57-29_init_for_chem_step_0_inc_wetting_only/data/timestep_199999.npz",
+        init_dir="/Users/sbszkudlarek/TUD_LBM/results/2026-01-14/11-19-38/run_wetting_init/data/timestep_199999.npz",
     )
 
     sim.run(verbose=True)
