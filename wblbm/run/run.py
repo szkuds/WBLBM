@@ -179,6 +179,8 @@ class Run:
                         print(
                             f"Step {it}/{nt}: avg_rho={avg_rho:.4f}, max_u={max_u:.6f}"
                         )
+        # Store final distribution function for post-processing
+        self.simulation.f = f_prev
         if verbose:
             print("Simulation completed!")
             print(f"Results saved in: {self.io_handler.run_dir}")

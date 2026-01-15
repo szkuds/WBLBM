@@ -393,24 +393,24 @@ def compare_simulations(parent_dir: str, comparison_output_dir: str):
             "x_tick_spacing": 1,
             "filename": "08_comparison_contact_angles_vs_x_location.png",
         },
-        {
-            "x_column": "Normalised iterations",
-            "y_column": "Ca normalised",
-            "title": "Ca normalised vs Iterations",
-            "xlabel": r"$\mathrm{it}/\mathrm{it}_{\mathrm{max}}$",
-            "ylabel": r"$\frac{\mathrm{Ca}}{\sin(\alpha)}$",
-            "x_tick_spacing": 0.1,
-            "filename": "09_comparison_plot_iteration_ca_norm.png",
-        },
-        {
-            "x_column": "Average X location normalised",
-            "y_column": "Ca normalised",
-            "title": "Ca normalised vs normalised average X location",
-            "xlabel": r"$\frac{X_{\mathrm{avg}}}{R_0}$",
-            "ylabel": r"$\frac{\mathrm{Ca}}{\sin(\alpha)}$",
-            "x_tick_spacing": 1,
-            "filename": "10_comparison_plot_average_x_location_ca_norm.png",
-        },
+        # {
+        #     "x_column": "Normalised iterations",
+        #     "y_column": "Ca normalised",
+        #     "title": "Ca normalised vs Iterations",
+        #     "xlabel": r"$\mathrm{it}/\mathrm{it}_{\mathrm{max}}$",
+        #     "ylabel": r"$\frac{\mathrm{Ca}}{\sin(\alpha)}$",
+        #     "x_tick_spacing": 0.1,
+        #     "filename": "09_comparison_plot_iteration_ca_norm.png",
+        # },
+        # {
+        #     "x_column": "Average X location normalised",
+        #     "y_column": "Ca normalised",
+        #     "title": "Ca normalised vs normalised average X location",
+        #     "xlabel": r"$\frac{X_{\mathrm{avg}}}{R_0}$",
+        #     "ylabel": r"$\frac{\mathrm{Ca}}{\sin(\alpha)}$",
+        #     "x_tick_spacing": 1,
+        #     "filename": "10_comparison_plot_average_x_location_ca_norm.png",
+        # },
     ]
 
     colors = list(TABLEAU_COLORS.values())
