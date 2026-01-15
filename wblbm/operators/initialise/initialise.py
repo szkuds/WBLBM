@@ -208,6 +208,34 @@ class Initialise:
         # Return the equilibrium distribution
         return self.equilibrium(rho, u)
 
+    def initialise_multiphase_droplet_variable_radius(
+            self, rho_l: float, rho_v: float, interface_width: int, radius: float
+    ):
+        """
+        Initialises a multiphase simulation with a droplet of specified radius.
+
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase density.
+            interface_width (int): Interface width for tanh profile.
+            radius (float): Droplet radius in lattice units.
+
+        Returns:
+            jnp.ndarray: Initialised population distribution f.
+        """
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+        center_x, center_y = self.nx // 2, self.ny // 2
+
+        distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+        rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+            (distance - radius) / interface_width
+        )
+
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+        return self.equilibrium(rho, u)
+
     def initialise_multiphase_bubble_bot(
             self, rho_l: float, rho_v: float, interface_width: int
     ):
@@ -376,3 +404,33 @@ class Initialise:
         rho_jax = jnp.array(rho)
         u_jax = jnp.array(u)
         return self.equilibrium(rho_jax, u_jax)
+
+
+def initialise_multiphase_droplet_variable_radius(
+        self, rho_l: float, rho_v: float, interface_width: int, radius: float
+):
+    """
+    Initialises a multiphase simulation with a droplet of specified radius.
+
+    Args:
+        rho_l (float): Liquid phase density.
+        rho_v (float): Vapour phase density.
+        interface_width (int): Interface width for tanh profile.
+        radius (float): Droplet radius in lattice units.
+
+    Returns:
+        jnp.ndarray: Initialised population distribution f.
+    """
+    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+    center_x, center_y = self.nx // 2, self.ny // 2
+
+    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+        (distance - radius) / interface_width
+    )
+
+    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+    u = jnp.zeros((self.nx, self.ny, 1, 2))
+
+    return self.equilibrium(rho, u)
+

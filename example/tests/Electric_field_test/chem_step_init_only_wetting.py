@@ -16,7 +16,7 @@ def init_for_chem_step_0_inc():
     # Simulation parameters
     grid_shape = (201, 101)
     tau = 0.99
-    nt = 300000
+    nt = 100000
     save_interval = 10000
     kappa = 0.04
     rho_l = 1.0
@@ -35,7 +35,7 @@ def init_for_chem_step_0_inc():
     # Add hysteresis parameters to bc_config
     bc_config = {
         'left': 'periodic',
-        'bottom': 'wetting',
+        'bottom': 'bounce-back',
         'top': 'bounce-back',
         'right': 'periodic',
         'wetting_params': {

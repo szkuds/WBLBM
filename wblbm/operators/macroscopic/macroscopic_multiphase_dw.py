@@ -116,5 +116,33 @@ class MacroscopicMultiphaseDW(Macroscopic):
         return u + force / 2
 
 
+    @partial(jit, static_argnums=(0,))
+    def pressure(self, rho):
+        """
+        Calculate the isotropic pressure field.
+        p0 = rho * mu - psi
+        where mu is chemical potential and psi is the bulk free energy density (double-well).
+
+        Args:
+            rho: Density field, shape (nx, ny, 1, 1)
+
+        Returns:
+            jnp.ndarray: Pressure field, shape (nx, ny, 1, 1)
+        """
+        mu = self.chem_pot(rho)
+
+        # Bulk free energy density (double-well potential)
+        rho_2d = rho[:, :, 0, 0]
+        psi_2d = self.beta * (rho_2d - self.rho_l) ** 2 * (rho_2d - self.rho_v) ** 2
+
+        # Convert to 4D
+        psi = jnp.zeros_like(rho).at[:, :, 0, 0].set(psi_2d)
+
+        # Isotropic pressure: p0 = rho * mu - psi
+        p0 = rho * mu - psi
+        return p0
+
+
+
 
 
