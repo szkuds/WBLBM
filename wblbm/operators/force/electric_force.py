@@ -158,7 +158,7 @@ class ElectricForce(Force):
     def boundary_condition_coplanar_electrode(self, f_col: jnp.ndarray, U_0) -> jnp.ndarray:
         grid_pad_ = jnp.pad(f_col, ((1, 1), (0, 1), (0, 0), (0, 0)), mode='edge')
         grid_pad = jnp.pad(grid_pad_, ((0, 0), (1, 0), (0, 0), (0, 0)), mode='empty')
-        grid_pad = grid_pad.at[:self.nx//2, 0, :, :].set(self.equilibrium_h(U_0, self.lattice.w)[:self.nx//2, 0, :, :])
+        grid_pad = grid_pad.at[:self.nx//2, 0, :, :].set(self.equilibrium_h(U_0, self.lattice.w)[:, 0, :, :])
         return grid_pad
 
     def update_h_i(self, h_i_prev: jnp.ndarray, conductivity: jnp.ndarray):
