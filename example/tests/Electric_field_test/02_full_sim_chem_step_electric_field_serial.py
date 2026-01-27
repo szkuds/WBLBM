@@ -2,15 +2,18 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import jax
 from datetime import datetime
+import shutil
 import uuid
 
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
 from wblbm.operators.force import ElectricForce
+
 from wblbm.utils.full_sim_util import (
     get_latest_timestep,
     move_results_to_pipeline,
     visualize_stage,
+    get_correct_wetting_init_timestep
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -31,25 +34,25 @@ RHO_V = 0.001
 INTERFACE_WIDTH = 5
 PHI_VALUE = 1.1
 D_RHO_VALUE = 0.1
-FORCE_G = 1e-7
+FORCE_G = 5e-7
 INCLINATION_ANGLE = 45
 
 # Iteration parameters
 WETTING_INIT_NT = 20
 WETTING_INIT_SAVE = WETTING_INIT_NT/10
 
-ELECTRIC_INIT_NT = 20
-ELECTRIC_INIT_SAVE = ELECTRIC_INIT_NT/10
+ELECTRIC_INIT_NT = 2
+ELECTRIC_INIT_SAVE = ELECTRIC_INIT_NT/1
 
-CHEM_STEP_RUN_NT = 20
-CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT/100
+CHEM_STEP_RUN_NT = 30
+CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT/3
 
 # Electric field config
 PERMITTIVITY_LIQUID = 1
 PERMITTIVITY_VAPOUR = 0.01
 CONDUCTIVITY_LIQUID = 1
 CONDUCTIVITY_VAPOUR = 0.001
-U_0 = 5e-2
+U_0 = 8e-2
 
 # Chemical step parameters
 CHEMICAL_STEP_LOCATION = 0.5
@@ -64,6 +67,7 @@ CA_ADVANCING = 90.0
 CA_RECEDING = 80.0
 LEARNING_RATE = 0.05
 MAX_ITERATIONS = 10
+
 
 
 
@@ -138,7 +142,7 @@ def run_electric_init(pipeline_timestamp, wetting_results_dir):
     print("=" * 80)
 
     # Get the final timestep from wetting sim results
-    init_path = get_latest_timestep(wetting_results_dir)
+    init_path = get_correct_wetting_init_timestep(wetting_results_dir, WETTING_INIT_NT, ELECTRIC_INIT_NT)
     print(f"Using wetting output: {init_path}")
 
     inclination_angle = 0
@@ -390,7 +394,7 @@ if __name__ == "__main__":
 
     # Create pipeline timestamp that will be used for all stages
     pipeline_timestamp = f"{datetime.now().strftime('%H-%M-%S')}_{uuid.uuid4().hex[:8]}"
-    pipeline_dir = os.path.join(os.path.expanduser("~/TUD_LBM/results"),
+    pipeline_dir = os.path.join("~/TUD_LBM_results",
                                 datetime.now().strftime("%Y-%m-%d"),
                                 pipeline_timestamp)
     os.makedirs(pipeline_dir, exist_ok=True)
@@ -403,15 +407,11 @@ if __name__ == "__main__":
 
     # Stage 3: Run both simulations in parallel
     print("\n" + "=" * 80)
-    print("STAGE 3: RUNNING PARALLEL SIMULATIONS")
+    print("STAGE 3: RUNNING SIMULATIONS")
     print("=" * 80)
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        chem_future = executor.submit(run_chem_step, pipeline_timestamp, wetting_dir)
-        electric_future = executor.submit(run_electric_step, pipeline_timestamp, electric_dir)
-
-        chem_dir = chem_future.result()
-        electric_run_dir = electric_future.result()
+    chem_dir = run_chem_step(pipeline_timestamp, wetting_dir)
+    electric_run_dir = run_electric_step(pipeline_timestamp, electric_dir)
 
     print("\n" + "=" * 80)
     print("ALL SIMULATIONS COMPLETED AND VISUALIZED")

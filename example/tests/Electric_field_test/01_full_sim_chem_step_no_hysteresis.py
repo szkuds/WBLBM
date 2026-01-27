@@ -5,7 +5,6 @@ import uuid
 
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
-
 from wblbm.utils.full_sim_util import (
     get_latest_timestep,
     move_results_to_pipeline,
@@ -34,11 +33,11 @@ FORCE_G = 5e-7
 INCLINATION_ANGLE = 45
 
 # Iteration parameters
-WETTING_INIT_NT = 10
-WETTING_INIT_SAVE = WETTING_INIT_NT / 10
+WETTING_INIT_NT = 40000
+WETTING_INIT_SAVE = WETTING_INIT_NT/10
 
-CHEM_STEP_RUN_NT = 10
-CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT / 200
+CHEM_STEP_RUN_NT = 25000
+CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT/200
 
 # Chemical step parameters
 CHEMICAL_STEP_LOCATION = 0.5
@@ -53,6 +52,7 @@ CA_ADVANCING = 90.0
 CA_RECEDING = 80.0
 LEARNING_RATE = 0.05
 MAX_ITERATIONS = 10
+
 
 
 # ============================================================================
@@ -154,12 +154,6 @@ def run_chem_step(pipeline_timestamp, wetting_results_dir):
             'd_rho_right': D_RHO_VALUE,
             'width': INTERFACE_WIDTH
         },
-        'hysteresis_params': {
-            'ca_advancing': CA_ADVANCING,
-            'ca_receding': CA_RECEDING,
-            'learning_rate': LEARNING_RATE,
-            'max_iterations': MAX_ITERATIONS
-        }
     }
 
     sim = Run(
@@ -192,7 +186,6 @@ def run_chem_step(pipeline_timestamp, wetting_results_dir):
 
     # Move the simulation results to pipeline structure
     return move_results_to_pipeline(sim, pipeline_timestamp, "run_chem_step")
-
 
 # ============================================================================
 # MAIN EXECUTION

@@ -2,11 +2,16 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 import jax
 from datetime import datetime
-import shutil
+import uuid
 
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
 from wblbm.operators.force import ElectricForce
+from wblbm.utils.full_sim_util import (
+    get_latest_timestep,
+    move_results_to_pipeline,
+    visualize_stage,
+)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -59,76 +64,6 @@ CA_ADVANCING = 90.0
 CA_RECEDING = 80.0
 LEARNING_RATE = 0.05
 MAX_ITERATIONS = 10
-
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
-def get_latest_timestep(results_dir):
-    """Extract final timestep from results directory."""
-    data_dir = os.path.join(results_dir, "data")
-
-    if not os.path.isdir(data_dir):
-        raise FileNotFoundError(f"Data directory not found: {data_dir}")
-
-    timesteps = sorted([int(f.split('_')[-1].split('.')[0])
-                        for f in os.listdir(data_dir)
-                        if f.startswith('timestep_')])
-
-    if not timesteps:
-        raise FileNotFoundError(f"No timestep files found in {data_dir}")
-
-    final_timestep = timesteps[-1]
-    return os.path.join(data_dir, f"timestep_{final_timestep}.npz")
-
-
-def move_and_rename_results(src_dir, target_stage_name, pipeline_timestamp):
-    """Move simulation results from default location to pipeline directory."""
-    base_results = os.path.expanduser("~/TUD_LBM/results")
-    date_part = src_dir.split('/')[-2]  # Extract DATE from path
-    target_dir = os.path.join(base_results, date_part, pipeline_timestamp, target_stage_name)
-
-    # If source and target are different, move it
-    if os.path.abspath(src_dir) != os.path.abspath(target_dir):
-        os.makedirs(os.path.dirname(target_dir), exist_ok=True)
-        if os.path.exists(target_dir):
-            shutil.rmtree(target_dir)
-        os.rename(src_dir, target_dir)
-
-    return target_dir
-
-
-def visualize_stage(sim_obj, stage_name):
-    """Visualize simulation results from Run object."""
-    print(f"\nVisualizing {stage_name}...")
-    visualise(sim_obj, f"{stage_name} Results")
-    print(f"✓ Visualization complete for {stage_name}")
-
-
-def move_results_to_pipeline(sim_obj, pipeline_timestamp, stage_name):
-    """
-    Move simulation results to pipeline structure using the simulation's own results directory.
-
-    Args:
-        sim_obj: The Run simulation object (has io_handler.run_dir)
-        pipeline_timestamp: The pipeline timestamp for organizing results
-        stage_name: Name of the stage (e.g., "run_wetting_init")
-
-    Returns:
-        Path to the moved stage directory
-    """
-    # Get the actual results directory from the simulation object
-    src_dir = sim_obj.io_handler.run_dir
-
-    if not os.path.isdir(src_dir):
-        raise FileNotFoundError(f"Simulation results directory not found: {src_dir}")
-
-    # Move to pipeline structure
-    stage_dir = move_and_rename_results(src_dir, stage_name, pipeline_timestamp)
-    print(f"✓ {stage_name} results saved to: {stage_dir}")
-
-    return stage_dir
 
 
 
@@ -454,7 +389,7 @@ if __name__ == "__main__":
     print("=" * 80)
 
     # Create pipeline timestamp that will be used for all stages
-    pipeline_timestamp = datetime.now().strftime("%H-%M-%S")
+    pipeline_timestamp = f"{datetime.now().strftime('%H-%M-%S')}_{uuid.uuid4().hex[:8]}"
     pipeline_dir = os.path.join(os.path.expanduser("~/TUD_LBM/results"),
                                 datetime.now().strftime("%Y-%m-%d"),
                                 pipeline_timestamp)
