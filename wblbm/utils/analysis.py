@@ -179,7 +179,7 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
     RHO_MEAN = (config.get('rho_l', 1.0) + config.get('rho_v', 0.001)) / 2
     NX = config.get('grid_shape', [256, 256])
     HALF_NX = NX[0] // 2
-    PLOT_EVERY = config.get('plot_every', 1)
+    SAVE_INTERVAL = config.get('save_interval', 1)
 
     # Process all timesteps
     iterations = []
@@ -232,10 +232,14 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
 
     v_left, v_right, v_cm = calculate_velocities(jnp.array(contact_line_left_list),
                                                  jnp.array(contact_line_right_list),
-                                                 jnp.array(cm_x_list), PLOT_EVERY)
+                                                 jnp.array(cm_x_list), SAVE_INTERVAL)
 
     TAU = config.get('tau', 1.0)
-    SIGMA_LG = config.get('sigma_lg', 0.1)
+    KAPPA = config.get('kappa', 0.01)
+    INTERFACE_WIDTH = config.get('interface_width', 5)
+    RHO_L = config.get('rho_l', 1.0)
+    RHO_V = config.get('rho_v', 1.0)
+    SIGMA_LG = (2/3)*(KAPPA/INTERFACE_WIDTH)*(RHO_L-RHO_V)**2
 
     Ca_drop = (jnp.array(avg_u_x_list) * ((TAU - 0.5) / 3)) / SIGMA_LG
     Ca_CL_L = (v_left * ((TAU - 0.5) / 3)) / SIGMA_LG
@@ -344,12 +348,12 @@ def compare_simulations(parent_dir: str, comparison_output_dir: str):
         },
         {
             "x_column": "Average X location normalised",
-            "y_columns": ["Contact line velocity left", "Contact line velocity right"],
+            "y_columns": ["Ca left contact line", "Ca right contact line"],
             "markers": [".", "o"],
             "labels": ["Trailing", "Leading"],
             "title": "Contact line velocity vs normalised average X location",
             "xlabel": r"$\frac{X_{\mathrm{avg}}}{R_0}$",
-            "ylabel": "Contact Line Velocity",
+            "ylabel": r"$\mathrm{Ca}$",
             "x_tick_spacing": 1,
             "filename": "04_comparison_contact_line_motion_vs_X_avg.png",
         },
