@@ -567,7 +567,7 @@ def create_composite_frame(
     # Combine legends
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left', fontsize=10)
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=10)
 
     ax1.set_title('Contact Line Capillary Number and Contact Angles', fontsize=16)
 
@@ -696,7 +696,7 @@ def create_video(frames_dir: str, output_path: str = None, video_duration: float
     print(f"Found {len(images)} frames")
 
     # Calculate fps
-    fps = len(images) / video_duration
+    fps = len(images) // video_duration
     print(f"Using fps = {fps:.2f}")
 
     # Set output path and ensure it has a valid extension

@@ -1,4 +1,6 @@
 import json
+import uuid
+
 import jax.numpy as jnp
 from typing import Any, Dict
 from pathlib import Path
@@ -99,14 +101,16 @@ class SimulationIO:
 
     def _create_timestamped_directory(self) -> str:
         """Creates a unique, timestamped directory for a single simulation run."""
-        timestamp = datetime.now().strftime("%Y-%m-%d/%H-%M-%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        unique_key = uuid.uuid4().hex[:8]
         if self.simulation_name:
-            rundir = os.path.join(self.base_dir, f"{timestamp}_{self.simulation_name}")
+            dirname = f"{timestamp}_{self.simulation_name}_{unique_key}"
         else:
-            rundir = os.path.join(self.base_dir, timestamp)
-        os.makedirs(rundir, exist_ok=True)
-        print(f"Created results directory: {rundir}")
-        return rundir
+            dirname = f"{timestamp}_{unique_key}"
+        run_dir = os.path.join(self.base_dir, dirname)
+        os.makedirs(run_dir, exist_ok=False)
+        print(f"Created results directory {run_dir}")
+        return run_dir
 
     def save_config(self, config: Dict):
         """Saves the simulation configuration to a JSON file using CustomJSONEncoder."""
@@ -121,6 +125,15 @@ class SimulationIO:
         print(f"Configuration saved to {config_path}")
 
     def save_data_step(self, iteration: int, data: Dict[str, np.ndarray]):
-        """Saves the data for a single timestep to a compressed .npz file."""
-        filename = os.path.join(self.data_dir, f"timestep_{iteration}.npz")
-        np.savez(filename, **data)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                os.makedirs(self.data_dir, exist_ok=True)
+                filename = os.path.join(self.data_dir, f"timestep_{iteration}.npz")
+                np.savez(filename, **data)
+                return
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise
+                import time
+                time.sleep(0.1 * (attempt + 1))
