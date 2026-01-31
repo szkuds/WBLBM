@@ -98,7 +98,7 @@ class Run:
                     h_prev = kwargs.get('h_i')
                     force_ext = self.simulation.force_obj.compute_force(rho=rho,
                                                                         rho_l=self.config.get('rho_l'),
-                                                                        rho_v=self.config.get('rho_l'),
+                                                                        rho_v=self.config.get('rho_v'),
                                                                         h_i=h_prev)
                     result = macroscopic(f_prev, force_ext)
                 else:
