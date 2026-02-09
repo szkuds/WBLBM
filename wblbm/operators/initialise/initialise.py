@@ -1,6 +1,9 @@
 import jax.numpy as jnp
 import numpy as np
 import os
+
+from jax import Array
+
 from wblbm.grid.grid import Grid
 from wblbm.lattice.lattice import Lattice
 from wblbm.operators.equilibrium.equilibrium import Equilibrium
@@ -284,7 +287,7 @@ class Initialise:
             jnp.ndarray: Initial distribution function.
         """
         # Radius of the droplet (adapted from user query)
-        r = (self.ny) / 6
+        r = (self.ny) / 5
 
         # Initialize velocity (zero) and density fields with correct shapes
         u = jnp.zeros((self.nx, self.ny, 1, 2))
@@ -405,32 +408,72 @@ class Initialise:
         u_jax = jnp.array(u)
         return self.equilibrium(rho_jax, u_jax)
 
+    def initialise_multiphase_droplet_variable_radius(
+            self, rho_l: float, rho_v: float, interface_width: int, radius: float
+    ) -> Array:
+        """
+        Initialises a multiphase simulation with a droplet of specified radius.
 
-def initialise_multiphase_droplet_variable_radius(
-        self, rho_l: float, rho_v: float, interface_width: int, radius: float
-):
-    """
-    Initialises a multiphase simulation with a droplet of specified radius.
+        Args:
+            rho_l (float): Liquid phase density.
+            rho_v (float): Vapour phase density.
+            interface_width (int): Interface width for tanh profile.
+            radius (float): Droplet radius in lattice units.
 
-    Args:
-        rho_l (float): Liquid phase density.
-        rho_v (float): Vapour phase density.
-        interface_width (int): Interface width for tanh profile.
-        radius (float): Droplet radius in lattice units.
+        Returns:
+            jnp.ndarray: Initialised population distribution f.
+        """
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+        center_x, center_y = self.nx // 2, self.ny // 2
 
-    Returns:
-        jnp.ndarray: Initialised population distribution f.
-    """
-    x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
-    center_x, center_y = self.nx // 2, self.ny // 2
+        distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
+        rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+            (distance - radius) / interface_width
+        )
 
-    distance = jnp.sqrt((x - center_x) ** 2 + (y - center_y) ** 2)
-    rho_field_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
-        (distance - radius) / interface_width
-    )
+        rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
 
-    rho = rho_field_2d.reshape((self.nx, self.ny, 1, 1))
-    u = jnp.zeros((self.nx, self.ny, 1, 2))
+        return self.equilibrium(rho, u)
 
-    return self.equilibrium(rho, u)
+    def initialise_multiphase_bubble_chem_step(
+            self, rho_l: float, rho_v: float, interface_width: int, radius: float, location: float
+    ):
+        """
+            Initialize the simulation with a bubble at the top of the domain.
 
+            Args:
+                rho_l (float): Liquid phase density.
+                rho_v (float): Vapour phase density.
+                interface_width (int): Width of the interface for tanh profile.
+
+            Returns:
+                jnp.ndarray: Initial distribution function.
+            """
+        # Radius of the bubble
+        r = int(self.ny * radius)
+
+        # Initialize velocity (zero) and density fields with correct shapes
+        u = jnp.zeros((self.nx, self.ny, 1, 2))
+        rho = jnp.zeros((self.nx, self.ny, 1, 1))
+
+        # Create grid
+        x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
+
+        # Calculate center coordinates (bubble centered horizontally, at top)
+        xc = int(self.nx * location)
+
+        # Distance from center at top boundary (y measured from top)
+        distance = jnp.sqrt((x - xc) ** 2 + (self.ny - 1 - y) ** 2)
+
+        # Calculate density distribution using tanh for smooth interface
+        # Note: sign flipped compared to wetting to create bubble (vapor inside)
+        rho_2d = (rho_l + rho_v) / 2 - (rho_l - rho_v) / 2 * jnp.tanh(
+            2 * (r - distance) / interface_width
+        )
+
+        # Assign to rho (reshape to 4D)
+        rho = rho.at[:, :, 0, 0].set(rho_2d)
+
+        # Return equilibrium distribution
+        return self.equilibrium(rho, u)

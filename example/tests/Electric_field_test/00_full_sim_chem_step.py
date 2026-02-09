@@ -1,15 +1,13 @@
-import os
 import jax
-from datetime import datetime
-import uuid
 
 from wblbm.run import Run
-from wblbm import GravityForceMultiphaseDroplet, visualise
+from wblbm import GravityForceMultiphaseDroplet
 
 from wblbm.utils.full_sim_util import (
     get_latest_timestep,
     move_results_to_pipeline,
     visualize_stage,
+    create_pipeline_timestamp,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -26,7 +24,7 @@ LATTICE_TYPE = "D2Q9"
 TAU = 0.99
 KAPPA = 0.04
 RHO_L = 1.0
-RHO_V = 0.33
+RHO_V = 0.001
 INTERFACE_WIDTH = 5
 PHI_VALUE = 1.1
 D_RHO_VALUE = 0.1
@@ -204,11 +202,7 @@ if __name__ == "__main__":
     print("=" * 80)
 
     # Create pipeline timestamp that will be used for all stages
-    pipeline_timestamp = f"{datetime.now().strftime('%H-%M-%S')}_{uuid.uuid4().hex[:8]}"
-    pipeline_dir = os.path.join(os.path.expanduser("~/TUD_LBM/results"),
-                                datetime.now().strftime("%Y-%m-%d"),
-                                pipeline_timestamp)
-    os.makedirs(pipeline_dir, exist_ok=True)
+    pipeline_timestamp, pipeline_dir = create_pipeline_timestamp()
 
     # Stage 1: Wetting initialization
     wetting_dir = run_wetting_init(pipeline_timestamp)

@@ -1,12 +1,9 @@
-import numpy as np
-
-from wblbm.operators.force import CompositeForce
 from wblbm.run import Run
 from wblbm import GravityForceMultiphaseDroplet, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
-# jax.config.update("jax_disable_jit", True)
+jax.config.update("jax_disable_jit", True)
 
 
 def init_for_chem_step_0_inc():
@@ -16,15 +13,15 @@ def init_for_chem_step_0_inc():
     # Simulation parameters
     grid_shape = (201, 101)
     tau = 0.99
-    nt = 100000
-    save_interval = 10000
+    nt = 40000
+    save_interval = nt/10
     kappa = 0.04
     rho_l = 1.0
     rho_v = 0.001
     interface_width = 5
 
-    phi_value = 1.1
-    d_rho_value = 0.1
+    phi_value = 1
+    d_rho_value = 0
 
     force_g = 1e-7
     inclination_angle = 0
@@ -34,10 +31,10 @@ def init_for_chem_step_0_inc():
 
     # Add hysteresis parameters to bc_config
     bc_config = {
-        'left': 'periodic',
-        'bottom': 'bounce-back',
-        'top': 'bounce-back',
         'right': 'periodic',
+        'bottom': 'wetting',
+        'top': 'symmetry',
+        'left': 'periodic',
         'wetting_params': {
             'rho_l': rho_l,
             'rho_v': rho_v,
@@ -61,7 +58,7 @@ def init_for_chem_step_0_inc():
         interface_width=interface_width,
         save_interval=save_interval,
         bc_config=bc_config,
-        force_enabled=True,
+        force_enabled=False,
         force_obj=[gravity],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
@@ -69,7 +66,6 @@ def init_for_chem_step_0_inc():
         force_g=force_g,
         inclination_angle=inclination_angle,
         init_type="wetting_chem_step",
-        init_dir="/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests/results/2025-11-03_chemical_step_example/12-15-56_wetting_simulation_test/data/timestep_199999.npz",
     )
 
     sim.run(verbose=True)

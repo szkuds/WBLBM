@@ -12,31 +12,21 @@ class Streaming:
     """
 
     def __init__(self, lattice: Lattice, bc_config: dict = None):
-        """
-        Args:
-            lattice: Lattice object
-            bc_config: Boundary condition config dict. If provided, automatically
-                       determines periodicity from 'left'/'right' and 'top'/'bottom'.
-                       If None, defaults to fully periodic.
-        """
-        self.c = lattice.c  # Shape: (2, Q)
+        self.c = lattice.c
         self.q = lattice.q
 
-        # Determine periodicity from bc_config
         if bc_config is None:
             self.periodic_x = True
             self.periodic_y = True
         else:
-            # X is periodic if both left AND right are 'periodic'
-            self.periodic_x = (
-                    bc_config.get('left') == 'periodic' and
-                    bc_config.get('right') == 'periodic'
-            )
-            # Y is periodic if both top AND bottom are 'periodic'
-            self.periodic_y = (
-                    bc_config.get('top') == 'periodic' and
-                    bc_config.get('bottom') == 'periodic'
-            )
+            # Only check actual edge keys, ignore params
+            left_bc = bc_config.get('left', 'periodic')
+            right_bc = bc_config.get('right', 'periodic')
+            top_bc = bc_config.get('top', 'periodic')
+            bottom_bc = bc_config.get('bottom', 'periodic')
+
+            self.periodic_x = (left_bc == 'periodic' and right_bc == 'periodic')
+            self.periodic_y = (top_bc == 'periodic' and bottom_bc == 'periodic')
 
     @time_function(enable_timing=TIMING_ENABLED)
     @partial(jit, static_argnums=(0,))

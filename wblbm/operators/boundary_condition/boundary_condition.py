@@ -40,12 +40,15 @@ class BoundaryCondition:
         self, f_streamed: jnp.ndarray, f_collision: jnp.ndarray
     ) -> jnp.ndarray:
         for edge, bc_type in self.bc_config.items():
-            if bc_type == 'bounce-back' or bc_type == 'wetting':
+            # Skip non-boundary entries
+            if edge in ('wetting_params', 'hysteresis_params', 'chemical_step'):
+                continue
+            if bc_type == 'periodic':
+                continue  # Periodic is handled by streaming
+            elif bc_type == 'bounce-back' or bc_type == 'wetting':
                 f_streamed = self._apply_bounce_back(f_streamed, f_collision, edge)
             elif bc_type == 'symmetry':
                 f_streamed = self._apply_symmetry(f_streamed, f_collision, edge)
-            elif bc_type == 'periodic':
-                f_streamed = self._apply_periodic(f_streamed)
         return f_streamed
 
     @partial(jit, static_argnums=(0, 3))
@@ -150,8 +153,3 @@ class BoundaryCondition:
             )
         return f_streamed
 
-    @partial(jit, static_argnums=(0,))
-    def _apply_periodic(self, f_streamed: jnp.ndarray) -> jnp.ndarray:
-        # For periodic boundaries, no additional transformation is needed
-        # The streaming step already handles periodicity correctly
-        return f_streamed

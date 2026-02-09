@@ -28,7 +28,6 @@ class Run:
         simulation_type="singlephase",
         *,
         save_interval=100,
-        results_dir="results",
         init_type="standard",
         init_dir=None,
         skip_interval=0,
@@ -51,7 +50,6 @@ class Run:
         self.simulation = SimulationFactory.create_simulation(simulation_type, **kwargs)
         self.save_interval = save_interval
         self.skip_interval = skip_interval
-        self.results_dir = results_dir
         self.init_type = init_type
         self.init_dir = init_dir
         # Auto-detect simulation name from calling function if not provided
@@ -70,7 +68,6 @@ class Run:
         self.config = self._build_config(
             simulation_type=simulation_type,
             save_interval=save_interval,
-            results_dir=results_dir,
             skip_interval=skip_interval,
             init_type=init_type,
             init_dir=init_dir,
@@ -79,7 +76,7 @@ class Run:
         from wblbm.utils.io import SimulationIO
 
         self.io_handler = SimulationIO(
-            base_dir=results_dir, config=self.config, simulation_name=simulation_name
+            config=self.config, simulation_name=simulation_name
         )
 
     def _build_config(self, **kwargs):
