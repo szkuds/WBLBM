@@ -36,7 +36,7 @@ def init_for_chem_step_0_inc():
     bc_config = {
         'left': 'periodic',
         'bottom': 'wetting',
-        'top': 'symmetry',
+        'top': 'bounce-back',
         'right': 'periodic',
         'chemical_step': {
             'chemical_step_location': .5,

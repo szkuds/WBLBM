@@ -48,7 +48,8 @@ class MultiphaseSimulation(BaseSimulation):
         self.bubble = kwargs.get('bubble', False)
         self.rho_ref = self.kwargs.get('rho_ref', False)
         self.g = self.kwargs.get('g', False)
-        self.init_radius = kwargs.get('init_radius', None)  # For variable radius droplet initialization
+        self.init_radius = kwargs.get('init_radius', None)
+        self.init_location = kwargs.get('init_location', None)
         self.setup_operators()
         self.multiphase = True
 
@@ -121,6 +122,14 @@ class MultiphaseSimulation(BaseSimulation):
                 )
             return self.initialise.initialise_multiphase_droplet_variable_radius(
                 self.rho_l, self.rho_v, self.interface_width, self.init_radius
+            )
+        elif init_type == "multiphase_bubble_chem_step":
+            if self.init_radius is None or self.init_location is None:
+                raise ValueError(
+                    'multiphase_bubble_chem_step requires init_radius and init_location to be specified'
+                )
+            return self.initialise.initialise_multiphase_bubble_chem_step(
+                self.rho_l, self.rho_v, self.interface_width, self.init_radius, self.init_location
             )
         else:
             return self.initialise.initialise_standard()

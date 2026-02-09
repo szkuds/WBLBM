@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#SBATCH --job-name="02_chem_step_inc_80"
+#SBATCH --time=60:00:00
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --partition=compute
+#SBATCH --mem-per-cpu=1GB
+#SBATCH --account=research-as-cheme
+
+srun python ./02_chem_step_inc_80.py > ./02_chem_step_inc_80.log

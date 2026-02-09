@@ -1,0 +1,96 @@
+
+================================================================================
+FULL SIMULATION PIPELINE
+================================================================================
+
+================================================================================
+STAGE 1: WETTING INITIALIZATION
+================================================================================
+Created results directory scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-41-37_run_wetting_init_66d5396c
+Configuration saved to scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-41-37_run_wetting_init_66d5396c/config.json
+Starting LBM simulation with 100000 time steps...
+Config -> Grid: (201, 101), Multiphase: True, Wetting: True, Force: True
+Step 10000/100000: avg_rho=0.0339, max_u=0.002051
+Step 20000/100000: avg_rho=0.0339, max_u=0.002178
+Step 30000/100000: avg_rho=0.0339, max_u=0.002518
+Step 40000/100000: avg_rho=0.0339, max_u=0.002474
+Step 50000/100000: avg_rho=0.0339, max_u=0.002005
+Step 60000/100000: avg_rho=0.0339, max_u=0.001908
+Step 70000/100000: avg_rho=0.0339, max_u=0.001766
+Step 80000/100000: avg_rho=0.0339, max_u=0.001636
+Step 90000/100000: avg_rho=0.0339, max_u=0.001536
+Step 99999/100000: avg_rho=0.0339, max_u=0.001448
+Simulation completed!
+Results saved in: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-41-37_run_wetting_init_66d5396c
+
+Visualizing Wetting Initialization...
+Saving plots to: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-41-37_run_wetting_init_66d5396c/plots
+Combined simulation analysis plot saved to: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-41-37_run_wetting_init_66d5396c/plots/simulation_analysis.png
+Finished generating plots for all 10 timesteps.
+✓ Visualization complete for Wetting Initialization
+✓ run_wetting_init results saved to: /scratch/sbszkudlarek/TUD_LBM_results/results/09-41-37_b462333e/run_wetting_init
+
+================================================================================
+STAGE 2: RUNNING SIMULATION
+================================================================================
+
+================================================================================
+STAGE 3A: CHEMICAL STEP RUN (45° incline)
+================================================================================
+Using electric init output: /scratch/sbszkudlarek/TUD_LBM_results/results/09-41-37_b462333e/run_wetting_init/data/timestep_99999.npz
+Created results directory scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-52-33_run_chem_step_95decbeb
+Configuration saved to scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-52-33_run_chem_step_95decbeb/config.json
+Starting LBM simulation with 100000 time steps...
+Config -> Grid: (201, 101), Multiphase: True, Wetting: True, Force: True
+Step 500/100000: avg_rho=0.0339, max_u=0.003027
+Step 1000/100000: avg_rho=0.0339, max_u=0.004366
+Step 1500/100000: avg_rho=0.0339, max_u=0.004592
+Step 2000/100000: avg_rho=0.0339, max_u=0.004566
+Step 2500/100000: avg_rho=0.0339, max_u=0.004690
+Step 3000/100000: avg_rho=0.0339, max_u=0.004799
+Step 3500/100000: avg_rho=0.0339, max_u=0.004846
+Step 4000/100000: avg_rho=0.0339, max_u=0.004891
+Step 4500/100000: avg_rho=0.0339, max_u=0.004859
+Step 5000/100000: avg_rho=0.0339, max_u=0.004880
+Step 5500/100000: avg_rho=0.0339, max_u=0.004910
+Step 6000/100000: avg_rho=0.0339, max_u=0.004907
+Step 6500/100000: avg_rho=0.0339, max_u=0.004943
+Step 7000/100000: avg_rho=0.0339, max_u=0.004912
+Step 7500/100000: avg_rho=0.0339, max_u=0.004902
+Step 8000/100000: avg_rho=0.0339, max_u=0.004955
+Step 8500/100000: avg_rho=0.0339, max_u=0.004918
+Step 9000/100000: avg_rho=0.0339, max_u=0.004924
+Step 9500/100000: avg_rho=0.0339, max_u=0.004877
+Step 10000/100000: avg_rho=0.0339, max_u=0.004944
+Step 10500/100000: avg_rho=0.0339, max_u=0.004861
+Step 11000/100000: avg_rho=0.0339, max_u=0.004890
+Step 11500/100000: avg_rho=0.0339, max_u=0.004821
+Step 12000/100000: avg_rho=0.0339, max_u=0.004901
+Step 12500/100000: avg_rho=0.0339, max_u=0.005874
+Step 13000/100000: avg_rho=0.0339, max_u=0.009943
+Step 13500/100000: avg_rho=0.0339, max_u=0.009559
+Step 14000/100000: avg_rho=0.0339, max_u=0.009437
+Step 14500/100000: avg_rho=0.0339, max_u=0.009596
+Step 15000/100000: avg_rho=0.0339, max_u=0.009606
+Step 15500/100000: avg_rho=0.0339, max_u=0.009565
+Step 16000/100000: avg_rho=0.0339, max_u=0.030953
+NaN encountered at timestep 16387. Stopping simulation.
+Simulation completed!
+Results saved in: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-52-33_run_chem_step_95decbeb
+
+Visualizing Chemical Step...
+Saving plots to: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-52-33_run_chem_step_95decbeb/plots
+Combined simulation analysis plot saved to: scratch/sbszkudlarek/TUD_LBM_results/results/2026-02-09_09-52-33_run_chem_step_95decbeb/plots/simulation_analysis.png
+Finished generating plots for all 32 timesteps.
+✓ Visualization complete for Chemical Step
+✓ run_chem_step results saved to: /scratch/sbszkudlarek/TUD_LBM_results/results/09-41-37_b462333e/run_chem_step
+
+================================================================================
+ALL SIMULATIONS COMPLETED AND VISUALIZED
+================================================================================
+
+✓ Pipeline root directory: /home/sbszkudlarek/TUD_LBM/results/2026-02-09/09-41-37_b462333e
+✓ Wetting init results: /scratch/sbszkudlarek/TUD_LBM_results/results/09-41-37_b462333e/run_wetting_init
+✓ Chemical step results: /scratch/sbszkudlarek/TUD_LBM_results/results/09-41-37_b462333e/run_chem_step
+
+Plots have been saved to each stage's plots/ directory

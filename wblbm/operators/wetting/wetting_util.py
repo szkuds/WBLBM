@@ -22,18 +22,18 @@ class WettingParameters(NamedTuple):
 def determine_padding_modes(bc_config):
     if not bc_config:
         return ['wrap', 'wrap', 'wrap', 'wrap']
-    padmode = ['wrap', 'wrap', 'wrap', 'wrap']
+    pad_mode = ['wrap', 'wrap', 'wrap', 'wrap']
     for edge, bc_type in bc_config.items():
         if bc_type in ['symmetry', 'bounce-back', 'wetting']:
             if edge == 'bottom':
-                padmode[0] = 'edge'
+                pad_mode[0] = 'edge'
             elif edge == 'right':
-                padmode[1] = 'edge'
+                pad_mode[1] = 'edge'
             elif edge == 'top':
-                padmode[2] = 'edge'
+                pad_mode[2] = 'edge'
             elif edge == 'left':
-                padmode[3] = 'edge'
-    return padmode
+                pad_mode[3] = 'edge'
+    return pad_mode
 
 
 def has_wetting_bc(bc_config):
@@ -92,7 +92,7 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
         mask2 = arr[1:-1, idx] > (0.95 * rho_v + 0.05 * rho_l)
     # axis == 0 for the x-edges
     else:
-        arr = arr.at[idx, -1:1].set(
+        arr = arr.at[idx, 1:-1].set(
             (1 / 3 * arr[idx + 1 if idx == 0 else idx - 1, 1:-1] +
              1 / 12 * arr[idx + 1 if idx == 0 else idx - 1, 0:-2] +
              1 / 12 * arr[idx + 1 if idx == 0 else idx - 1, 2:])
@@ -110,8 +110,8 @@ def wetting_1d(arr, axis, idx, rho_l, rho_v, phi_left, phi_right, d_rho_left, d_
         )
         edge_slice = arr[idx, 1:-1]
 
-        mask1 = arr[idx, -1:1] < (0.95 * rho_l + 0.05 * rho_v)
-        mask2 = arr[idx, -1:1] > (0.95 * rho_v + 0.05 * rho_l)
+        mask1 = arr[idx, 1:-1] < (0.95 * rho_l + 0.05 * rho_v)
+        mask2 = arr[idx, 1:-1] > (0.95 * rho_v + 0.05 * rho_l)
 
     # Wetting mask logic
     mask_final = mask1 * mask2

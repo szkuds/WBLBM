@@ -271,8 +271,8 @@ def main():
     for r, dp in zip(radii, delta_pressures):
         print(f"{r:<15.4f} {1 / r:<15.6f} {dp:<15.6e}")
 
-    # Save results
-    output_dir = Path(__file__).parent / 'results'
+    # Save results - use the directory where config.json is located
+    output_dir = config_path.parent / 'results'
     output_dir.mkdir(exist_ok=True)
 
     # Save numerical data
