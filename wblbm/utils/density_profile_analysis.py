@@ -10,7 +10,7 @@ base_dir = os.path.join("/Users/sbszkudlarek/PycharmProjects/WBLBM/example/tests
 data_dir = os.path.join(base_dir, "data")
 
 
-def plot_density_profile(data_folder, y_value=200):
+def plot_density_profile(data_folder, y_value=25):
     npz_files = sorted(glob.glob(os.path.join(data_folder, '*.npz')))
     assert npz_files, "No .npz files found"
     parent_dir = os.path.abspath(os.path.join(data_folder, os.pardir))

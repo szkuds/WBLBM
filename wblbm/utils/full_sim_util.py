@@ -1,6 +1,26 @@
 import os
 import shutil
+from datetime import datetime
+import uuid
 from wblbm import visualise
+from wblbm.utils.io import BASE_RESULTS_DIR
+
+
+def create_pipeline_timestamp() -> tuple[str, str]:
+    """
+    Create a unique pipeline timestamp and directory.
+
+    Returns:
+        tuple: (pipeline_timestamp, pipeline_dir)
+    """
+    pipeline_timestamp = f"{datetime.now().strftime('%H-%M-%S')}_{uuid.uuid4().hex[:8]}"
+    pipeline_dir = os.path.join(
+        BASE_RESULTS_DIR,
+        datetime.now().strftime("%Y-%m-%d"),
+        pipeline_timestamp
+    )
+    os.makedirs(pipeline_dir, exist_ok=True)
+    return pipeline_timestamp, pipeline_dir
 
 
 def get_latest_timestep(results_dir: str) -> str:
@@ -19,9 +39,8 @@ def get_latest_timestep(results_dir: str) -> str:
 
 
 def move_and_rename_results(src_dir: str, target_stage_name: str, pipeline_timestamp: str) -> str:
-    base_results = os.path.expanduser("~/TUD_LBM/results")
     date_part = src_dir.split("/")[-2]
-    target_dir = os.path.join(base_results, date_part, pipeline_timestamp, target_stage_name)
+    target_dir = os.path.join(BASE_RESULTS_DIR, date_part, pipeline_timestamp, target_stage_name)
     if os.path.abspath(src_dir) != os.path.abspath(target_dir):
         os.makedirs(os.path.dirname(target_dir), exist_ok=True)
         if os.path.exists(target_dir):

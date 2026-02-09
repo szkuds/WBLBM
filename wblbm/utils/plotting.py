@@ -63,7 +63,7 @@ def visualise(sim_instance, title="LBM Simulation Results"):
             # Initialize density profile y-index (mid-plane by default or config override)
             if y_index is None:
                 ny = final_rho.shape[1]
-                y_index = sim_instance.config.get('density_profile_y', ny // 2)
+                y_index = sim_instance.config.get('density_profile_y', ny // 4)
 
             # load the config .json
             config = json.load(open(run_dir + "/config.json"))
