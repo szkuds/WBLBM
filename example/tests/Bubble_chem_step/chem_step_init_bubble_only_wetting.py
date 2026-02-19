@@ -2,7 +2,7 @@ import numpy as np
 
 from wblbm.operators.force import CompositeForce
 from wblbm.run import Run
-from wblbm import GravityForceMultiphaseDroplet, visualise
+from wblbm import GravityForceMultiphaseBubble, visualise
 import jax
 
 jax.config.update("jax_enable_x64", True)
@@ -16,7 +16,7 @@ def init_for_bubble_top_chem_step():
     # Simulation parameters
     grid_shape = (201, 101)
     tau = 0.99
-    nt = 1000
+    nt = 10
     save_interval = nt / 10
     kappa = 0.04
     rho_l = 1.0
@@ -28,7 +28,7 @@ def init_for_bubble_top_chem_step():
 
     force_g = 1e-7
     inclination_angle = 0
-    gravity = GravityForceMultiphaseDroplet(
+    gravity = GravityForceMultiphaseBubble(
         force_g, inclination_angle, grid_shape
     )
 
@@ -65,7 +65,7 @@ def init_for_bubble_top_chem_step():
         interface_width=interface_width,
         save_interval=save_interval,
         bc_config=bc_config,
-        force_enabled=False,
+        force_enabled=True,
         force_obj=[gravity],
         phi_value=phi_value,
         d_rho_value=d_rho_value,
