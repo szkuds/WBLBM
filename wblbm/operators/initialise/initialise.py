@@ -328,7 +328,7 @@ class Initialise:
         # Radius of the droplet (adapted from user query)
         r = (self.ny) / 3.33
 
-        # Initialize velocity (zero) and density fields with correct shapes
+        # Initialise velocity (zero) and density fields with correct shapes
         u = jnp.zeros((self.nx, self.ny, 1, 2))
         rho = jnp.zeros((self.nx, self.ny, 1, 1))
 
@@ -422,6 +422,12 @@ class Initialise:
 
         Returns:
             jnp.ndarray: Initialised population distribution f.
+            :return:
+            :param rho_l:
+            :param rho_v:
+            :param interface_width:
+            :param radius:
+            :return:
         """
         x, y = jnp.meshgrid(jnp.arange(self.nx), jnp.arange(self.ny), indexing="ij")
         center_x, center_y = self.nx // 2, self.ny // 2
@@ -446,6 +452,8 @@ class Initialise:
                 rho_l (float): Liquid phase density.
                 rho_v (float): Vapour phase density.
                 interface_width (int): Width of the interface for tanh profile.
+                radius (float): Droplet radius in lattice units.
+                location (float): Location of the bubble.
 
             Returns:
                 jnp.ndarray: Initial distribution function.

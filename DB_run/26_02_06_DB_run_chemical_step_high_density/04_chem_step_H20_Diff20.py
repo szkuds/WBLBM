@@ -1,15 +1,13 @@
-import os
 import jax
-from datetime import datetime
-import uuid
 
 from wblbm.run import Run
-from wblbm import GravityForceMultiphaseDroplet, visualise
+from wblbm import GravityForceMultiphaseDroplet
 
 from wblbm.utils.full_sim_util import (
     get_latest_timestep,
     move_results_to_pipeline,
     visualize_stage,
+    create_pipeline_timestamp,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -34,10 +32,10 @@ FORCE_G = 5e-7
 INCLINATION_ANGLE = 60
 
 # Iteration parameters
-WETTING_INIT_NT = 100000
+WETTING_INIT_NT = 50000
 WETTING_INIT_SAVE = WETTING_INIT_NT / 10
 
-CHEM_STEP_RUN_NT = 100000
+CHEM_STEP_RUN_NT = 40000
 CHEM_STEP_RUN_SAVE = CHEM_STEP_RUN_NT / 200
 
 # Chemical step parameters
@@ -61,9 +59,6 @@ MAX_ITERATIONS = 10
 
 def run_wetting_init(pipeline_timestamp):
     """Initialize with wetting only (no electric field, horizontal surface)."""
-    print("\n" + "=" * 80)
-    print("STAGE 1: WETTING INITIALIZATION")
-    print("=" * 80)
 
     inclination_angle = 0
     gravity = GravityForceMultiphaseDroplet(FORCE_G, inclination_angle, GRID_SHAPE)
@@ -121,9 +116,6 @@ def run_wetting_init(pipeline_timestamp):
 
 def run_chem_step(pipeline_timestamp, wetting_results_dir):
     """Run chemical step with incline (45 degrees)."""
-    print("\n" + "=" * 80)
-    print("STAGE 3A: CHEMICAL STEP RUN (45° incline)")
-    print("=" * 80)
 
     # Get init path from electric init output
     init_path = get_latest_timestep(wetting_results_dir)
@@ -204,13 +196,12 @@ if __name__ == "__main__":
     print("=" * 80)
 
     # Create pipeline timestamp that will be used for all stages
-    pipeline_timestamp = f"{datetime.now().strftime('%H-%M-%S')}_{uuid.uuid4().hex[:8]}"
-    pipeline_dir = os.path.join(os.path.expanduser("~/TUD_LBM/results"),
-                                datetime.now().strftime("%Y-%m-%d"),
-                                pipeline_timestamp)
-    os.makedirs(pipeline_dir, exist_ok=True)
+    pipeline_timestamp, pipeline_dir = create_pipeline_timestamp()
 
     # Stage 1: Wetting initialization
+    print("\n" + "=" * 80)
+    print("STAGE 1: INITIALISING SIMULATION")
+    print("=" * 80)
     wetting_dir = run_wetting_init(pipeline_timestamp)
 
     # Stage 2: Run chemical step simulation
