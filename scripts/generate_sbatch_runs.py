@@ -1,13 +1,13 @@
 """Generate sbatch run scripts grouping generated variant Python files into batches of 10.
 
-Reads the manifest `DB_run/16_02_14_DB_run_phase_plots/generated_variants_manifest.txt` and
+Reads the manifest `DB_run/26_02_14_DB_run_phase_plots/generated_variants_manifest.txt` and
 creates run scripts `11-20_run.sh`, `21-30_run.sh`, ..., `131-140_run.sh` in the same directory
 as the manifest. Each generated script mirrors the headers from `01-10_run.sh`.
 """
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = ROOT / "DB_run" / "16_02_14_DB_run_phase_plots"
+OUT_DIR = ROOT / "DB_run" / "26_02_14_DB_run_phase_plots"
 MANIFEST = OUT_DIR / "generated_variants_manifest.txt"
 TEMPLATE = OUT_DIR / "01-10_run.sh"
 
