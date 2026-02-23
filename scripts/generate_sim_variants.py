@@ -13,7 +13,7 @@ from pathlib import Path
 from itertools import product
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "DB_run" / "16_02_14_DB_run_phase_plots" / "00_base_sim.py"
+TEMPLATE = ROOT / "DB_run" / "26_02_14_DB_run_phase_plots" / "00_base_sim.py"
 OUT_DIR = TEMPLATE.parent
 
 # Parameters

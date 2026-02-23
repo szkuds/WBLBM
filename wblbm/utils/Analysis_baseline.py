@@ -286,6 +286,11 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
         base_diameter_list.append(base_diameter)
 
     # Calculate derived quantities
+    R0 = config.get('R_ZERO', 27)
+    height_norm = jnp.array(height_list) / R0
+    base_diameter_norm = jnp.array(base_diameter_list) / R0
+
+    INCLINATION_ANGLE = config.get('inclination_angle', 0)
     if_max_iteration = max(iterations) if iterations else 1
     iterations_norm = jnp.array(iterations) / if_max_iteration
     avg_x_loc_norm = jnp.array(avg_x_location_list) / config.get('R_ZERO', 27)
@@ -303,11 +308,11 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
     Ca_CL_R = (v_right * ((TAU - 0.5) / 3)) / SIGMA_LG
     Ca_drop_cm = (v_cm * ((TAU - 0.5) / 3)) / SIGMA_LG
 
-    R0 = config.get('R_ZERO', 27)
-    height_norm = jnp.array(height_list) / R0
-    base_diameter_norm = jnp.array(base_diameter_list) / R0
+    We_CL_L = (v_left**2 * R0 * RHO_L) / SIGMA_LG
+    We_CL_R = (v_right**2 * R0 * RHO_L) / SIGMA_LG
+    We_drop = (jnp.array(avg_u_x_list) * R0 * RHO_L) / SIGMA_LG
 
-    INCLINATION_ANGLE = config.get('inclination_angle', 0)
+
     Ca_norm_inc = Ca_drop / jnp.sin(jnp.deg2rad(INCLINATION_ANGLE)) if INCLINATION_ANGLE > 0 else Ca_drop
 
     # Save to CSV
@@ -340,6 +345,9 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
         'Base diameter': base_diameter_list,
         'Height normalised': height_norm,
         'Base diameter normalised': base_diameter_norm,
+        'We left contact line': We_CL_L,
+        'We right contact line': We_CL_R,
+        'We': We_drop,
 
     })
 
