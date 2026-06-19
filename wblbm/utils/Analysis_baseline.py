@@ -31,9 +31,9 @@ def clean_name(s: str) -> str:
 
 def extract_npz_data(npz_file: str) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Extract rho, u_x, u_y from npz file"""
-    data = jnp.load(npz_file)
-    rho = data['rho']
-    u = data['u']
+    data = np.load(npz_file, allow_pickle=True)
+    rho = jnp.array(data['rho'])
+    u = jnp.array(data['u'])
     u_x = u[..., 0]
     u_y = u[..., 1]
     return rho, u_x, u_y
@@ -214,8 +214,9 @@ def process_single_simulation(sim_dir: str, output_dir: str) -> str:
     if not os.path.exists(data_dir):
         return None
 
-    # Get all npz files
-    npz_files = sorted([f for f in os.listdir(data_dir) if f.endswith('.npz')],
+    # Get all npz files (skip macOS resource fork files starting with "._")
+    npz_files = sorted([f for f in os.listdir(data_dir)
+                        if f.endswith('.npz') and not f.startswith('._')],
                        key=lambda x: extract_iteration_number(x) or 0)
 
     if not npz_files:
