@@ -12,3 +12,15 @@
 /example/tests/Isolde/results/
 /example/tests/Electric_field_test/results/
 /example/tests/Rebuttal_checks/results/
+
+# Simulation output / generated files (never commit)
+results/
+*.npz
+*.npy
+*.png
+*.log
+slurm-*.out
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
